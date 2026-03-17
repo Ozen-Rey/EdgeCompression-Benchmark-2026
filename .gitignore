@@ -1,0 +1,22 @@
+# Dataset (troppo grandi per git)
+datasets/
+
+# Risultati numerici (aggiunti selettivamente)
+results/
+
+# Python
+__pycache__/
+*.pyc
+*.pth.tar
+.cache/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Modelli scaricati da CompressAI/HuggingFace
+*.pth
+
+# Editor
+.vscode/settings.json
+*.7z
+wget-log*
