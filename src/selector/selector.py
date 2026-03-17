@@ -178,11 +178,6 @@ def load_video_data() -> pd.DataFrame:
 def compute_pareto_frontier(
     df: pd.DataFrame, max_enc_ms: Optional[float] = None
 ) -> pd.DataFrame:
-    """
-    Identifica i punti sulla frontiera di Pareto:
-    non dominati su (bpp minimizzato, psnr massimizzato, enc_ms minimizzato).
-    max_enc_ms: se specificato, esclude i punti con latenza superiore.
-    """
     candidates = df.copy()
     if max_enc_ms is not None:
         candidates = candidates[candidates["enc_ms"] <= max_enc_ms]
@@ -190,21 +185,50 @@ def compute_pareto_frontier(
         candidates = df.copy()
 
     pareto_mask = []
-    records = candidates[["bpp", "psnr", "enc_ms"]].values
+
+    # usa lpips se disponibile, altrimenti solo 3 dimensioni
+    has_lpips = "lpips" in candidates.columns and candidates["lpips"].notna().all()
+
+    if has_lpips:
+        records = candidates[["bpp", "psnr", "lpips", "enc_ms"]].values
+    else:
+        records = candidates[["bpp", "psnr", "enc_ms"]].values
 
     for i, point in enumerate(records):
         dominated = False
         for j, other in enumerate(records):
             if i == j:
                 continue
-            if (
-                other[0] <= point[0]
-                and other[1] >= point[1]
-                and other[2] <= point[2]
-                and (other[0] < point[0] or other[1] > point[1] or other[2] < point[2])
-            ):
-                dominated = True
-                break
+            if has_lpips:
+                # domina se migliore o uguale su tutte e 4 le dimensioni
+                # bpp↓  psnr↑  lpips↓  enc_ms↓
+                if (
+                    other[0] <= point[0]  # bpp più basso
+                    and other[1] >= point[1]  # psnr più alto
+                    and other[2] <= point[2]  # lpips più basso
+                    and other[3] <= point[3]  # enc_ms più basso
+                    and (
+                        other[0] < point[0]
+                        or other[1] > point[1]
+                        or other[2] < point[2]
+                        or other[3] < point[3]
+                    )
+                ):
+                    dominated = True
+                    break
+            else:
+                if (
+                    other[0] <= point[0]
+                    and other[1] >= point[1]
+                    and other[2] <= point[2]
+                    and (
+                        other[0] < point[0]
+                        or other[1] > point[1]
+                        or other[2] < point[2]
+                    )
+                ):
+                    dominated = True
+                    break
         pareto_mask.append(not dominated)
 
     return candidates[pareto_mask].copy()
