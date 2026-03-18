@@ -48,13 +48,20 @@ def compute_lpips(img1_np, img2_np):
 def img_to_tensor(img_path):
     img = Image.open(img_path).convert("RGB")
     x = torch.from_numpy(np.array(img)).permute(2, 0, 1).unsqueeze(0).float() / 255.0
-    return x.to(device), np.array(img)
+    
+    # Padding a multiplo di 64 richiesto da CompressAI
+    h, w = x.shape[2], x.shape[3]
+    pad_h = (64 - h % 64) % 64
+    pad_w = (64 - w % 64) % 64
+    if pad_h > 0 or pad_w > 0:
+        x = torch.nn.functional.pad(x, (0, pad_w, 0, pad_h), mode='reflect')
+    
+    return x.to(device), np.array(img), h, w
 
 
 def compress_neural(model, img_path):
-    x, orig_np = img_to_tensor(img_path)
-    h, w = x.shape[2], x.shape[3]
-    total_pixels = h * w
+    x, orig_np, orig_h, orig_w = img_to_tensor(img_path)
+    total_pixels = orig_h * orig_w  # usa dimensioni originali per bpp
 
     with torch.no_grad():
         torch.cuda.synchronize()
@@ -69,15 +76,13 @@ def compress_neural(model, img_path):
         torch.cuda.synchronize()
         elapsed_dec = time.time() - start
 
-    # calcola bpp dai byte delle stringhe compresse
+    # crop alle dimensioni originali
+    x_hat = x_hat[:, :, :orig_h, :orig_w]
+    
     num_bits = sum(len(s[0]) for s in out["strings"]) * 8
     bpp = num_bits / total_pixels
 
-    rec_np = (
-        (np.nan_to_num(x_hat.squeeze(0).permute(1, 2, 0).cpu().numpy()) * 255)
-        .clip(0, 255)
-        .astype(np.uint8)
-    )
+    rec_np = (np.nan_to_num(x_hat.squeeze(0).permute(1,2,0).cpu().numpy()) * 255).clip(0,255).astype(np.uint8)
 
     return {
         "bpp": bpp,
@@ -85,7 +90,7 @@ def compress_neural(model, img_path):
         "ms_ssim": compute_msssim(orig_np, rec_np),
         "lpips": compute_lpips(orig_np, rec_np),
         "enc_ms": round(elapsed_enc * 1000, 2),
-        "dec_ms": round(elapsed_dec * 1000, 2),
+        "dec_ms": round(elapsed_dec * 1000, 2)
     }
 
 
