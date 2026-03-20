@@ -10,15 +10,17 @@ class SpatialFeatureExtractor:
     Ottimizzato per vincoli Edge (< 15 ms su CPU).
     """
     def __init__(self):
-        self.feature_names = [
+         self.feature_names = [
             "variance",
             "entropy",
             "sobel_mean",
             "rms_contrast",
             "laplacian_var",
-            "skewness",       # (NUOVA) Asimmetria dell'istogramma
-            "kurtosis",       # (NUOVA) Peso delle code dell'istogramma
-            "edge_density"    # (NUOVA) Percentuale di bordi netti (Canny)
+            "skewness",
+            "kurtosis",
+            "edge_density",
+            "megapixels",
+            "aspect_ratio",
         ]
 
     def extract_features(self, image_path: str) -> Tuple[Dict[str, float], np.ndarray]:
@@ -71,6 +73,13 @@ class SpatialFeatureExtractor:
         edge_density = np.count_nonzero(edges) / edges.size
         features["edge_density"] = float(edge_density)
 
+        # 9. Risoluzione (megapixels)
+        h, w = img.shape[:2]
+        features["megapixels"] = float(h * w) / 1e6
+
+        # 10. Aspect ratio
+        features["aspect_ratio"] = float(w) / float(h)
+
         # Array per XGBoost: blindato sull'ordine della lista master
         feature_array = np.array([features[name] for name in self.feature_names], dtype=np.float32)
 
@@ -86,7 +95,7 @@ if __name__ == "__main__":
         feats, array = extractor.extract_features(test_img)
         elapsed_ms = (time.perf_counter() - start) * 1000
 
-        print(f"✅ 8 Feature estratte in {elapsed_ms:.2f} ms")
+        print(f"✅ 10 Feature estratte in {elapsed_ms:.2f} ms")
         print("Feature dizionario:")
         for k, v in feats.items():
             print(f"  {k:15}: {v:10.4f}")

@@ -21,7 +21,7 @@ from xgboost import XGBClassifier
 sys.path.insert(0, os.path.expanduser("~/tesi"))
 from src.selector.feature_extractor import SpatialFeatureExtractor
 
-ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_v2_multi.csv")
+ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_raw_telemetry_eco_winners_3class.csv")
 RESULTS_DIR = os.path.expanduser("~/tesi/results/selector")
 MODEL_PATH = os.path.expanduser("~/tesi/results/selector/xgboost_model.pkl")
 FEATURES_CACHE = os.path.expanduser("~/tesi/results/selector/features_cache.csv")
@@ -35,6 +35,8 @@ FEATURE_COLS = [
     "skewness",
     "kurtosis",
     "edge_density",
+    "megapixels",
+    "aspect_ratio",
 ]
 
 
@@ -58,13 +60,13 @@ def extract_all_features(df: pd.DataFrame) -> pd.DataFrame:
             feat = {str(k): v for k, v in cache.loc[img_path].to_dict().items()}
         else:
             try:
-                feat = cast(dict[str, Any], extractor.extract_features(img_path))
+                feat = cast(dict[str, Any], extractor.extract_features(img_path)[0])
             except Exception as e:
                 print(f"  ERRORE feature {img_path}: {e}")
                 continue
 
         feat["image"] = img_path
-        feat["winner_codec"] = str(row["winner_codec"])
+        feat["codec"] = str(row["codec"])
         feat["dataset"] = str(row["dataset"])
         rows.append(feat)
 
@@ -80,7 +82,7 @@ def train_xgboost(features_df: pd.DataFrame) -> tuple[XGBClassifier, LabelEncode
     """Addestra XGBoost e valuta sull'hold-out set."""
 
     X = features_df[FEATURE_COLS].values
-    y_raw = np.array(features_df["winner_codec"].values)
+    y_raw = np.array(features_df["codec"].values)
 
     # encode labels
     le = LabelEncoder()
@@ -97,9 +99,10 @@ def train_xgboost(features_df: pd.DataFrame) -> tuple[XGBClassifier, LabelEncode
 
     # addestra XGBoost
     model = XGBClassifier(
-        n_estimators=200,
-        max_depth=6,
+        n_estimators=100,
+        max_depth=3,
         learning_rate=0.1,
+        min_child_weight=1,
         subsample=0.8,
         colsample_bytree=0.8,
         random_state=42,
@@ -165,7 +168,7 @@ def train_xgboost(features_df: pd.DataFrame) -> tuple[XGBClassifier, LabelEncode
 if __name__ == "__main__":
     print("Caricamento dati oracolo...")
     df = pd.read_csv(ORACLE_CSV)
-    df = df[df["winner_codec"] != "ERROR"].reset_index(drop=True)
+    df = df[df["codec"] != "ERROR"].reset_index(drop=True)
     print(f"Immagini valide: {len(df)}")
 
     print("\nEstrazione feature spaziali...")

@@ -1,0 +1,1026 @@
+nohup: ignoring input
+/home/user/miniconda3/envs/tesi/lib/python3.11/site-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/home/user/miniconda3/envs/tesi/lib/python3.11/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=AlexNet_Weights.IMAGENET1K_V1`. You can also use `weights=AlexNet_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+Setting up [LPIPS] perceptual loss: trunk [alex], v[0.1], spatial [off]
+Loading model from: /home/user/miniconda3/envs/tesi/lib/python3.11/site-packages/lpips/weights/v0.1/alex.pth
+/opt/rocm/lib/libamd_smi.so: cannot open shared object file: No such file or directory
+Unable to find libamd_smi.so library try installing amd-smi-lib from your package manager
+Device: cuda
+Setting up [LPIPS] perceptual loss: trunk [alex], v[0.1], spatial [off]
+Loading model from: /home/user/miniconda3/envs/tesi/lib/python3.11/site-packages/lpips/weights/v0.1/alex.pth
+Resume: 34 misurazioni già completate.
+Caricamento modelli neurali...
+Modelli caricati.
+
+  kodak: 24 immagini
+  clic_train: 585 immagini
+  div2k: 100 immagini
+  tecnick: 0 immagini
+  coco_sample: 200 immagini
+
+Totale: 909 immagini
+
+[1/909] kodim01.png
+[2/909] kodim02.png
+[3/909] kodim03.png
+[4/909] kodim04.png
+[5/909] kodim05.png
+[6/909] kodim06.png
+[7/909] kodim07.png
+[8/909] kodim08.png
+[9/909] kodim09.png
+[10/909] kodim10.png
+  -> Checkpoint: 86 righe scritte
+[11/909] kodim11.png
+[12/909] kodim12.png
+[13/909] kodim13.png
+[14/909] kodim14.png
+[15/909] kodim15.png
+[16/909] kodim16.png
+[17/909] kodim17.png
+[18/909] kodim18.png
+[19/909] kodim19.png
+[20/909] kodim20.png
+  -> Checkpoint: 206 righe scritte
+[21/909] kodim21.png
+[22/909] kodim22.png
+[23/909] kodim23.png
+[24/909] kodim24.png
+[25/909] abigail-keenan-27293.png
+[26/909] adam-przewoski-193.png
+[27/909] adam-willoughby-knox-56406.png
+[28/909] afroz-nawaf-323.png
+[29/909] alberto-restifo-4549.png
+[30/909] alec-weir-22151.png
+  -> Checkpoint: 326 righe scritte
+[31/909] alejandro-escamilla-1.png
+[32/909] alejandro-escamilla-10.png
+[33/909] alejandro-escamilla-2.png
+[34/909] alejandro-escamilla-23.png
+[35/909] alejandro-escamilla-25.png
+[36/909] aleks-dorohovich-26.png
+[37/909] aleks-dorohovich-38.png
+[38/909] aleksandra-boguslawska-288.png
+[39/909] aleksi-tappura-445.png
+[40/909] ales-krivec-1211.png
+  -> Checkpoint: 446 righe scritte
+[41/909] ales-krivec-2051.png
+[42/909] ales-krivec-26511.png
+[43/909] ales-krivec-2892.png
+[44/909] ales-krivec-3727.png
+[45/909] ales-krivec-3728.png
+[46/909] ales-krivec-434.png
+[47/909] ales-krivec-731.png
+[48/909] alex-siale-95113.png
+[49/909] alex-talmon-192.png
+[50/909] alex-wong-17993.png
+  -> Checkpoint: 566 righe scritte
+[51/909] alex-wong-17997.png
+[52/909] alexander-dimitrov-5583.png
+[53/909] alexander-rotker-107460.png
+[54/909] alexander-schwarz-660.png
+[55/909] alexander-shustov-63.png
+[56/909] alexander-shustov-69.png
+[57/909] alexandre-perotto-45492.png
+[58/909] alexandre-perotto-75274.png
+[59/909] ali-inay-2273.png
+[60/909] ali-inay-2277.png
+  -> Checkpoint: 686 righe scritte
+[61/909] amar-yashlaha-122277.png
+[62/909] ambitious-creative-co-rick-barrett-110145 (1).png
+[63/909] anders-jilden-89745.png
+[64/909] andre-koch-188.png
+[65/909] andre-robillard-298.png
+[66/909] andre-spieker-238.png
+[67/909] andrea-boldizsar-183.png
+[68/909] andrew-coelho-46449.png
+[69/909] andrew-collins-1612.png
+[70/909] andrew-neel-133200.png
+  -> Checkpoint: 806 righe scritte
+[71/909] andrew-neel-178721.png
+[72/909] angela-benito-3184.png
+[73/909] angelina-odemchuk-180.png
+[74/909] anna-anikina-31537.png
+[75/909] anna-popovic-56025.png
+[76/909] annie-spratt-42051.png
+[77/909] annie-spratt-44241.png
+[78/909] anthony-delanoix-14634.png
+[79/909] anthony-delanoix-16442.png
+[80/909] anthony-delanoix-22776.png
+  -> Checkpoint: 926 righe scritte
+[81/909] anthony-delanoix-33879.png
+[82/909] anthony-indraus-14311.png
+[83/909] anton-repponen-96746.png
+[84/909] anton-repponen-99546.png
+[85/909] ariana-prestes-285.png
+[86/909] arto-marttinen-182999.png
+[87/909] arto-marttinen-79383.png
+[88/909] artur-pokusin-739.png
+[89/909] arvee-marie-107.png
+[90/909] aurelien-bellanger-3970.png
+  -> Checkpoint: 1046 righe scritte
+[91/909] austin-neill-139496.png
+[92/909] austin-neill-159603.png
+[93/909] austin-neill-189141.png
+[94/909] axel-antas-bergkvist-7400.png
+[95/909] barcelona-81.png
+[96/909] barcelona-82.png
+[97/909] barn-images-11460.png
+[98/909] bartlomiej-jacak-114470.png
+[99/909] bartosz-bak-254.png
+[100/909] bec-brown-3490.png
+  -> Checkpoint: 1166 righe scritte
+[101/909] ben-dumond-13830.png
+[102/909] benjamin-combs-27619.png
+[103/909] benjamin-combs-28880.png
+[104/909] benjamin-combs-28896.png
+[105/909] bertrand-zuchuat-641.png
+[106/909] beto-galetto-200.png
+[107/909] biegun-wschodni-8636.png
+[108/909] bino-storyteller-33047.png
+[109/909] bjorn-simon-418.png
+[110/909] blake-richard-verdoorn-21434.png
+  -> Checkpoint: 1286 righe scritte
+[111/909] blake-richard-verdoorn-25009.png
+[112/909] bonnie-meisels-437.png
+[113/909] brandon-lam-29892.png
+[114/909] brian-erickson-54417.png
+[115/909] brownie-768.png
+[116/909] buzo-jesus-190.png
+[117/909] c-ma-435.png
+[118/909] caleb-george-480.png
+[119/909] caleb-ralston-21604.png
+[120/909] cameron-kirby-49742.png
+  -> Checkpoint: 1406 righe scritte
+[121/909] carli-jeen-365.png
+[122/909] carli-jeen-431.png
+[123/909] caroline-sada-92.png
+[124/909] caryle-barton-56255.png
+[125/909] casey-fyfe-998.png
+[126/909] cayton-heath-60402.png
+[127/909] charles-forerunner-1727.png
+[128/909] charles-forerunner-378.png
+[129/909] charles-l-309.png
+[130/909] charles-s-524.png
+  -> Checkpoint: 1526 righe scritte
+[131/909] chelsea-francis-3458.png
+[132/909] chloe-benko-prieur-162.png
+[133/909] chris-adams-237.png
+[134/909] chris-becker-52648.png
+[135/909] chris-greenhow-135337.png
+[136/909] christian-holzinger-1262.png
+[137/909] christopher-campbell-30253.png
+[138/909] christopher-skor-1894.png
+[139/909] chuttersnap-255210.png
+[140/909] cierra-59.png
+  -> Checkpoint: 1646 righe scritte
+[141/909] clark-street-mercantile-33932.png
+[142/909] claudio-testa-135408.png
+[143/909] clem-onojeghuo-91150.png
+[144/909] cole-patrick-404.png
+[145/909] cornelia-schutz-338.png
+[146/909] cosmic-timetraveler-29758.png
+[147/909] cosmic-timetraveler-39770.png
+[148/909] cristian-baron-27348.png
+[149/909] cristian-moscoso-61.png
+[150/909] cristina-gottardi-177252.png
+  -> Checkpoint: 1766 righe scritte
+[151/909] crucifix-jean-luc-1837.png
+[152/909] dakota-roos-1195.png
+[153/909] dan-carlson-88563.png
+[154/909] daniel-beilinson-1695.png
+[155/909] daniel-genser-70.png
+[156/909] daniel-robert-159.png
+[157/909] daniela-cuevas-21225.png
+[158/909] danka-peter-178.png
+[159/909] danka-peter-336.png
+[160/909] danny-froese-1052.png
+  -> Checkpoint: 1886 righe scritte
+[161/909] davey-heuser-696.png
+[162/909] david-marcu-1263.png
+[163/909] david-marcu-1425.png
+[164/909] david-marcu-30865.png
+[165/909] david-marcu-441.png
+[166/909] david-marcu-4655.png
+[167/909] david-marcu-5437.png
+[168/909] davide-ragusa-2178.png
+[169/909] davide-ragusa-269.png
+[170/909] delfi-de-la-rua-23324.png
+  -> Checkpoint: 2006 righe scritte
+[171/909] delfi-de-la-rua-85106.png
+[172/909] desi-mendoza-451.png
+[173/909] devin-rajaram-28791.png
+[174/909] dietmar-becker-131.png
+[175/909] dillon-mcintosh-163.png
+[176/909] dino-reichmuth-84077.png
+[177/909] dirk-sebregts-2408.png
+[178/909] dmitri-popov-114770.png
+[179/909] dmitrii-medvedev-100580.png
+[180/909] dmitry-sytnik-25017.png
+  -> Checkpoint: 2126 righe scritte
+[181/909] dominik-lange-35224.png
+[182/909] dominik-martin-100802.png
+[183/909] dominik-martin-326.png
+[184/909] dorothee-hubner-764.png
+[185/909] dorothy-lin-72.png
+[186/909] dorothy-lin-77.png
+[187/909] doug-robichaud-3531.png
+[188/909] drew-geraets-957.png
+[189/909] drew-hays-26333.png
+[190/909] drew-patrick-miller-29382.png
+  -> Checkpoint: 2246 righe scritte
+[191/909] drew-patrick-miller-59416.png
+[192/909] dustin-lee-19667.png
+[193/909] dustin-scarpitti-1009.png
+[194/909] dyaa-eldin-moustafa-197.png
+[195/909] edan-cohen-2486.png
+[196/909] elena-prokofyeva-17909.png
+[197/909] eli-defaria-14555.png
+[198/909] elisabetta-foco-241.png
+[199/909] elizabeth-lies-20237.png
+[200/909] elle-zhu-22896.png
+  -> Checkpoint: 2366 righe scritte
+[201/909] emanuele-pinna-258.png
+[202/909] eric-huang-35182.png
+[203/909] erol-ahmed-80094.png
+[204/909] evan-kirby-104799.png
+[205/909] ezra-jeffrey-87323.png
+[206/909] faye-cornish-76100.png
+[207/909] federico-beccari-130703.png
+[208/909] felix-russell-saw-182331.png
+[209/909] fineas-anton-143501.png
+[210/909] forrest-cavale-350.png
+  -> Checkpoint: 2486 righe scritte
+[211/909] frances-gunn-39238.png
+[212/909] francisco-casero-234.png
+[213/909] fre-sonneveld-272.png
+[214/909] fre-sonneveld-315.png
+[215/909] fritz-bielmeier-29905.png
+[216/909] gabe-rodriguez-110.png
+[217/909] gabriel-santiago-423.png
+[218/909] gabriel-santiago-453.png
+[219/909] gabriel-santiago-598.png
+[220/909] galymzhan-abdugalimov-181.png
+  -> Checkpoint: 2606 righe scritte
+[221/909] georgia-dixon-248.png
+[222/909] glen-carrie-429.png
+[223/909] go-wild-27.png
+[224/909] gonzalo-poblete-450.png
+[225/909] good-free-photos-177.png
+[226/909] greg-rakozy-199744.png
+[227/909] greg-rakozy-53292.png
+[228/909] guillaume-120.png
+[229/909] hailey-kean-100680.png
+[230/909] hartmut-tobies-481.png
+  -> Checkpoint: 2726 righe scritte
+[231/909] harvey-enrile-491.png
+[232/909] hide-obara-233.png
+[233/909] hikersbay-hikersbay-3503.png
+[234/909] hisu-lee-38286.png
+[235/909] hoach-le-dinh-91879.png
+[236/909] igor-ovsyannykov-410.png
+[237/909] ilham-rahmansyah-102.png
+[238/909] israel-sundseth-1687.png
+[239/909] ivan-chen-37378.png
+[240/909] jacob-aguilar-friend-343.png
+  -> Checkpoint: 2846 righe scritte
+[241/909] jake-hills-389.png
+[242/909] james-forbes-191.png
+[243/909] jamie-r-mink-67789.png
+[244/909] jan-schulz-webdesigner-stuttgart-99749.png
+[245/909] jared-erondu-8131.png
+[246/909] jason-blackeye-137278.png
+[247/909] jason-blackeye-172510.png
+[248/909] jason-long-718.png
+[249/909] jason-ortego-5386.png
+[250/909] jasper-van-der-meij-756.png
+  -> Checkpoint: 2966 righe scritte
+[251/909] jassy-onyae-71.png
+[252/909] jay-ruzesky-84387.png
+[253/909] jean-lakosnyk-1325.png
+[254/909] jean-marie-grange-21067.png
+[255/909] jeff-sheldon-2549.png
+[256/909] jeff-sheldon-2550.png
+[257/909] jeff-sheldon-2551.png
+[258/909] jeff-sheldon-2554.png
+[259/909] jeff-sheldon-2557.png
+[260/909] jeff-sheldon-3219.png
+  -> Checkpoint: 3086 righe scritte
+[261/909] jeff-sheldon-3224.png
+[262/909] jeff-sheldon-3225.png
+[263/909] jeff-sheldon-3227.png
+[264/909] jeff-sheldon-3228.png
+[265/909] jeffrey-swanson-17942.png
+[266/909] jennifer-langley-290.png
+[267/909] jeremy-cai-1177.png
+[268/909] jeremy-thomas-99326.png
+[269/909] jerry-adney-28.png
+[270/909] jessica-polar-537.png
+  -> Checkpoint: 3206 righe scritte
+[271/909] jimmy-musto-39162.png
+[272/909] joanna-kosinska-44214.png
+[273/909] joao-silas-85835.png
+[274/909] joe-jansen-184838.png
+[275/909] joe-reed-82416.png
+[276/909] joel-filipe-187166.png
+[277/909] joel-herzog-105060.png
+[278/909] john-cobb-13965.png
+[279/909] john-cobb-14128.png
+[280/909] john-kutcher-15357.png
+  -> Checkpoint: 3326 righe scritte
+[281/909] john-price-5258.png
+[282/909] john-towner-125997.png
+[283/909] john-towner-188590.png
+[284/909] johnny-lam-86.png
+[285/909] jon-eckert-75.png
+[286/909] jon-flobrant-155201.png
+[287/909] jon-flobrant-32821.png
+[288/909] jon-flobrant-49795.png
+[289/909] jon-toney-99.png
+[290/909] jonas-eriksson-3517.png
+  -> Checkpoint: 3446 righe scritte
+[291/909] jonas-lavoie-levesque-397.png
+[292/909] jonatan-pie-117073.png
+[293/909] jordan-mcqueen-6535.png
+[294/909] jordan-sanchez-13139.png
+[295/909] joren-645.png
+[296/909] joschko-hammermann-2224.png
+[297/909] jose-martin-ramirez-c-363.png
+[298/909] jose-martin-ramirez-c-364.png
+[299/909] jose-murillo-30007.png
+[300/909] josefa-holland-merten-3739.png
+  -> Checkpoint: 3566 righe scritte
+[301/909] josefa-holland-merten-4142.png
+[302/909] josefa-holland-merten-4145.png
+[303/909] joseph-barrientos-22207.png
+[304/909] josh-felise-10266.png
+[305/909] josh-felise-14491.png
+[306/909] joshua-earle-33443.png
+[307/909] joshua-hibbert-22841.png
+[308/909] joshua-k-jackson-121881.png
+[309/909] joshua-k-jackson-36622.png
+[310/909] joshua-sortino-5581.png
+  -> Checkpoint: 3686 righe scritte
+[311/909] julie-geiger-84.png
+[312/909] julie-macey-67464.png
+[313/909] julien-lavallee-4273.png
+[314/909] justin-leibow-1939.png
+[315/909] justin-luebke-92974.png
+[316/909] kace-rodriguez-85845.png
+[317/909] kalen-emsley-98264.png
+[318/909] kalen-emsley-99666.png
+[319/909] karl-fredrickson-35017.png
+[320/909] kazuend-25771.png
+  -> Checkpoint: 3806 righe scritte
+[321/909] kazuend-25774.png
+[322/909] kazuend-29733.png
+[323/909] keith-misner-308.png
+[324/909] keith-misner-778.png
+[325/909] keith-wickramasekara-97976.png
+[326/909] kelly-sikkema-1910.png
+[327/909] kelly-sikkema-215.png
+[328/909] kenneth-thewissen-117.png
+[329/909] kim-daniel-371.png
+[330/909] kim-daniel-594.png
+  -> Checkpoint: 3926 righe scritte
+[331/909] kristian-karlsson-264.png
+[332/909] kristian-karlsson-320.png
+[333/909] kundan-ramisetti-146.png
+[334/909] kundan-ramisetti-96.png
+[335/909] kyle-szegedi-8217.png
+[336/909] lacey-raper-361.png
+[337/909] lance-asper-153769.png
+[338/909] lechon-kirb-21832.png
+[339/909] lee-miller-48144.png
+[340/909] lee-roylland-10260.png
+  -> Checkpoint: 4046 righe scritte
+[341/909] leeroy-653.png
+[342/909] liane-metzler-29935.png
+[343/909] lili-popper-29464.png
+[344/909] linh-nguyen-164.png
+[345/909] linh-nguyen-175.png
+[346/909] lionello-delpiccolo-100306.png
+[347/909] loic-djim-94369.png
+[348/909] london-scout-27289.png
+[349/909] london-scout-27290.png
+[350/909] loudge-402.png
+  -> Checkpoint: 4166 righe scritte
+[351/909] luca-bravo-186960.png
+[352/909] lucas-lof-388.png
+[353/909] lukas-budimaier-49074.png
+[354/909] lukasz-szmigiel-413.png
+[355/909] luke-chesser-48.png
+[356/909] luke-chesser-49.png
+[357/909] luke-pamer-26747.png
+[358/909] m-wrona-144338.png
+[359/909] manuel-barroso-parejo-17159.png
+[360/909] marcelo-quinan-37428.png
+  -> Checkpoint: 4286 righe scritte
+[361/909] marcelo-quinan-37429.png
+[362/909] marcin-czerwinski-129.png
+[363/909] marco-bonomo-1930.png
+[364/909] margaret-barley-42.png
+[365/909] margot-pandone-2309.png
+[366/909] maria-victoria-heredia-reyes-20882.png
+[367/909] mark-basarab-157611.png
+[368/909] martin-wessely-212.png
+[369/909] martin-wessely-243.png
+[370/909] mathew-macquarrie-91468.png
+  -> Checkpoint: 4406 righe scritte
+[371/909] matt-benson-7408.png
+[372/909] matt-benson-7409.png
+[373/909] matt-jones-67226.png
+[374/909] matteo-minelli-134.png
+[375/909] matteo-paganelli-39971.png
+[376/909] matthew-clark-616.png
+[377/909] matthew-henry-14221.png
+[378/909] matthew-henry-1438.png
+[379/909] matthew-henry-300.png
+[380/909] matthew-henry-56066.png
+  -> Checkpoint: 4526 righe scritte
+[381/909] matthew-henry-6205.png
+[382/909] matthew-henry-82940.png
+[383/909] matthew-kane-121134.png
+[384/909] matthew-skinner-196.png
+[385/909] maxime-le-conte-des-floris-151374.png
+[386/909] mcdobbie-hu-12791.png
+[387/909] mia-domenico-455.png
+[388/909] micah-h-18872.png
+[389/909] michael-221247.png
+[390/909] michael-hacker-142262.png
+  -> Checkpoint: 4646 righe scritte
+[391/909] mickey-o-neil-40131.png
+[392/909] mika-ruusunen-683.png
+[393/909] mikael-kristenson-13641.png
+[394/909] mike-petrucci-25087.png
+[395/909] mike-wilson-111578.png
+[396/909] mike-wilson-140883.png
+[397/909] modestas-urbonas-14752.png
+[398/909] modestas-urbonas-14753.png
+[399/909] monstruo-estudio-573.png
+[400/909] morgan-sessions-543.png
+  -> Checkpoint: 4766 righe scritte
+[401/909] morgan-sessions-6255.png
+[402/909] mr-cup-fabien-barral-86074.png
+[403/909] mr-lee-603.png
+[404/909] mr-marco-614.png
+[405/909] nadir-balcikli-118.png
+[406/909] nasa-43567.png
+[407/909] nasa-43569.png
+[408/909] nasa-43979.png
+[409/909] nasa-53887.png
+[410/909] nasa-89125.png
+  -> Checkpoint: 4886 righe scritte
+[411/909] nathan-anderson-158078.png
+[412/909] nathan-anderson-158541.png
+[413/909] neil-thomas-5889.png
+[414/909] nelly-volkovich-16093.png
+[415/909] nicholas-swanson-56.png
+[416/909] nicholas-swanson-60.png
+[417/909] nicholas-swanson-65.png
+[418/909] nick-scheerbart-15636.png
+[419/909] nick-scheerbart-32085.png
+[420/909] nick-wilkes-490.png
+  -> Checkpoint: 5006 righe scritte
+[421/909] nicolai-berntsen-8741.png
+[422/909] nicomiot-photographies-54150.png
+[423/909] nigel-lo-550.png
+[424/909] nitish-kadam-34748.png
+[425/909] noah-basle-25980.png
+[426/909] noah-kuhn-27481.png
+[427/909] noah-rosenfield-41197.png
+[428/909] noe-araujo-721.png
+[429/909] noel-lopez-170.png
+[430/909] noel-lopez-171.png
+  -> Checkpoint: 5126 righe scritte
+[431/909] oleg-chursin-44.png
+[432/909] olivier-miche-76298.png
+[433/909] oscar-nilsson-398.png
+[434/909] oskar-krawczyk-172847.png
+[435/909] owen-walters-471.png
+[436/909] ozark-drones-21024.png
+[437/909] pablo-garcia-saldana-27620.png
+[438/909] parker-gibbs-783.png
+[439/909] patrick-tomasso-71909.png
+[440/909] patrik-gothe-444.png
+  -> Checkpoint: 5246 righe scritte
+[441/909] patryk-sobczak-1726.png
+[442/909] paul-earle-39322.png
+[443/909] paul-evans-74.png
+[444/909] paul-gilmore-184255.png
+[445/909] paul-gilmore-97770.png
+[446/909] paul-jarvis-11.png
+[447/909] paul-jarvis-13.png
+[448/909] paul-jarvis-15.png
+[449/909] paul-jarvis-16.png
+[450/909] paul-jarvis-19.png
+  -> Checkpoint: 5366 righe scritte
+[451/909] paul-jarvis-217.png
+[452/909] paul-morris-171434.png
+[453/909] paul-proshin-468.png
+[454/909] paula-borowska-216.png
+[455/909] paula-borowska-3938.png
+[456/909] paula-porto-36696.png
+[457/909] paulo-simoes-mendes-1249.png
+[458/909] paulo-simoes-mendes-33354.png
+[459/909] pawel-kadysz-3294.png
+[460/909] pawel-kadysz-3295.png
+  -> Checkpoint: 5486 righe scritte
+[461/909] peter-besser-132.png
+[462/909] peter-hershey-177645.png
+[463/909] petradr-168.png
+[464/909] philipp-reiner-317.png
+[465/909] picseli-13574.png
+[466/909] picseli-6726.png
+[467/909] pierre-bouillot-29023.png
+[468/909] pierre-bouillot-29065.png
+[469/909] pineapple-supply-co-54478.png
+[470/909] pineapple-supply-co-56454.png
+  -> Checkpoint: 5606 righe scritte
+[471/909] piotr-kwiatkowski-354.png
+[472/909] por7o-419.png
+[473/909] pujohn-das-110287.png
+[474/909] rafael-fabricio-351.png
+[475/909] ray-hennessy-118048.png
+[476/909] ray-hennessy-139969.png
+[477/909] raybay-382.png
+[478/909] rebecca-johnston-17130.png
+[479/909] redd-angelo-70553.png
+[480/909] ricardo-gomez-angel-180819.png
+  -> Checkpoint: 5726 righe scritte
+[481/909] richard-loader-31932.png
+[482/909] rick-waalders-123.png
+[483/909] rick-waalders-124.png
+[484/909] rob-bye-55418.png
+[485/909] rob-potvin-420.png
+[486/909] robson-hatsukami-morgan-116208.png
+[487/909] rodrigo-melo-32.png
+[488/909] roman-arkhipov-123618.png
+[489/909] roman-kraft-27340.png
+[490/909] rosan-harmens-18703.png
+  -> Checkpoint: 5846 righe scritte
+[491/909] rowan-heuvel-20502.png
+[492/909] ruben-dos-santos-1938.png
+[493/909] rula-sibai-97.png
+[494/909] ruxandra-mateiu-421.png
+[495/909] ry-van-362.png
+[496/909] ryan-pohanic-13342.png
+[497/909] ryan-tauss-795.png
+[498/909] sam-wheeler-2303.png
+[499/909] samsommer-76472.png
+[500/909] samuel-rohl-412.png
+  -> Checkpoint: 5966 righe scritte
+[501/909] samuel-scrimshaw-76646.png
+[502/909] samuel-zeller-1609.png
+[503/909] samuel-zeller-72120.png
+[504/909] samuel-zeller-88483.png
+[505/909] sander-weeteling-88.png
+[506/909] sarah-burvenich-745.png
+[507/909] saul-cuellar-21764.png
+[508/909] scott-webb-56901.png
+[509/909] sebastian-unrau-31874.png
+[510/909] sebastian-unrau-41675.png
+  -> Checkpoint: 6086 righe scritte
+[511/909] sebastien-gabriel-13684.png
+[512/909] sebastien-gabriel-14597.png
+[513/909] sebastien-marchand-9747.png
+[514/909] sergee-bee-6680.png
+[515/909] sergei-akulich-39027.png
+[516/909] sergio-rola-38758.png
+[517/909] seth-doyle-133177.png
+[518/909] shawnn-tan-265187.png
+[519/909] siddharth-kothari-417.png
+[520/909] simon-schmitt-29709.png
+  -> Checkpoint: 6206 righe scritte
+[521/909] skyler-smith-25745.png
+[522/909] sonja-langford-325.png
+[523/909] sonja-langford-974.png
+[524/909] spacex-81773.png
+[525/909] stale-grut-14863.png
+[526/909] stefan-kunze-16862.png
+[527/909] stefan-kunze-26924.png
+[528/909] stefan-kunze-26928.png
+[529/909] stefan-ringler-13140.png
+[530/909] stefanus-martanto-setyo-husodo-14699.png
+  -> Checkpoint: 6326 righe scritte
+[531/909] stephen-radford-27354.png
+[532/909] steve-carter-68574.png
+[533/909] steve-richey-141.png
+[534/909] steve-richey-7216.png
+[535/909] steven-lewis-555.png
+[536/909] sudarshan-bhat-31099.png
+[537/909] susanne-feldt-12790.png
+[538/909] sven-scheuermeier-37377.png
+[539/909] sven-schlager-758.png
+[540/909] sweet-ice-cream-photography-83915.png
+  -> Checkpoint: 6446 righe scritte
+[541/909] sylwia-bartyzel-199.png
+[542/909] sylwia-bartyzel-502.png
+[543/909] talia-cohen-1811.png
+[544/909] taylor-jacobs-25060.png
+[545/909] taylor-leopold-278.png
+[546/909] taylor-leopold-279.png
+[547/909] teddy-kelley-106391.png
+[548/909] the-anchor-28037.png
+[549/909] thomas-kelley-63615.png
+[550/909] thomas-lefebvre-1518.png
+  -> Checkpoint: 6566 righe scritte
+[551/909] thomas-lefebvre-20957.png
+[552/909] thomas-lefebvre-5691.png
+[553/909] thomas-shellberg-33477.png
+[554/909] thomas-tixtaaz-119880.png
+[555/909] thomas-tucker-129635.png
+[556/909] thong-vo-332.png
+[557/909] tiago-gerken-205.png
+[558/909] tiago-gerken-252.png
+[559/909] tiago-muraro-30895.png
+[560/909] tim-gouw-73090.png
+  -> Checkpoint: 6686 righe scritte
+[561/909] tim-marshall-140945.png
+[562/909] tim-marshall-154623.png
+[563/909] tim-mossholder-2441.png
+[564/909] tim-swaan-45717.png
+[565/909] todd-desantis-37264.png
+[566/909] todd-quackenbush-47564.png
+[567/909] todd-quackenbush-700.png
+[568/909] todd-quackenbush-997.png
+[569/909] tom-butler-218.png
+[570/909] tomasz-paciorek-536.png
+  -> Checkpoint: 6806 righe scritte
+[571/909] tony-naccarato-55.png
+[572/909] tony-webster-97532.png
+[573/909] tsaiga-26406.png
+[574/909] tyler-finck-80.png
+[575/909] tyler-wanlass-51.png
+[576/909] ugur-gurcuoglu-98840.png
+[577/909] vadim-sherbakov-127.png
+[578/909] vadim-sherbakov-194.png
+[579/909] vadim-sherbakov-30.png
+[580/909] vadim-sherbakov-41909.png
+  -> Checkpoint: 6926 righe scritte
+[581/909] vadim-sherbakov-68.png
+[582/909] valor-kopeny-31409.png
+[583/909] veeterzy-82538.png
+[584/909] verne-ho-26451.png
+[585/909] victor-erixon-282.png
+[586/909] vincent-burkhead-141499.png
+[587/909] vincent-guth-177308.png
+[588/909] vladimir-kramer-145.png
+[589/909] vladimir-kudinov-12755.png
+[590/909] vladimir-kudinov-12762.png
+  -> Checkpoint: 7046 righe scritte
+[591/909] vladimir-kudinov-58771.png
+[592/909] vladimir-kudinov-94873.png
+[593/909] webvilla-293.png
+[594/909] will-van-wingerden-87463.png
+[595/909] william-bout-103533.png
+[596/909] william-hook-58610.png
+[597/909] william-iven-5893.png
+[598/909] wilson-ye-128679.png
+[599/909] wim-peters-274.png
+[600/909] wojtek-witkowski-189.png
+  -> Checkpoint: 7166 righe scritte
+[601/909] wojtek-witkowski-275.png
+[602/909] wolf-schram-79896.png
+[603/909] wolfgang-lutz-26516.png
+[604/909] yair-hazout-245.png
+[605/909] yamon-figurs-26140.png
+[606/909] yoni-kaplan-nadel-29.png
+[607/909] yulia-vambold-20364.png
+[608/909] zara-walker-71279.png
+[609/909] zugr-121.png
+[610/909] 0801.png
+  -> Checkpoint: 7286 righe scritte
+[611/909] 0802.png
+[612/909] 0803.png
+[613/909] 0804.png
+[614/909] 0805.png
+[615/909] 0806.png
+[616/909] 0807.png
+[617/909] 0808.png
+[618/909] 0809.png
+[619/909] 0810.png
+[620/909] 0811.png
+  -> Checkpoint: 7406 righe scritte
+[621/909] 0812.png
+[622/909] 0813.png
+[623/909] 0814.png
+[624/909] 0815.png
+[625/909] 0816.png
+[626/909] 0817.png
+[627/909] 0818.png
+[628/909] 0819.png
+[629/909] 0820.png
+[630/909] 0821.png
+  -> Checkpoint: 7526 righe scritte
+[631/909] 0822.png
+[632/909] 0823.png
+[633/909] 0824.png
+[634/909] 0825.png
+[635/909] 0826.png
+[636/909] 0827.png
+[637/909] 0828.png
+[638/909] 0829.png
+[639/909] 0830.png
+[640/909] 0831.png
+  -> Checkpoint: 7646 righe scritte
+[641/909] 0832.png
+[642/909] 0833.png
+[643/909] 0834.png
+[644/909] 0835.png
+[645/909] 0836.png
+[646/909] 0837.png
+[647/909] 0838.png
+[648/909] 0839.png
+[649/909] 0840.png
+[650/909] 0841.png
+  -> Checkpoint: 7766 righe scritte
+[651/909] 0842.png
+[652/909] 0843.png
+[653/909] 0844.png
+[654/909] 0845.png
+[655/909] 0846.png
+[656/909] 0847.png
+[657/909] 0848.png
+[658/909] 0849.png
+[659/909] 0850.png
+[660/909] 0851.png
+  -> Checkpoint: 7886 righe scritte
+[661/909] 0852.png
+[662/909] 0853.png
+[663/909] 0854.png
+[664/909] 0855.png
+[665/909] 0856.png
+[666/909] 0857.png
+[667/909] 0858.png
+[668/909] 0859.png
+[669/909] 0860.png
+[670/909] 0861.png
+  -> Checkpoint: 8006 righe scritte
+[671/909] 0862.png
+[672/909] 0863.png
+[673/909] 0864.png
+[674/909] 0865.png
+[675/909] 0866.png
+[676/909] 0867.png
+[677/909] 0868.png
+[678/909] 0869.png
+[679/909] 0870.png
+[680/909] 0871.png
+  -> Checkpoint: 8126 righe scritte
+[681/909] 0872.png
+[682/909] 0873.png
+[683/909] 0874.png
+[684/909] 0875.png
+[685/909] 0876.png
+[686/909] 0877.png
+[687/909] 0878.png
+[688/909] 0879.png
+[689/909] 0880.png
+[690/909] 0881.png
+  -> Checkpoint: 8246 righe scritte
+[691/909] 0882.png
+[692/909] 0883.png
+[693/909] 0884.png
+[694/909] 0885.png
+[695/909] 0886.png
+[696/909] 0887.png
+[697/909] 0888.png
+[698/909] 0889.png
+[699/909] 0890.png
+[700/909] 0891.png
+  -> Checkpoint: 8366 righe scritte
+[701/909] 0892.png
+[702/909] 0893.png
+[703/909] 0894.png
+[704/909] 0895.png
+[705/909] 0896.png
+[706/909] 0897.png
+[707/909] 0898.png
+[708/909] 0899.png
+[709/909] 0900.png
+[710/909] 000000000285.jpg
+  -> Checkpoint: 8486 righe scritte
+[711/909] 000000000632.jpg
+[712/909] 000000000724.jpg
+[713/909] 000000000776.jpg
+[714/909] 000000000785.jpg
+[715/909] 000000000802.jpg
+[716/909] 000000000872.jpg
+[717/909] 000000000885.jpg
+[718/909] 000000001000.jpg
+[719/909] 000000001268.jpg
+[720/909] 000000001296.jpg
+  -> Checkpoint: 8606 righe scritte
+[721/909] 000000001353.jpg
+[722/909] 000000001425.jpg
+[723/909] 000000001490.jpg
+[724/909] 000000001503.jpg
+[725/909] 000000001532.jpg
+[726/909] 000000001584.jpg
+[727/909] 000000001675.jpg
+[728/909] 000000001761.jpg
+[729/909] 000000001818.jpg
+[730/909] 000000001993.jpg
+  -> Checkpoint: 8726 righe scritte
+[731/909] 000000002006.jpg
+[732/909] 000000002149.jpg
+[733/909] 000000002153.jpg
+[734/909] 000000002157.jpg
+[735/909] 000000002261.jpg
+[736/909] 000000002299.jpg
+[737/909] 000000002431.jpg
+[738/909] 000000002473.jpg
+[739/909] 000000002532.jpg
+[740/909] 000000002587.jpg
+  -> Checkpoint: 8846 righe scritte
+[741/909] 000000002592.jpg
+[742/909] 000000002685.jpg
+[743/909] 000000002923.jpg
+[744/909] 000000003156.jpg
+[745/909] 000000003255.jpg
+[746/909] 000000003501.jpg
+[747/909] 000000003553.jpg
+[748/909] 000000003661.jpg
+[749/909] 000000003845.jpg
+[750/909] 000000003934.jpg
+  -> Checkpoint: 8966 righe scritte
+[751/909] 000000004134.jpg
+[752/909] 000000004395.jpg
+[753/909] 000000004495.jpg
+[754/909] 000000004765.jpg
+[755/909] 000000004795.jpg
+[756/909] 000000005001.jpg
+[757/909] 000000005037.jpg
+[758/909] 000000005060.jpg
+[759/909] 000000005193.jpg
+[760/909] 000000005477.jpg
+  -> Checkpoint: 9086 righe scritte
+[761/909] 000000005503.jpg
+[762/909] 000000005529.jpg
+[763/909] 000000005586.jpg
+[764/909] 000000005600.jpg
+[765/909] 000000005992.jpg
+[766/909] 000000006012.jpg
+[767/909] 000000006040.jpg
+[768/909] 000000006213.jpg
+[769/909] 000000006460.jpg
+[770/909] 000000006471.jpg
+  -> Checkpoint: 9206 righe scritte
+[771/909] 000000006614.jpg
+[772/909] 000000006723.jpg
+[773/909] 000000006763.jpg
+[774/909] 000000006771.jpg
+[775/909] 000000006818.jpg
+[776/909] 000000006894.jpg
+[777/909] 000000006954.jpg
+[778/909] 000000007088.jpg
+[779/909] 000000007108.jpg
+[780/909] 000000007278.jpg
+  -> Checkpoint: 9326 righe scritte
+[781/909] 000000007281.jpg
+[782/909] 000000007386.jpg
+[783/909] 000000007511.jpg
+[784/909] 000000007574.jpg
+[785/909] 000000007784.jpg
+[786/909] 000000007795.jpg
+[787/909] 000000007816.jpg
+[788/909] 000000007818.jpg
+[789/909] 000000007888.jpg
+[790/909] 000000007977.jpg
+  -> Checkpoint: 9446 righe scritte
+[791/909] 000000007991.jpg
+[792/909] 000000008021.jpg
+[793/909] 000000008211.jpg
+[794/909] 000000008277.jpg
+[795/909] 000000008532.jpg
+[796/909] 000000008629.jpg
+[797/909] 000000008690.jpg
+[798/909] 000000008762.jpg
+[799/909] 000000008844.jpg
+[800/909] 000000008899.jpg
+  -> Checkpoint: 9566 righe scritte
+[801/909] 000000009378.jpg
+[802/909] 000000009400.jpg
+[803/909] 000000009448.jpg
+[804/909] 000000009483.jpg
+[805/909] 000000009590.jpg
+[806/909] 000000009769.jpg
+[807/909] 000000009772.jpg
+[808/909] 000000009891.jpg
+[809/909] 000000009914.jpg
+[810/909] 000000010092.jpg
+  -> Checkpoint: 9686 righe scritte
+[811/909] 000000010363.jpg
+[812/909] 000000010583.jpg
+[813/909] 000000010707.jpg
+[814/909] 000000010764.jpg
+[815/909] 000000010977.jpg
+[816/909] 000000010995.jpg
+[817/909] 000000011051.jpg
+[818/909] 000000011122.jpg
+[819/909] 000000011149.jpg
+[820/909] 000000011197.jpg
+  -> Checkpoint: 9806 righe scritte
+[821/909] 000000011511.jpg
+[822/909] 000000011615.jpg
+[823/909] 000000011699.jpg
+[824/909] 000000011760.jpg
+[825/909] 000000011813.jpg
+[826/909] 000000012062.jpg
+[827/909] 000000012120.jpg
+[828/909] 000000012280.jpg
+[829/909] 000000012576.jpg
+[830/909] 000000012639.jpg
+  -> Checkpoint: 9926 righe scritte
+[831/909] 000000012667.jpg
+[832/909] 000000012670.jpg
+[833/909] 000000012748.jpg
+[834/909] 000000013004.jpg
+[835/909] 000000013177.jpg
+[836/909] 000000013201.jpg
+[837/909] 000000013291.jpg
+[838/909] 000000013348.jpg
+[839/909] 000000013546.jpg
+[840/909] 000000013597.jpg
+  -> Checkpoint: 10046 righe scritte
+[841/909] 000000013659.jpg
+[842/909] 000000013729.jpg
+[843/909] 000000013774.jpg
+[844/909] 000000013923.jpg
+[845/909] 000000014007.jpg
+[846/909] 000000014038.jpg
+[847/909] 000000014226.jpg
+[848/909] 000000014380.jpg
+[849/909] 000000014439.jpg
+[850/909] 000000014473.jpg
+  -> Checkpoint: 10166 righe scritte
+[851/909] 000000014831.jpg
+[852/909] 000000014888.jpg
+[853/909] 000000015079.jpg
+[854/909] 000000015254.jpg
+[855/909] 000000015272.jpg
+[856/909] 000000015278.jpg
+[857/909] 000000015335.jpg
+[858/909] 000000015338.jpg
+[859/909] 000000015440.jpg
+[860/909] 000000015497.jpg
+  -> Checkpoint: 10286 righe scritte
+[861/909] 000000015517.jpg
+[862/909] 000000015597.jpg
+[863/909] 000000015660.jpg
+[864/909] 000000015746.jpg
+[865/909] 000000015751.jpg
+[866/909] 000000015956.jpg
+[867/909] 000000016010.jpg
+[868/909] 000000016228.jpg
+[869/909] 000000016249.jpg
+[870/909] 000000016439.jpg
+  -> Checkpoint: 10406 righe scritte
+[871/909] 000000016451.jpg
+[872/909] 000000016502.jpg
+[873/909] 000000016598.jpg
+[874/909] 000000016958.jpg
+[875/909] 000000017029.jpg
+[876/909] 000000017031.jpg
+[877/909] 000000017115.jpg
+[878/909] 000000017178.jpg
+[879/909] 000000017182.jpg
+[880/909] 000000017207.jpg
+  -> Checkpoint: 10526 righe scritte
+[881/909] 000000017379.jpg
+[882/909] 000000017436.jpg
+[883/909] 000000017627.jpg
+[884/909] 000000017714.jpg
+[885/909] 000000017899.jpg
+[886/909] 000000017905.jpg
+[887/909] 000000017959.jpg
+[888/909] 000000018150.jpg
+[889/909] 000000018193.jpg
+[890/909] 000000018380.jpg
+  -> Checkpoint: 10646 righe scritte
+[891/909] 000000018491.jpg
+[892/909] 000000018519.jpg
+[893/909] 000000018575.jpg
+[894/909] 000000018737.jpg
+[895/909] 000000018770.jpg
+[896/909] 000000018833.jpg
+[897/909] 000000018837.jpg
+[898/909] 000000019042.jpg
+[899/909] 000000019109.jpg
+[900/909] 000000019221.jpg
+  -> Checkpoint: 10766 righe scritte
+[901/909] 000000019402.jpg
+[902/909] 000000019432.jpg
+[903/909] 000000019742.jpg
+[904/909] 000000019786.jpg
+[905/909] 000000019924.jpg
+[906/909] 000000020059.jpg
+[907/909] 000000020107.jpg
+[908/909] 000000020247.jpg
+[909/909] 000000581781.jpg
+
+Profilazione completata! File: /home/user/tesi/results/oracle/oracle_raw_telemetry.csv
+Righe totali scritte: 10874

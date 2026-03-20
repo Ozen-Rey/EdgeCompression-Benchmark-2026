@@ -26,7 +26,7 @@ from torchvision import transforms
 
 sys.path.insert(0, os.path.expanduser("~/tesi"))
 
-ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_v2_multi.csv")
+ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_raw_telemetry_eco_winners_3class.csv")
 RESULTS_DIR = os.path.expanduser("~/tesi/results/selector")
 MODEL_PATH = os.path.expanduser("~/tesi/results/selector/cnn_model.pth")
 
@@ -166,7 +166,7 @@ def train_cnn(
     """Addestra la Micro-CNN e valuta sull'hold-out set."""
 
     img_paths = df["image"].tolist()
-    y_raw = np.array(df["winner_codec"].values)
+    y_raw = np.array(df["codec"].values)
 
     le = LabelEncoder()
     y = le.fit_transform(y_raw)
@@ -305,7 +305,7 @@ def train_cnn(
 if __name__ == "__main__":
     print("Caricamento dati oracolo...")
     df = pd.read_csv(ORACLE_CSV)
-    df = df[df["winner_codec"] != "ERROR"].reset_index(drop=True)
+    df = df[df["codec"] != "ERROR"].reset_index(drop=True)
     print(f"Immagini valide: {len(df)}")
 
     print(f"\nDevice: {DEVICE}")
