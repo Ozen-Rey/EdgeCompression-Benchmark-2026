@@ -12,6 +12,7 @@ import pandas as pd
 from tqdm import tqdm
 from pytorch_msssim import ms_ssim
 import lpips
+import imagecodecs
 
 loss_fn_lpips = lpips.LPIPS(net="alex").cuda()
 
@@ -160,6 +161,33 @@ def run_benchmark(codec, param_name, param_values, compress_fn):
     df.to_csv(out_path, index=False)
     return df
 
+def compress_jxl(img_path, distance=1.0):
+    """
+    Codec Classico SOTA: JPEG XL (JXL)
+    distance: 0.0 = lossless, 1.0 = visually lossless (default), fino a 15+ (molto lossy)
+    """
+    img = np.array(Image.open(img_path).convert('RGB'))
+    
+    # effort=5 è il bilanciamento standard di JXL per velocità/compressione
+    start = time.perf_counter()
+    jxl_bytes = imagecodecs.jpegxl_encode(img, distance=distance, effort=5)
+    enc_ms = (time.perf_counter() - start) * 1000
+    
+    img_rec = imagecodecs.jpegxl_decode(jxl_bytes)
+    
+    # JXL restituisce l'immagine in RGB, ce l'abbiamo già pronta come array
+    bpp = (len(jxl_bytes) * 8) / (img.shape[0] * img.shape[1])
+    
+    psnr_val = psnr(img, img_rec)
+    lpips_val = compute_lpips(img, img_rec)
+    
+    return {
+        "bpp": round(bpp, 4),
+        "psnr": round(psnr_val, 2),
+        "lpips": round(lpips_val, 4),
+        "enc_ms": round(enc_ms, 2)
+    }
+
 
 if __name__ == "__main__":
     print("=== JPEG ===")
@@ -169,3 +197,5 @@ if __name__ == "__main__":
 
     print("\n=== H.265/HEVC ===")
     run_benchmark("HEVC", "crf", [51, 45, 40, 35, 30, 25, 20, 15], compress_hevc)
+
+

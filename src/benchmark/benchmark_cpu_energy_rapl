@@ -1,0 +1,385 @@
+"""
+Benchmark energia CPU via Intel RAPL per codec classici (JPEG, JXL, HEVC).
+Misura il consumo energetico del package CPU durante encode+decode.
+
+Requisiti:
+  - Permessi lettura su /sys/class/powercap/intel-rapl:0/energy_uj e max_energy_range_uj
+    (sudo chmod a+r /sys/class/powercap/intel-rapl:0/energy_uj)
+  - imagecodecs, ffmpeg, PIL
+
+Output: CSV + tabella riepilogativa
+"""
+
+import time
+import csv
+import os
+import json
+import subprocess
+import numpy as np
+from pathlib import Path
+from PIL import Image
+
+# ================== CONFIG ==================
+KODAK_DIR = os.path.expanduser("~/tesi/datasets/kodak")
+RAPL_PATH = "/sys/class/powercap/intel-rapl:0/energy_uj"
+# FIX 3: Aggiunto percorso per il limite massimo del contatore hardware (overflow)
+RAPL_MAX_PATH = "/sys/class/powercap/intel-rapl:0/max_energy_range_uj"
+
+OUTPUT_CSV = os.path.expanduser("~/tesi/results/cpu_energy_rapl_benchmark.csv")
+OUTPUT_JSON = os.path.expanduser("~/tesi/results/cpu_energy_rapl_benchmark.json")
+
+JXL_DISTANCES = [1.0, 3.0, 7.0, 12.0]
+JPEG_QUALITIES = [30, 60, 90]
+HEVC_CRFS = [25, 35, 45]
+
+WARMUP_IMAGES = 2  # immagini di warmup prima delle misurazioni
+
+
+# ================== RAPL ==================
+def read_max_cpu_uj() -> int:
+    """Legge il valore massimo del contatore RAPL per gestire gli overflow."""
+    try:
+        with open(RAPL_MAX_PATH) as f:
+            return int(f.read().strip())
+    except Exception:
+        # Fallback sicuro: se non riesce a leggere il file, usa un limite tipico a 32 bit
+        return 2**32
+
+
+RAPL_MAX_UJ = read_max_cpu_uj()
+
+
+def read_cpu_uj() -> int:
+    """Legge energia CPU cumulativa in microjoule da Intel RAPL."""
+    with open(RAPL_PATH) as f:
+        return int(f.read().strip())
+
+
+def calc_energy_j(before_uj: int, after_uj: int) -> float:
+    """
+    Calcola l'energia spesa in Joule.
+    FIX 3: Gestione dell'overflow se il contatore RAPL si resetta durante il benchmark.
+    """
+    if after_uj >= before_uj:
+        return (after_uj - before_uj) / 1e6
+    else:
+        # Wrap-around avvenuto
+        return ((RAPL_MAX_UJ - before_uj) + after_uj) / 1e6
+
+
+def measure_cpu_idle(duration_s: float = 2.0) -> float:
+    """Misura potenza idle CPU in watt."""
+    before = read_cpu_uj()
+    time.sleep(duration_s)
+    after = read_cpu_uj()
+    return calc_energy_j(before, after) / duration_s
+
+
+# ================== CODEC BENCHMARKS ==================
+def benchmark_jpeg(img_rgb: np.ndarray, quality: int) -> dict:
+    """JPEG encode + decode via imagecodecs, misura CPU energy."""
+    import imagecodecs
+
+    h, w = img_rgb.shape[:2]
+
+    before = read_cpu_uj()
+    t0 = time.perf_counter()
+    buf = imagecodecs.jpeg_encode(img_rgb, level=quality)
+    t1_enc = time.perf_counter()
+    rec = imagecodecs.jpeg_decode(buf)
+    t1 = time.perf_counter()
+    after = read_cpu_uj()
+
+    return {
+        "codec": "JPEG",
+        "param": f"q={quality}",
+        "bpp": (len(buf) * 8) / (h * w),
+        "file_bytes": len(buf),
+        "time_encode_ms": (t1_enc - t0) * 1000,
+        "time_decode_ms": (t1 - t1_enc) * 1000,
+        "time_total_ms": (t1 - t0) * 1000,
+        "cpu_energy_j": calc_energy_j(before, after),
+    }
+
+
+def benchmark_jxl(img_rgb: np.ndarray, distance: float) -> dict:
+    """JXL encode + decode via imagecodecs, misura CPU energy."""
+    import imagecodecs
+
+    h, w = img_rgb.shape[:2]
+
+    before = read_cpu_uj()
+    t0 = time.perf_counter()
+    buf = imagecodecs.jpegxl_encode(img_rgb, distance=distance, effort=5)
+    t1_enc = time.perf_counter()
+    rec = imagecodecs.jpegxl_decode(buf)
+    t1 = time.perf_counter()
+    after = read_cpu_uj()
+
+    return {
+        "codec": "JXL",
+        "param": f"d={distance}",
+        "bpp": (len(buf) * 8) / (h * w),
+        "file_bytes": len(buf),
+        "time_encode_ms": (t1_enc - t0) * 1000,
+        "time_decode_ms": (t1 - t1_enc) * 1000,
+        "time_total_ms": (t1 - t0) * 1000,
+        "cpu_energy_j": calc_energy_j(before, after),
+    }
+
+
+def benchmark_hevc(img_path: str, crf: int) -> dict:
+    """HEVC intra encode + decode via ffmpeg, misura CPU energy."""
+    img = Image.open(img_path).convert("RGB")
+    w, h = img.size
+    n_pixels = h * w
+
+    # FIX 1: Usa /dev/shm/ per evitare I/O su disco (è una partizione montata in RAM su Linux)
+    tmp_in = "/dev/shm/rapl_hevc_input.png"
+    tmp_h265 = "/dev/shm/rapl_hevc_output.h265"
+    tmp_dec = "/dev/shm/rapl_hevc_decoded.png"
+    img.save(tmp_in)
+
+    # Encode
+    before = read_cpu_uj()
+    t0 = time.perf_counter()
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            tmp_in,
+            "-pix_fmt",
+            "yuv444p",  # FIX 2: Mantiene subsampling 4:4:4 per fair comparison con JXL/JPEG
+            "-c:v",
+            "libx265",
+            "-crf",
+            str(crf),
+            "-x265-params",
+            "log-level=error",
+            tmp_h265,
+        ],
+        capture_output=True,
+    )
+    t1_enc = time.perf_counter()
+
+    # Decode
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", tmp_h265, tmp_dec],
+        capture_output=True,
+    )
+    t1 = time.perf_counter()
+    after = read_cpu_uj()
+
+    file_bytes = os.path.getsize(tmp_h265) if os.path.exists(tmp_h265) else 0
+
+    # Cleanup
+    for f in [tmp_in, tmp_h265, tmp_dec]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    return {
+        "codec": "HEVC",
+        "param": f"crf={crf}",
+        "bpp": (file_bytes * 8) / n_pixels,
+        "file_bytes": file_bytes,
+        "time_encode_ms": (t1_enc - t0) * 1000,
+        "time_decode_ms": (t1 - t1_enc) * 1000,
+        "time_total_ms": (t1 - t0) * 1000,
+        "cpu_energy_j": calc_energy_j(before, after),
+    }
+
+
+# ================== MAIN ==================
+def main():
+    # Verifica RAPL
+    try:
+        read_cpu_uj()
+    except Exception as e:
+        print(f"[!] RAPL non leggibile: {e}")
+        print("    Esegui: sudo chmod a+r /sys/class/powercap/intel-rapl:0/energy_uj")
+        return
+
+    imgs = sorted(Path(KODAK_DIR).glob("*.png"))
+    if not imgs:
+        print(f"[!] Nessuna immagine in {KODAK_DIR}")
+        return
+
+    # Info sistema
+    idle_w = measure_cpu_idle(2.0)
+    print("=" * 70)
+    print("BENCHMARK ENERGIA CPU (Intel RAPL)")
+    print("=" * 70)
+    print(f"RAPL: {RAPL_PATH}")
+    print(f"CPU idle power: {idle_w:.1f} W")
+    print(f"Kodak: {len(imgs)} immagini")
+    print("=" * 70)
+
+    ALL_COLS = [
+        "codec",
+        "param",
+        "image",
+        "bpp",
+        "file_bytes",
+        "time_encode_ms",
+        "time_decode_ms",
+        "time_total_ms",
+        "cpu_energy_j",
+        "cpu_energy_net_j",
+    ]
+    all_results = []
+
+    # Warmup
+    print(f"\nWarmup su {WARMUP_IMAGES} immagini...")
+    for img_path in imgs[:WARMUP_IMAGES]:
+        img_rgb = np.array(Image.open(img_path).convert("RGB"))
+        import imagecodecs
+
+        imagecodecs.jpegxl_encode(img_rgb, distance=3.0, effort=5)
+        imagecodecs.jpeg_encode(img_rgb, level=60)
+
+    # === JPEG ===
+    print("\n" + "=" * 50)
+    print("JPEG")
+    print("=" * 50)
+    for quality in JPEG_QUALITIES:
+        print(f"\n--- JPEG q={quality} ---")
+        for i, img_path in enumerate(imgs):
+            img_rgb = np.array(Image.open(img_path).convert("RGB"))
+            m = benchmark_jpeg(img_rgb, quality)
+            duration_s = m["time_total_ms"] / 1000
+            m["cpu_energy_net_j"] = m["cpu_energy_j"] - idle_w * duration_s
+            m["image"] = img_path.name
+            all_results.append(m)
+            if (i + 1) % 8 == 0:
+                print(
+                    f"  [{i+1}/{len(imgs)}] {m['cpu_energy_j']:.2f} J, {m['time_total_ms']:.0f} ms"
+                )
+
+        subset = [r for r in all_results if r["param"] == f"q={quality}"]
+        avg_j = np.mean([r["cpu_energy_j"] for r in subset])
+        avg_ms = np.mean([r["time_total_ms"] for r in subset])
+        avg_bpp = np.mean([r["bpp"] for r in subset])
+        print(f"  MEDIA: {avg_j:.2f} J, {avg_ms:.0f} ms, {avg_bpp:.3f} bpp")
+
+    # === JXL ===
+    print("\n" + "=" * 50)
+    print("JPEG XL")
+    print("=" * 50)
+    for dist in JXL_DISTANCES:
+        print(f"\n--- JXL d={dist} ---")
+        for i, img_path in enumerate(imgs):
+            img_rgb = np.array(Image.open(img_path).convert("RGB"))
+            m = benchmark_jxl(img_rgb, dist)
+            duration_s = m["time_total_ms"] / 1000
+            m["cpu_energy_net_j"] = m["cpu_energy_j"] - idle_w * duration_s
+            m["image"] = img_path.name
+            all_results.append(m)
+            if (i + 1) % 8 == 0:
+                print(
+                    f"  [{i+1}/{len(imgs)}] {m['cpu_energy_j']:.2f} J, {m['time_total_ms']:.0f} ms"
+                )
+
+        subset = [r for r in all_results if r["param"] == f"d={dist}"]
+        avg_j = np.mean([r["cpu_energy_j"] for r in subset])
+        avg_ms = np.mean([r["time_total_ms"] for r in subset])
+        avg_bpp = np.mean([r["bpp"] for r in subset])
+        print(f"  MEDIA: {avg_j:.2f} J, {avg_ms:.0f} ms, {avg_bpp:.3f} bpp")
+
+    # === HEVC ===
+    print("\n" + "=" * 50)
+    print("HEVC Intra (ffmpeg libx265)")
+    print("=" * 50)
+    for crf in HEVC_CRFS:
+        print(f"\n--- HEVC crf={crf} ---")
+        for i, img_path in enumerate(imgs):
+            m = benchmark_hevc(str(img_path), crf)
+            duration_s = m["time_total_ms"] / 1000
+            m["cpu_energy_net_j"] = m["cpu_energy_j"] - idle_w * duration_s
+            m["image"] = img_path.name
+            all_results.append(m)
+            if (i + 1) % 8 == 0:
+                print(
+                    f"  [{i+1}/{len(imgs)}] {m['cpu_energy_j']:.2f} J, {m['time_total_ms']:.0f} ms"
+                )
+
+        subset = [r for r in all_results if r["param"] == f"crf={crf}"]
+        avg_j = np.mean([r["cpu_energy_j"] for r in subset])
+        avg_ms = np.mean([r["time_total_ms"] for r in subset])
+        avg_bpp = np.mean([r["bpp"] for r in subset])
+        print(f"  MEDIA: {avg_j:.2f} J, {avg_ms:.0f} ms, {avg_bpp:.3f} bpp")
+
+    # === SALVATAGGIO ===
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=ALL_COLS, extrasaction="ignore")
+        writer.writeheader()
+        for r in all_results:
+            writer.writerow(r)
+    print(f"\nCSV: {OUTPUT_CSV}")
+
+    # JSON medie aggregate
+    summary = {}
+    groups = set((r["codec"], r["param"]) for r in all_results)
+    for codec, param in sorted(groups):
+        subset = [r for r in all_results if r["codec"] == codec and r["param"] == param]
+        key = f"{codec}_{param}"
+        summary[key] = {
+            "codec": codec,
+            "param": param,
+            "n_images": len(subset),
+            "bpp": round(np.mean([r["bpp"] for r in subset]), 4),
+            "time_total_ms": round(np.mean([r["time_total_ms"] for r in subset]), 1),
+            "time_encode_ms": round(np.mean([r["time_encode_ms"] for r in subset]), 1),
+            "time_decode_ms": round(np.mean([r["time_decode_ms"] for r in subset]), 1),
+            "cpu_energy_j": round(np.mean([r["cpu_energy_j"] for r in subset]), 3),
+            "cpu_energy_net_j": round(
+                np.mean([r["cpu_energy_net_j"] for r in subset]), 3
+            ),
+        }
+
+    with open(OUTPUT_JSON, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"JSON: {OUTPUT_JSON}")
+
+    # === TABELLA RIEPILOGATIVA ===
+    print("\n" + "=" * 80)
+    print("TABELLA RIEPILOGATIVA (medie su 24 immagini Kodak)")
+    print("=" * 80)
+    print(f"CPU idle: {idle_w:.1f} W")
+    print()
+    header = f"{'Codec':<20} {'bpp':>6} {'t_enc':>7} {'t_dec':>7} {'t_tot':>7} {'E_cpu':>7} {'E_net':>7}"
+    print(header)
+    print("-" * len(header))
+    for key in sorted(summary.keys()):
+        s = summary[key]
+        print(
+            f"{key:<20} {s['bpp']:>6.3f} {s['time_encode_ms']:>7.0f} "
+            f"{s['time_decode_ms']:>7.0f} {s['time_total_ms']:>7.0f} "
+            f"{s['cpu_energy_j']:>7.2f} {s['cpu_energy_net_j']:>7.2f}"
+        )
+
+    # === CONFRONTO CON GPU ===
+    print("\n" + "=" * 80)
+    print("CONFRONTO CPU (RAPL) vs GPU (Zeus)")
+    print("=" * 80)
+    print(f"{'Codec':<25} {'Energia':>10} {'Fonte':>10} {'Tempo':>8}")
+    print("-" * 55)
+    for key in sorted(summary.keys()):
+        s = summary[key]
+        print(
+            f"{key:<25} {s['cpu_energy_j']:>8.2f} J {'RAPL':>10} {s['time_total_ms']:>6.0f} ms"
+        )
+    print(f"{'ELIC fwd lam=0.150':<25} {'~1.40':>8} J {'Zeus':>10} {'15':>6} ms")
+    print(f"{'ELIC full lam=0.150':<25} {'5.55':>8} J {'Zeus':>10} {'134':>6} ms")
+    print(f"{'Balle2018 q4':<25} {'0.67':>8} J {'Zeus':>10} {'63':>6} ms")
+    print(f"{'Cheng2020 q4':<25} {'185.14':>8} J {'Zeus':>10} {'3456':>6} ms")
+    print()
+    print("Nota: CPU energy (RAPL) e GPU energy (Zeus) misurano componenti")
+    print("diversi del sistema. Non sono direttamente sommabili, ma indicano")
+    print("il costo energetico del componente dominante per ciascun codec.")
+
+
+if __name__ == "__main__":
+    main()
