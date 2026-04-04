@@ -17,35 +17,43 @@ from src.benchmark.benchmark_images import compress_jpeg, compress_hevc
 from src.benchmark.benchmark_neural_images import compress_neural
 import torch
 import numpy as np
-import pandas as pd  # <--- AGGIUNGI QUESTA RIGA QUI
+import pandas as pd
 
 # ================== CONFIG ==================
 CSV_OUTPUT_PATH = os.path.expanduser("~/tesi/results/oracle/oracle_raw_telemetry.csv")
 SAVE_INTERVAL = 10  # checkpoint ogni 10 immagini
 
 DATASETS = {
-    "kodak":       os.path.expanduser("~/tesi/datasets/kodak"),
-    "clic_train":  os.path.expanduser("~/tesi/datasets/clic2020/train"),
-    "div2k":       os.path.expanduser("~/tesi/datasets/div2k/DIV2K_valid_HR"),
-    "tecnick":     os.path.expanduser("~/tesi/datasets/tecnick_flat"),
+    "kodak": os.path.expanduser("~/tesi/datasets/kodak"),
+    "clic_train": os.path.expanduser("~/tesi/datasets/clic2020/train"),
+    "div2k": os.path.expanduser("~/tesi/datasets/div2k/DIV2K_valid_HR"),
+    "tecnick": os.path.expanduser("~/tesi/datasets/tecnick_flat"),
     "coco_sample": os.path.expanduser("~/tesi/datasets/coco_sample"),
 }
 
 # Parametri codec — 3 punti per famiglia (basso, medio, alto)
-JPEG_QUALITIES  = [30, 60, 90]
-HEVC_CRFS       = [45, 35, 25]
+JPEG_QUALITIES = [30, 60, 90]
+HEVC_CRFS = [45, 35, 25]
 BALLE_QUALITIES = [2, 4, 6]
 CHENG_QUALITIES = [2, 4, 6]
 
 FIELDNAMES = [
-    "image", "dataset", "codec", "param",
-    "bpp", "psnr", "lpips", "enc_ms", "status"
+    "image",
+    "dataset",
+    "codec",
+    "param",
+    "bpp",
+    "psnr",
+    "lpips",
+    "enc_ms",
+    "status",
 ]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # ================== RESUME ==================
+
 
 def load_done() -> set[tuple[str, str, int]]:
     """Carica coppie (image, codec, param) già processate per il resume."""
@@ -61,6 +69,7 @@ def load_done() -> set[tuple[str, str, int]]:
 
 # ================== PROFILER ==================
 
+
 def run_telemetry_profiler() -> None:
     os.makedirs(os.path.dirname(CSV_OUTPUT_PATH), exist_ok=True)
 
@@ -73,7 +82,9 @@ def run_telemetry_profiler() -> None:
 
     balle_models: dict[int, torch.nn.Module] = {}
     for q in BALLE_QUALITIES:
-        balle_models[q] = bmshj2018_hyperprior(quality=q, pretrained=True).to(device).eval()
+        balle_models[q] = (
+            bmshj2018_hyperprior(quality=q, pretrained=True).to(device).eval()
+        )
 
     cheng_models: dict[int, torch.nn.Module] = {}
     for q in CHENG_QUALITIES:
@@ -87,8 +98,9 @@ def run_telemetry_profiler() -> None:
         if not os.path.exists(dataset_path):
             print(f"Dataset {dataset_name} non trovato, skip.")
             continue
-        imgs = sorted(Path(dataset_path).glob("*.png")) + \
-               sorted(Path(dataset_path).glob("*.jpg"))
+        imgs = sorted(Path(dataset_path).glob("*.png")) + sorted(
+            Path(dataset_path).glob("*.jpg")
+        )
         all_images.extend([(img, dataset_name) for img in imgs])
         print(f"  {dataset_name}: {len(imgs)} immagini")
 
@@ -112,21 +124,28 @@ def run_telemetry_profiler() -> None:
             if (img_name, "JPEG", q) in done:
                 continue
             row: dict = {
-                "image": img_name, "dataset": dataset_name,
-                "codec": "JPEG", "param": q,
-                "bpp": None, "psnr": None, "lpips": None,
-                "enc_ms": None, "status": "OK"
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "JPEG",
+                "param": q,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
             }
             try:
                 start = time.perf_counter()
                 m = compress_jpeg(img_path, q)
                 enc_ms = (time.perf_counter() - start) * 1000
-                row.update({
-                    "bpp": round(m["bpp"], 5),
-                    "psnr": round(m["psnr"], 4),
-                    "lpips": round(m["lpips"], 5),
-                    "enc_ms": round(enc_ms, 2),
-                })
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(enc_ms, 2),
+                    }
+                )
             except Exception as e:
                 row["status"] = f"ERROR: {str(e)[:100]}"
                 print(f"  [!] JPEG q={q}: {e}")
@@ -138,21 +157,28 @@ def run_telemetry_profiler() -> None:
             if (img_name, "HEVC", crf) in done:
                 continue
             row = {
-                "image": img_name, "dataset": dataset_name,
-                "codec": "HEVC", "param": crf,
-                "bpp": None, "psnr": None, "lpips": None,
-                "enc_ms": None, "status": "OK"
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "HEVC",
+                "param": crf,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
             }
             try:
                 start = time.perf_counter()
                 m = compress_hevc(img_path, crf)
                 enc_ms = (time.perf_counter() - start) * 1000
-                row.update({
-                    "bpp": round(m["bpp"], 5),
-                    "psnr": round(m["psnr"], 4),
-                    "lpips": round(m["lpips"], 5),
-                    "enc_ms": round(enc_ms, 2),
-                })
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(enc_ms, 2),
+                    }
+                )
             except Exception as e:
                 row["status"] = f"ERROR: {str(e)[:100]}"
                 print(f"  [!] HEVC crf={crf}: {e}")
@@ -164,19 +190,26 @@ def run_telemetry_profiler() -> None:
             if (img_name, "Balle2018", q) in done:
                 continue
             row = {
-                "image": img_name, "dataset": dataset_name,
-                "codec": "Balle2018", "param": q,
-                "bpp": None, "psnr": None, "lpips": None,
-                "enc_ms": None, "status": "OK"
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "Balle2018",
+                "param": q,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
             }
             try:
                 m = compress_neural(balle_models[q], img_path)
-                row.update({
-                    "bpp": round(m["bpp"], 5),
-                    "psnr": round(m["psnr"], 4),
-                    "lpips": round(m["lpips"], 5),
-                    "enc_ms": round(m["enc_ms"], 2),
-                })
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(m["enc_ms"], 2),
+                    }
+                )
             except Exception as e:
                 torch.cuda.empty_cache()
                 row["status"] = f"ERROR: {str(e)[:100]}"
@@ -189,19 +222,26 @@ def run_telemetry_profiler() -> None:
             if (img_name, "Cheng2020", q) in done:
                 continue
             row = {
-                "image": img_name, "dataset": dataset_name,
-                "codec": "Cheng2020", "param": q,
-                "bpp": None, "psnr": None, "lpips": None,
-                "enc_ms": None, "status": "OK"
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "Cheng2020",
+                "param": q,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
             }
             try:
                 m = compress_neural(cheng_models[q], img_path)
-                row.update({
-                    "bpp": round(m["bpp"], 5),
-                    "psnr": round(m["psnr"], 4),
-                    "lpips": round(m["lpips"], 5),
-                    "enc_ms": round(m["enc_ms"], 2),
-                })
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(m["enc_ms"], 2),
+                    }
+                )
             except Exception as e:
                 torch.cuda.empty_cache()
                 row["status"] = f"ERROR: {str(e)[:100]}"
@@ -224,12 +264,13 @@ def run_telemetry_profiler() -> None:
 
 # ================== POLICY (applicata a posteriori) ==================
 
+
 def apply_policy(
     csv_path: str,
     max_enc_ms: float = 150.0,
     max_bpp: float = 0.5,
     mode: str = "performance",  # "performance" o "eco"
-    lpips_threshold: float = 0.15 # usato solo in modalità eco
+    lpips_threshold: float = 0.15,  # usato solo in modalità eco
 ) -> "pd.DataFrame":
     """
     Applica una policy decisionale sul CSV raw.
@@ -255,12 +296,13 @@ def apply_policy(
         # Cerca la qualità assoluta
         idx = admissible.groupby("image")["lpips"].idxmin()
         winners = admissible.loc[idx]
-        
+
     elif mode == "eco":
+
         def eco_selector(group):
             decent_classical = group[
-                (group["lpips"] <= lpips_threshold) &
-                (group["codec"].isin(["JPEG", "HEVC"]))
+                (group["lpips"] <= lpips_threshold)
+                & (group["codec"].isin(["JPEG", "HEVC", "JXL"]))
             ]
             if not decent_classical.empty:
                 return decent_classical.loc[decent_classical["lpips"].idxmin()]
@@ -270,11 +312,15 @@ def apply_policy(
             return group.loc[group["lpips"].idxmin()]
 
         winners = admissible.groupby("image", group_keys=False).apply(eco_selector)
-        
+
     else:
         raise ValueError("Modalità non supportata. Usa 'performance' o 'eco'.")
 
-    winners = winners.reset_index(drop=True) if "image" in winners.columns else winners.reset_index()
+    winners = (
+        winners.reset_index(drop=True)
+        if "image" in winners.columns
+        else winners.reset_index()
+    )
     print(f"\nDistribuzione vincitori (Profilo {mode.upper()}):")
     print(winners["codec"].value_counts())
     print(f"\nTotale immagini elaborate: {len(winners)}")
@@ -291,8 +337,15 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", action="store_true", help="Lancia il profiler hardware su GPU")
-    parser.add_argument("--policy", type=str, choices=["performance", "eco"], help="Applica policy sul CSV esistente")
+    parser.add_argument(
+        "--profile", action="store_true", help="Lancia il profiler hardware su GPU"
+    )
+    parser.add_argument(
+        "--policy",
+        type=str,
+        choices=["performance", "eco"],
+        help="Applica policy sul CSV esistente",
+    )
     parser.add_argument("--max-enc-ms", type=float, default=150.0)
     parser.add_argument("--max-bpp", type=float, default=0.5)
     parser.add_argument("--lpips-thresh", type=float, default=0.15)
@@ -301,7 +354,13 @@ if __name__ == "__main__":
     if args.profile:
         run_telemetry_profiler()
     elif args.policy:
-        apply_policy(CSV_OUTPUT_PATH, args.max_enc_ms, args.max_bpp, mode=args.policy, lpips_threshold=args.lpips_thresh)
+        apply_policy(
+            CSV_OUTPUT_PATH,
+            args.max_enc_ms,
+            args.max_bpp,
+            mode=args.policy,
+            lpips_threshold=args.lpips_thresh,
+        )
     else:
         # Default: lancia il profiler
         run_telemetry_profiler()

@@ -17,11 +17,12 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
+from sklearn.utils.class_weight import compute_sample_weight
 
 sys.path.insert(0, os.path.expanduser("~/tesi"))
 from src.selector.feature_extractor import SpatialFeatureExtractor
 
-ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_raw_telemetry_eco_winners_3class.csv")
+ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_eco_jxl_4class.csv")
 RESULTS_DIR = os.path.expanduser("~/tesi/results/selector")
 MODEL_PATH = os.path.expanduser("~/tesi/results/selector/xgboost_model.pkl")
 FEATURES_CACHE = os.path.expanduser("~/tesi/results/selector/features_cache.csv")
@@ -54,6 +55,7 @@ def extract_all_features(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for _, row in df.iterrows():
         img_path = str(row["image"])
+        
         feat: dict[str, Any] = {}
 
         if len(cache) > 0 and img_path in cache.index:
@@ -109,6 +111,13 @@ def train_xgboost(features_df: pd.DataFrame) -> tuple[XGBClassifier, LabelEncode
         eval_metric="mlogloss",
         verbosity=0,
     )
+
+    # Calcola il peso per ogni campione nel training set
+    sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+
+    # Passa i pesi al modello
+    model.fit(X_train, y_train, sample_weight=sample_weights)
+
     model.fit(X_train, y_train)
 
     # valuta
