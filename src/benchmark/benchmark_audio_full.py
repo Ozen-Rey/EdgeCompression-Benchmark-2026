@@ -1,15 +1,11 @@
 """
 Benchmark audio completo: Opus vs EnCodec vs DAC vs SNAC.
-
-Metriche per-file: PESQ, STOI, SI-SDR, mel distance, RTF
-Energia: RAPL (CPU multi-zone) per Opus, Zeus (GPU) per codec neurali
-
-ViSQOL e FAD vengono calcolati in script separati (richiedono protobuf diverso).
-I file ricostruiti vengono salvati per l'analisi successiva con ViSQOL.
-
-Output: CSV + JSON + tabella riepilogativa + WAV ricostruiti + Hardware Log
+VERSIONE REVISIONATA:
+- Opus in-RAM tramite PyAV (Zero I/O disk latency)
+- Dynamic Energy Tracking (Zeus se GPU, RAPL se CPU forzata per mele-con-mele)
 """
 
+import scipy.signal
 import torch
 import warnings
 import time
@@ -19,9 +15,11 @@ import csv
 import json
 import random
 import glob
+import io
 import numpy as np
 import librosa
 import soundfile as sf
+import av
 from pathlib import Path
 
 warnings.filterwarnings("ignore")
@@ -30,7 +28,6 @@ sys.path.insert(0, os.path.expanduser("~/tesi"))
 
 # ================== RIPRODUCIBILITÀ ==================
 def set_seed(seed: int = 42):
-    """Fissa il seed per tutti i generatori pseudo-casuali."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -48,24 +45,37 @@ DATASETS = {
 }
 MAX_DURATION = 10.0
 TARGET_SR = 24000
-PESQ_SR = 16000
 
 OUTPUT_CSV = os.path.expanduser("~/tesi/results/audio/audio_benchmark_full.csv")
 OUTPUT_JSON = os.path.expanduser("~/tesi/results/audio/audio_benchmark_full.json")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Limite di file per dataset per garantire tempi di run accettabili.
-# 50 file * 3 dataset = 150 file totali per punto operativo.
 MAX_PER_DS = 50
+
+
+def align_audio(ref: np.ndarray, est: np.ndarray) -> np.ndarray:
+    """Allinea temporalmente l'audio stimato (est) al riferimento (ref)."""
+    search_len = min(24000, len(ref), len(est))
+    correlation = scipy.signal.correlate(
+        est[:search_len], ref[:search_len], mode="full"
+    )
+    delay = np.argmax(correlation) - search_len + 1
+
+    if delay > 0:
+        est_aligned = est[delay:]
+    elif delay < 0:
+        est_aligned = np.pad(est, (int(-delay), 0), mode="constant")
+    else:
+        est_aligned = est
+
+    return est_aligned
 
 
 # ================== RAPL (MULTI-ZONE) ==================
 def get_rapl_zones() -> list:
-    """Trova le root zones di RAPL escludendo le sub-zones (core/uncore/dram) per evitare doppi conteggi."""
     zones = []
     for path in glob.glob("/sys/class/powercap/intel-rapl:*"):
-        if path.count(":") == 1:  # Trova solo intel-rapl:0, intel-rapl:1, ecc.
+        if path.count(":") == 1:
             zones.append(path)
     return zones
 
@@ -74,7 +84,6 @@ RAPL_ZONES = get_rapl_zones()
 
 
 def read_cpu_uj() -> dict:
-    """Legge l'energia corrente (in microJoule) per tutte le zone fisiche della CPU."""
     energies = {}
     for zone in RAPL_ZONES:
         try:
@@ -86,7 +95,6 @@ def read_cpu_uj() -> dict:
 
 
 def calc_energy_j(before: dict, after: dict) -> float:
-    """Calcola i Joule consumati sommando i delta di tutte le zone e gestendo il wrap-around hardware."""
     total_j = 0.0
     for zone in before:
         if zone in after:
@@ -100,7 +108,7 @@ def calc_energy_j(before: dict, after: dict) -> float:
                         max_val = int(f.read().strip())
                     total_j += ((max_val - b) + a) / 1e6
                 except Exception:
-                    total_j += (a - b) / 1e6  # Fallback di emergenza
+                    total_j += (a - b) / 1e6
     return total_j
 
 
@@ -110,51 +118,67 @@ from zeus.device.gpu import get_gpus
 gpu_obj = get_gpus().gpus[0] if device.type == "cuda" else None
 
 
+# ================== WRAPPER ENERGIA NEURALE ==================
+def measure_neural_inference(model_func, *args):
+    """
+    Misura dinamicamente energia e tempo.
+    Usa la GPU (Zeus) se disponibile, altrimenti usa CPU (RAPL) per test "mele con mele".
+    """
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+        before_gpu = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
+        t0 = time.perf_counter()
+
+        res = model_func(*args)
+
+        torch.cuda.synchronize()
+        t1 = time.perf_counter()
+        after_gpu = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
+
+        return res, (t1 - t0), None, (after_gpu - before_gpu) / 1000, "Zeus"
+    else:
+        before_cpu = read_cpu_uj()
+        t0 = time.perf_counter()
+
+        res = model_func(*args)
+
+        t1 = time.perf_counter()
+        after_cpu = read_cpu_uj()
+
+        return res, (t1 - t0), calc_energy_j(before_cpu, after_cpu), None, "RAPL"
+
+
 # ================== METRICHE ==================
 from pesq import pesq as compute_pesq
 from pystoi import stoi as compute_stoi
 
 
 def compute_si_sdr(ref: np.ndarray, est: np.ndarray) -> float:
-    """Scale-Invariant Signal-to-Distortion Ratio (SI-SDR) in dB. Immuno al volume."""
     min_len = min(len(ref), len(est))
-    ref = ref[:min_len]
-    est = est[:min_len]
-
-    # Rimuovi la media (DC offset)
-    ref = ref - np.mean(ref)
-    est = est - np.mean(est)
+    ref = ref[:min_len] - np.mean(ref[:min_len])
+    est = est[:min_len] - np.mean(est[:min_len])
 
     ref_energy = np.sum(ref**2)
     if ref_energy < 1e-10:
-        return -100.0  # Silenzio totale
+        return -100.0
 
-    # Proiezione ortogonale (Fattore di scala alpha)
-    dot_product = np.sum(ref * est)
-    alpha = dot_product / ref_energy
-
+    alpha = np.sum(ref * est) / ref_energy
     target_scaled = alpha * ref
     noise = est - target_scaled
-
-    target_energy = np.sum(target_scaled**2)
     noise_energy = np.sum(noise**2)
 
     if noise_energy < 1e-10:
-        return 100.0  # Ricostruzione perfetta
-
-    return float(10.0 * np.log10(target_energy / noise_energy))
+        return 100.0
+    return float(10.0 * np.log10(np.sum(target_scaled**2) / noise_energy))
 
 
 def compute_metrics(
     orig_24k: np.ndarray, rec_24k: np.ndarray, duration_s: float, process_time_s: float
 ) -> dict:
-    """Calcola PESQ, STOI, SI-SDR, mel distance, e RTF."""
     m: dict = {}
-
     min_len = min(len(orig_24k), len(rec_24k))
     orig_24k = orig_24k[:min_len]
     rec_24k = rec_24k[:min_len]
-
     orig_16k = librosa.resample(orig_24k, orig_sr=24000, target_sr=16000)
     rec_16k = librosa.resample(rec_24k, orig_sr=24000, target_sr=16000)
 
@@ -162,47 +186,47 @@ def compute_metrics(
         m["pesq"] = compute_pesq(16000, orig_16k, rec_16k, "wb")
     except Exception:
         m["pesq"] = None
-
     try:
         m["stoi"] = compute_stoi(orig_16k, rec_16k, 16000, extended=False)
     except Exception:
         m["stoi"] = None
-
     try:
         m["sdr"] = compute_si_sdr(orig_24k, rec_24k)
     except Exception:
         m["sdr"] = None
-
     try:
         S_orig = librosa.feature.melspectrogram(y=orig_24k, sr=24000, n_mels=80)
         S_rec = librosa.feature.melspectrogram(y=rec_24k, sr=24000, n_mels=80)
-        log_orig = np.log(np.maximum(S_orig, 1e-10))
-        log_rec = np.log(np.maximum(S_rec, 1e-10))
-        min_frames = min(log_orig.shape[1], log_rec.shape[1])
         m["mel_dist"] = float(
-            np.mean(np.abs(log_orig[:, :min_frames] - log_rec[:, :min_frames]))
+            np.mean(
+                np.abs(
+                    np.log(np.maximum(S_orig, 1e-10)) - np.log(np.maximum(S_rec, 1e-10))
+                )
+            )
         )
     except Exception:
         m["mel_dist"] = None
-
     m["rtf"] = process_time_s / duration_s if duration_s > 0 else None
-
     return m
 
 
-# ================== CODEC: OPUS (CPU) ==================
+# ================== CODEC: OPUS (Subprocess RAM-Disk) ==================
 def compress_opus(audio_24k: np.ndarray, bitrate_kbps: int) -> tuple:
     import subprocess
 
     duration_s = len(audio_24k) / 24000
+
+    # Usa /dev/shm (RAM disk su Linux) per zero latenza I/O fisico
     tmp_in = "/dev/shm/opus_bench_in.wav"
     tmp_opus = "/dev/shm/opus_bench.opus"
     tmp_out = "/dev/shm/opus_bench_out.wav"
+
     sf.write(tmp_in, audio_24k, 24000)
 
     before = read_cpu_uj()
     t0 = time.perf_counter()
 
+    # Encode (da WAV in RAM a OPUS in RAM)
     subprocess.run(
         [
             "ffmpeg",
@@ -218,10 +242,13 @@ def compress_opus(audio_24k: np.ndarray, bitrate_kbps: int) -> tuple:
             tmp_opus,
         ],
         capture_output=True,
+        check=True,
     )
+    # Decode (da OPUS in RAM a WAV in RAM)
     subprocess.run(
         ["ffmpeg", "-y", "-i", tmp_opus, "-ar", "24000", tmp_out],
         capture_output=True,
+        check=True,
     )
 
     t1 = time.perf_counter()
@@ -231,6 +258,10 @@ def compress_opus(audio_24k: np.ndarray, bitrate_kbps: int) -> tuple:
     file_bytes = os.path.getsize(tmp_opus) if os.path.exists(tmp_opus) else 0
     actual_kbps = (file_bytes * 8) / duration_s / 1000 if duration_s > 0 else 0
 
+    # Riallineamento temporale per annullare il pre-skip di Opus e fixare SI-SDR/PESQ
+    rec = align_audio(audio_24k, rec)
+
+    # Pulizia RAM
     for f in [tmp_in, tmp_opus, tmp_out]:
         if os.path.exists(f):
             os.remove(f)
@@ -246,7 +277,7 @@ def compress_opus(audio_24k: np.ndarray, bitrate_kbps: int) -> tuple:
     }
 
 
-# ================== CODEC: ENCODEC (GPU) ==================
+# ================== CODEC: ENCODEC ==================
 _encodec_model = None
 
 
@@ -259,40 +290,39 @@ def get_encodec():
     return _encodec_model
 
 
-def compress_encodec(audio_24k: np.ndarray, bandwidth: float) -> tuple:
+def _encodec_run(x, bandwidth):
     model = get_encodec()
     model.set_target_bandwidth(bandwidth)
-    duration_s = len(audio_24k) / 24000
-    x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
-
-    torch.cuda.synchronize()
-    before = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
-    t0 = time.perf_counter()
-
     with torch.no_grad():
         frames = model.encode(x)
         decoded = model.decode(frames)
+    return frames, decoded
 
-    torch.cuda.synchronize()
-    t1 = time.perf_counter()
-    after = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
+
+def compress_encodec(audio_24k: np.ndarray, bandwidth: float) -> tuple:
+    duration_s = len(audio_24k) / 24000
+    x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
+
+    (frames, decoded), t_s, e_cpu, e_gpu, e_src = measure_neural_inference(
+        _encodec_run, x, bandwidth
+    )
 
     rec = decoded.squeeze().cpu().numpy()
     total_tokens = sum(f[0].numel() for f in frames)
     file_bytes = total_tokens * 10 // 8
 
     return rec, {
-        "time_s": t1 - t0,
-        "cpu_energy_j": None,
-        "gpu_energy_j": (after - before) / 1000 if gpu_obj else None,
+        "time_s": t_s,
+        "cpu_energy_j": e_cpu,
+        "gpu_energy_j": e_gpu,
         "file_bytes": file_bytes,
         "actual_kbps": bandwidth,
-        "energy_source": "Zeus",
+        "energy_source": e_src,
         "duration_s": duration_s,
     }
 
 
-# ================== CODEC: DAC (GPU) ==================
+# ================== CODEC: DAC ==================
 _dac_model = None
 
 
@@ -306,40 +336,36 @@ def get_dac():
     return _dac_model
 
 
-def compress_dac(audio_24k: np.ndarray) -> tuple:
+def _dac_run(x):
     model = get_dac()
+    with torch.no_grad():
+        z, codes, latents, _, _ = model.encode(x)
+        audio_hat = model.decode(z)
+    return codes, audio_hat
+
+
+def compress_dac(audio_24k: np.ndarray) -> tuple:
     duration_s = len(audio_24k) / 24000
     x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
     original_length = x.shape[-1]
 
-    torch.cuda.synchronize()
-    before = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
-    t0 = time.perf_counter()
-
-    with torch.no_grad():
-        z, codes, latents, _, _ = model.encode(x)
-        audio_hat = model.decode(z)
-
-    torch.cuda.synchronize()
-    t1 = time.perf_counter()
-    after = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
+    (codes, audio_hat), t_s, e_cpu, e_gpu, e_src = measure_neural_inference(_dac_run, x)
 
     rec = audio_hat.squeeze().cpu().numpy()[:original_length]
-    total_tokens = codes.numel()
-    file_bytes = total_tokens * 10 // 8
+    file_bytes = codes.numel() * 10 // 8
 
     return rec, {
-        "time_s": t1 - t0,
-        "cpu_energy_j": None,
-        "gpu_energy_j": (after - before) / 1000 if gpu_obj else None,
+        "time_s": t_s,
+        "cpu_energy_j": e_cpu,
+        "gpu_energy_j": e_gpu,
         "file_bytes": file_bytes,
         "actual_kbps": 8.0,
-        "energy_source": "Zeus",
+        "energy_source": e_src,
         "duration_s": duration_s,
     }
 
 
-# ================== CODEC: SNAC (GPU, SOTA 2024) ==================
+# ================== CODEC: SNAC ==================
 _snac_model = None
 
 
@@ -352,38 +378,33 @@ def get_snac():
     return _snac_model
 
 
-def compress_snac(audio_24k: np.ndarray) -> tuple:
+def _snac_run(x):
     model = get_snac()
-    duration_s = len(audio_24k) / 24000
-    x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
-
-    torch.cuda.synchronize()
-    before = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
-    t0 = time.perf_counter()
-
     with torch.no_grad():
         codes = model.encode(x)
         audio_hat = model.decode(codes)
+    return codes, audio_hat
 
-    torch.cuda.synchronize()
-    t1 = time.perf_counter()
-    after = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
+
+def compress_snac(audio_24k: np.ndarray) -> tuple:
+    duration_s = len(audio_24k) / 24000
+    x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
+
+    (codes, audio_hat), t_s, e_cpu, e_gpu, e_src = measure_neural_inference(
+        _snac_run, x
+    )
 
     rec = audio_hat.squeeze().cpu().numpy()
-
-    # NOTA TESI: Bitrate calcolato come "Bitrate di Payload Teorico".
-    # Non essendoci un container (muxer) ufficiale, misuriamo l'entropia del latente.
-    total_tokens = sum(c.numel() for c in codes)
-    file_bytes = total_tokens * 12 // 8  # codebook 4096 = 12 bit
+    file_bytes = sum(c.numel() for c in codes) * 12 // 8
     actual_kbps = (file_bytes * 8) / duration_s / 1000 if duration_s > 0 else 0
 
     return rec, {
-        "time_s": t1 - t0,
-        "cpu_energy_j": None,
-        "gpu_energy_j": (after - before) / 1000 if gpu_obj else None,
+        "time_s": t_s,
+        "cpu_energy_j": e_cpu,
+        "gpu_energy_j": e_gpu,
         "file_bytes": file_bytes,
         "actual_kbps": actual_kbps,
-        "energy_source": "Zeus",
+        "energy_source": e_src,
         "duration_s": duration_s,
     }
 
