@@ -70,41 +70,55 @@ M = {
 # DATI
 # ====================================================================
 def load_rde():
-    """Tutti i codec immagini con R-D-E full pipeline."""
-    df = pd.read_csv(
+    """Unisci PSNR corretto (da 12-metric) con energia (da full pipeline)."""
+
+    # 1. Energia dal full pipeline benchmark
+    energy = pd.read_csv(
         os.path.expanduser("~/tesi/results/images/full_pipeline_energy_benchmark.csv")
     )
+    energy = energy[["codec", "param", "image", "energy_j", "time_total_ms"]].copy()
 
-    # Aggiungi ELIC dal benchmark precedente
-    try:
-        elic_df = pd.read_csv(
-            os.path.expanduser("~/tesi/results/jxl_vs_elic_benchmark.csv")
+    # 2. Quality (PSNR corretto) dai 12-metric CSV
+    q_dfs = []
+
+    # Ballé, Cheng, JPEG, HEVC
+    q1 = pd.read_csv(
+        os.path.expanduser("~/tesi/results/images/missing_12metric_benchmark.csv")
+    )
+    q_dfs.append(q1[["codec", "param", "image", "bpp", "psnr"]])
+
+    # TCM, DCAE
+    q2 = pd.read_csv(
+        os.path.expanduser("~/tesi/results/images/sota_12metric_benchmark.csv")
+    )
+    q_dfs.append(q2[["codec", "param", "image", "bpp", "psnr"]])
+
+    # JXL, ELIC (forward pass only per PSNR corretto)
+    q3 = pd.read_csv(os.path.expanduser("~/tesi/results/jxl_vs_elic_benchmark.csv"))
+    q3_filt = q3[(q3["codec"] == "JXL") | (q3["pipeline"] == "forward_pass_only")]
+    q_dfs.append(q3_filt[["codec", "param", "image", "bpp", "psnr"]])
+
+    quality = pd.concat(q_dfs, ignore_index=True)
+
+    # 3. ELIC energia dal vecchio benchmark (full pipeline)
+    elic_full = q3[(q3["codec"] == "ELIC") & (q3["pipeline"] == "full_pipeline")]
+    elic_energy = elic_full[["codec", "param", "image"]].copy()
+    elic_energy["energy_j"] = elic_full["energy_net_j"].values
+    elic_energy["time_total_ms"] = elic_full["time_ms"].values
+    energy = pd.concat([energy, elic_energy], ignore_index=True)
+
+    # 4. Merge quality + energy su codec+param+image
+    merged = quality.merge(energy, on=["codec", "param", "image"], how="inner")
+    merged = merged.dropna(subset=["bpp", "psnr", "energy_j"])
+
+    print(f"  R-D-E merge: {len(merged)} righe")
+    for codec in sorted(merged["codec"].unique()):
+        sub = merged[merged["codec"] == codec]
+        print(
+            f"    {codec}: {len(sub)} righe, PSNR={sub['psnr'].mean():.2f}, E={sub['energy_j'].mean():.2f} J"
         )
-        elic_full = elic_df[
-            (elic_df["codec"] == "ELIC") & (elic_df["pipeline"] == "full_pipeline")
-        ].copy()
-        elic_rows = []
-        for _, row in elic_full.iterrows():
-            elic_rows.append(
-                {
-                    "codec": "ELIC",
-                    "param": row["param"],
-                    "image": row["image"],
-                    "bpp": row["bpp"],
-                    "psnr": row["psnr"],
-                    "time_total_ms": row.get("time_ms", None),
-                    "energy_j": row.get("energy_net_j", None),
-                    "energy_source": "Zeus",
-                    "params_M": 36.9,
-                    "pipeline": "full_pipeline",
-                }
-            )
-        if elic_rows:
-            df = pd.concat([df, pd.DataFrame(elic_rows)], ignore_index=True)
-    except Exception as e:
-        print(f"  [!] ELIC non caricato: {e}")
 
-    return df.dropna(subset=["bpp", "psnr", "energy_j"])
+    return merged
 
 
 def load_quality():
@@ -300,23 +314,23 @@ def fig3(df):
 # FIG 4: Energy bar chart a ~34 dB (confronto fair)
 # ====================================================================
 def fig4(df):
-    # Punti a ~34 dB PSNR per confronto fair
-    targets = [
-        ("JPEG", "q=85", 36.46, 0.07),
-        ("JXL", "d=1.0", 37.89, 1.37),
-        ("HEVC", "crf=25", 38.63, 5.65),
-        ("Ballé", "q=5", 37.32, 1.32),
-        ("Cheng", "q=5", 34.95, 404.0),
-        ("TCM", "lam=0.013", 34.14, 14.41),
-        ("DCAE", "lam=0.013", 34.52, 29.04),
-    ]
+    # Prendi i punti a qualità medio-alta per confronto
+    targets_raw = {
+        ("JPEG", "q=85"): None,
+        ("JXL", "d=1.0"): None,
+        ("HEVC", "crf=25"): None,
+        ("Ballé", "q=5"): None,
+        ("Cheng", "q=5"): None,
+        ("ELIC", "lam=0.150"): None,
+        ("TCM", "lam=0.013"): None,
+        ("DCAE", "lam=0.013"): None,
+    }
 
-    # Aggiungi ELIC se disponibile
-    elic_sub = df[(df["codec"] == "ELIC") & (df["param"] == "lam=0.150")]
-    if len(elic_sub) > 0:
-        targets.append(
-            ("ELIC", "lam=0.150", elic_sub["psnr"].mean(), elic_sub["energy_j"].mean())
-        )
+    targets = []
+    for codec, param in targets_raw:
+        sub = df[(df["codec"] == codec) & (df["param"] == param)]
+        if len(sub) > 0:
+            targets.append((codec, param, sub["psnr"].mean(), sub["energy_j"].mean()))
 
     targets.sort(key=lambda x: x[3])
 
@@ -325,7 +339,7 @@ def fig4(df):
     colors = [C[t[0]] for t in targets]
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    bars = ax.bar(
+    ax.bar(
         range(len(targets)),
         energies,
         color=colors,
@@ -337,9 +351,7 @@ def fig4(df):
     ax.set_xticks(range(len(targets)))
     ax.set_xticklabels(labels, fontsize=8)
     ax.set_ylabel("Energia full pipeline (J)")
-    ax.set_title(
-        "Costo energetico per codec (Kodak, full pipeline)\nCheng: codifica aritmetica = 99.6% del costo"
-    )
+    ax.set_title("Costo energetico per codec (Kodak, full pipeline)")
     ax.set_yscale("log")
     ax.set_ylim(0.01, 1000)
 
