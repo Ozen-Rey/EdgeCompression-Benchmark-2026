@@ -1,0 +1,5838 @@
+
+
+========================================
+FILE: ./notebooks/plot_rd_curves.py
+========================================
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+RESULTS_DIR = os.path.expanduser("~/tesi/results/images")
+
+jpeg = pd.read_csv(f"{RESULTS_DIR}/jpeg_kodak.csv")
+hevc = pd.read_csv(f"{RESULTS_DIR}/hevc_kodak.csv")
+balle = pd.read_csv(f"{RESULTS_DIR}/balle2018_kodak.csv")
+cheng = pd.read_csv(f"{RESULTS_DIR}/cheng2020_kodak.csv")
+
+jpeg_rd = jpeg.groupby("quality")[["bpp", "psnr", "lpips"]].mean().sort_values("bpp")
+hevc_rd = hevc.groupby("crf")[["bpp", "psnr", "lpips"]].mean().sort_values("bpp")
+balle_rd = balle.groupby("quality")[["bpp", "psnr", "lpips"]].mean().sort_values("bpp")
+cheng_rd = cheng.groupby("quality")[["bpp", "psnr", "lpips"]].mean().sort_values("bpp")
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+for ax, metric, ylabel in [
+    (ax1, "psnr", "PSNR (dB)"),
+    (ax2, "lpips", "LPIPS (↓ meglio)"),
+]:
+    ax.plot(jpeg_rd["bpp"], jpeg_rd[metric], "b-o", label="JPEG", markersize=4)
+    ax.plot(hevc_rd["bpp"], hevc_rd[metric], "r-s", label="H.265/HEVC", markersize=4)
+    ax.plot(balle_rd["bpp"], balle_rd[metric], "g-^", label="Ballé2018", markersize=4)
+    ax.plot(cheng_rd["bpp"], cheng_rd[metric], "m-D", label="Cheng2020", markersize=4)
+    ax.set_xlabel("Bitrate (bpp)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(f"Rate-Distortion Immagini: {metric.upper()}")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, 2.5)
+
+plt.tight_layout()
+out = f"{RESULTS_DIR}/rd_curves_images_v2.png"
+plt.savefig(out, dpi=150, bbox_inches="tight")
+print(f"Salvato {out}")
+plt.show()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_visqol.py
+========================================
+"""
+Benchmark ViSQOL: calcola ViSQOL MOS-LQO sui file ricostruiti.
+Requisiti: protobuf==3.20.3
+Dopo: pip install "protobuf>=6.0"
+"""
+
+import os
+import glob
+import csv
+import numpy as np
+import librosa
+from pathlib import Path
+
+import visqol_lib_py
+from visqol.pb2 import visqol_config_pb2, similarity_result_pb2
+
+RECONSTRUCTIONS_DIR = os.path.expanduser("~/tesi/results/audio/reconstructions")
+DATASETS_DIRS = {
+    "librispeech": os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    "esc50": os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    "musdb": os.path.expanduser("~/tesi/datasets_audio/musdb_10s"),
+}
+OUTPUT_CSV = os.path.expanduser("~/tesi/results/audio/visqol_benchmark.csv")
+VISQOL_SR = 16000
+
+CODEC_PARAMS = [
+    ("Opus", "12"),
+    ("Opus", "24"),
+    ("Opus", "48"),
+    ("EnCodec", "1.5"),
+    ("EnCodec", "3.0"),
+    ("EnCodec", "6.0"),
+    ("DAC", "8.0"),
+    ("SNAC", "0.8"),
+]
+
+
+def init_visqol():
+    config = visqol_config_pb2.VisqolConfig()
+    config.audio.sample_rate = VISQOL_SR  # type: ignore
+    config.options.use_speech_scoring = True  # type: ignore
+    api = visqol_lib_py.VisqolApi()
+    api.Create(config)
+    return api
+
+
+def measure_visqol(api, ref_path: str, deg_path: str) -> float:
+    ref, _ = librosa.load(ref_path, sr=VISQOL_SR, mono=True)
+    deg, _ = librosa.load(deg_path, sr=VISQOL_SR, mono=True)
+    min_len = min(len(ref), len(deg))
+    ref = ref[:min_len].astype(np.float64)
+    deg = deg[:min_len].astype(np.float64)
+    result = api.Measure(ref, deg)
+    return result.moslqo
+
+
+def find_original(filename: str) -> tuple:
+    for ds_name, ds_path in DATASETS_DIRS.items():
+        for ext in ["wav", "flac"]:
+            candidate = os.path.join(ds_path, f"{filename}.{ext}")
+            if os.path.exists(candidate):
+                return candidate, ds_name
+            matches = glob.glob(
+                os.path.join(ds_path, "**", f"{filename}.{ext}"), recursive=True
+            )
+            if matches:
+                return matches[0], ds_name
+    return None, None
+
+
+def main():
+    print("=" * 60)
+    print("BENCHMARK ViSQOL (MOS-LQO)")
+    print("=" * 60)
+
+    api = init_visqol()
+    print("ViSQOL inizializzato (speech mode, 16kHz)\n")
+
+    all_results = []
+    fieldnames = ["file", "dataset", "codec", "param", "visqol"]
+
+    for codec, param in CODEC_PARAMS:
+        tag = f"{codec}_{param}"
+        rec_files = sorted(glob.glob(os.path.join(RECONSTRUCTIONS_DIR, f"*_{tag}.wav")))
+
+        if not rec_files:
+            print(f"[!] Nessun file per {tag}")
+            continue
+
+        print(f"--- {tag}: {len(rec_files)} file ---")
+        scores = []
+
+        for i, rec_path in enumerate(rec_files):
+            rec_name = Path(rec_path).stem
+            orig_name = rec_name.rsplit(f"_{tag}", 1)[0]
+            orig_path, dataset = find_original(orig_name)
+
+            if orig_path is None:
+                continue
+
+            try:
+                score = measure_visqol(api, orig_path, rec_path)
+                scores.append(score)
+                all_results.append(
+                    {
+                        "file": orig_name,
+                        "dataset": dataset,
+                        "codec": codec,
+                        "param": param,
+                        "visqol": round(score, 4),
+                    }
+                )
+            except Exception as e:
+                pass
+
+            if (i + 1) % 25 == 0:
+                avg = np.mean(scores) if scores else 0
+                print(f"  [{i+1}/{len(rec_files)}] media: {avg:.3f} (n={len(scores)})")
+
+        if scores:
+            print(f"  MEDIA {tag}: {np.mean(scores):.3f} (n={len(scores)})")
+        print()
+
+    # Salva CSV
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in all_results:
+            writer.writerow(r)
+    print(f"CSV: {OUTPUT_CSV}")
+
+    # Tabella
+    print("\n" + "=" * 60)
+    print("RISULTATI ViSQOL (MOS-LQO, scala 1-5)")
+    print("=" * 60)
+    print(f"{'Codec':<18} {'ViSQOL':>8} {'n':>5}")
+    print("-" * 35)
+    for codec, param in CODEC_PARAMS:
+        tag = f"{codec}_{param}"
+        subset = [
+            r["visqol"]
+            for r in all_results
+            if r["codec"] == codec and r["param"] == param
+        ]
+        if subset:
+            print(f"{tag:<18} {np.mean(subset):>8.3f} {len(subset):>5}")
+
+    # Per dataset
+    print("\n" + "=" * 60)
+    print("DETTAGLIO PER DATASET")
+    print("=" * 60)
+    for ds in DATASETS_DIRS:
+        print(f"\n--- {ds} ---")
+        for codec, param in CODEC_PARAMS:
+            tag = f"{codec}_{param}"
+            subset = [
+                r["visqol"]
+                for r in all_results
+                if r["codec"] == codec and r["param"] == param and r["dataset"] == ds
+            ]
+            if subset:
+                print(f"  {tag:<18} {np.mean(subset):.3f} (n={len(subset)})")
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_video.py
+========================================
+import os
+import sys
+import time
+import subprocess
+import tempfile
+import torch
+import numpy as np
+from pathlib import Path
+import pandas as pd
+from tqdm import tqdm
+from pytorch_msssim import ms_ssim
+import lpips
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+
+UVG_DIR = os.path.expanduser("~/tesi/datasets/uvg")
+RESULTS_DIR = os.path.expanduser("~/tesi/results/video")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+loss_fn_lpips = lpips.LPIPS(net="alex").to(device)
+
+WIDTH, HEIGHT, FPS, N_FRAMES = 1920, 1080, 120, 120
+
+SEQUENCES = [
+    "Beauty_1920x1080_120fps_420_8bit_YUV.yuv",
+    "Bosphorus_1920x1080_120fps_420_8bit_YUV.yuv",
+    "HoneyBee_1920x1080_120fps_420_8bit_YUV.yuv",
+]
+
+
+def psnr(img1, img2):
+    mse = np.mean((img1.astype(np.float64) - img2.astype(np.float64)) ** 2)
+    if mse == 0:
+        return 100.0
+    return 20 * np.log10(255.0 / np.sqrt(mse))
+
+
+def compute_msssim(img1_np, img2_np):
+    t1 = torch.from_numpy(img1_np).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    t2 = torch.from_numpy(img2_np).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    return ms_ssim(t1, t2, data_range=1.0).item()
+
+
+def compute_lpips(img1_np, img2_np):
+    def to_t(img):
+        t = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+        return (t * 2.0 - 1.0).to(device)
+
+    with torch.no_grad():
+        return loss_fn_lpips(to_t(img1_np), to_t(img2_np)).item()
+
+
+def extract_frames(yuv_path, n_frames=N_FRAMES):
+    """Estrae i primi n_frames dal file YUV come array numpy RGB."""
+    frames = []
+    with tempfile.TemporaryDirectory() as tmp:
+        out_pattern = os.path.join(tmp, "frame_%04d.png")
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "rawvideo",
+                "-pixel_format",
+                "yuv420p",
+                "-video_size",
+                f"{WIDTH}x{HEIGHT}",
+                "-framerate",
+                str(FPS),
+                "-i",
+                yuv_path,
+                "-frames:v",
+                str(n_frames),
+                out_pattern,
+            ],
+            capture_output=True,
+            check=True,
+        )
+        for i in range(1, n_frames + 1):
+            p = os.path.join(tmp, f"frame_{i:04d}.png")
+            if os.path.exists(p):
+                from PIL import Image
+
+                frames.append(np.array(Image.open(p).convert("RGB")))
+    return frames
+
+
+def compress_video(yuv_path, codec, param_value, n_frames=N_FRAMES):
+    """Comprime n_frames con il codec specificato e calcola le metriche."""
+    total_pixels = WIDTH * HEIGHT
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # input: primi n_frames del YUV
+        input_clip = os.path.join(tmp, "input.yuv")
+        bytes_per_frame = WIDTH * HEIGHT * 3 // 2  # YUV420
+        with open(yuv_path, "rb") as fin, open(input_clip, "wb") as fout:
+            fout.write(fin.read(bytes_per_frame * n_frames))
+
+        output_video = os.path.join(
+            tmp, f"compressed.{'mp4' if codec != 'av1' else 'mkv'}"
+        )
+        decoded_dir = os.path.join(tmp, "decoded")
+        os.makedirs(decoded_dir)
+
+        # formato raw senza container overhead
+        # scegli encoder
+        if codec == "h264":
+            vcodec = "libx264"
+            output_video = os.path.join(tmp, "compressed.264")
+            quality_param = ["-crf", str(param_value)]
+        elif codec == "h265":
+            vcodec = "libx265"
+            output_video = os.path.join(tmp, "compressed.265")
+            quality_param = [
+                "-crf",
+                str(param_value),
+                "-x265-params",
+                "log-level=error",
+            ]
+        elif codec == "av1":
+            vcodec = "libaom-av1"
+            output_video = os.path.join(tmp, "compressed.ivf")
+            quality_param = ["-crf", str(param_value), "-b:v", "0"]
+        else:
+            raise ValueError(f"Codec non supportato: {codec}")
+
+        # codifica
+        start = time.time()
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "rawvideo",
+                "-pixel_format",
+                "yuv420p",
+                "-video_size",
+                f"{WIDTH}x{HEIGHT}",
+                "-framerate",
+                str(FPS),
+                "-i",
+                input_clip,
+                "-c:v",
+                vcodec,
+                "-preset",
+                "medium" if codec != "av1" else "4",
+                *quality_param,
+                output_video,
+            ],
+            capture_output=True,
+            check=True,
+        )
+        enc_time = time.time() - start
+
+        compressed_bits = os.path.getsize(output_video) * 8
+        bpp = compressed_bits / (total_pixels * n_frames)
+        fps_enc = n_frames / enc_time
+
+        # decodifica — per raw streams serve specificare il codec
+        if codec == "h264":
+            dec_cmd = [
+                "ffmpeg",
+                "-y",
+                "-c:v",
+                "h264",
+                "-i",
+                output_video,
+                os.path.join(decoded_dir, "frame_%04d.png"),
+            ]
+        elif codec == "h265":
+            dec_cmd = [
+                "ffmpeg",
+                "-y",
+                "-c:v",
+                "hevc",
+                "-i",
+                output_video,
+                os.path.join(decoded_dir, "frame_%04d.png"),
+            ]
+        elif codec == "av1":
+            dec_cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                output_video,
+                os.path.join(decoded_dir, "frame_%04d.png"),
+            ]
+        else:
+            raise ValueError(f"Codec non supportato per decodifica: {codec}")
+        subprocess.run(dec_cmd, capture_output=True, check=True)
+
+        # calcola metriche frame per frame
+        from PIL import Image
+
+        orig_frames = extract_frames(yuv_path, n_frames)
+        psnr_vals, msssim_vals, lpips_vals = [], [], []
+
+        for i, orig in enumerate(orig_frames):
+            dec_path = os.path.join(decoded_dir, f"frame_{i+1:04d}.png")
+            if not os.path.exists(dec_path):
+                continue
+            rec = np.array(Image.open(dec_path).convert("RGB"))
+            psnr_vals.append(psnr(orig, rec))
+            msssim_vals.append(compute_msssim(orig, rec))
+            lpips_vals.append(compute_lpips(orig, rec))
+
+        return {
+            "bpp": round(bpp, 6),
+            "psnr": round(np.mean(psnr_vals), 4),
+            "ms_ssim": round(np.mean(msssim_vals), 6),
+            "lpips": round(np.mean(lpips_vals), 6),
+            "fps_enc": round(fps_enc, 3),
+            "enc_time_s": round(enc_time, 2),
+        }
+
+
+def run_video_benchmark():
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    rows = []
+    out = os.path.join(RESULTS_DIR, "video_benchmark.csv")
+
+    codecs = {
+        "h264": [51, 45, 40, 35, 30, 25, 20],
+        "h265": [51, 45, 40, 35, 30, 25, 20],
+        # "av1":  [63, 55, 48, 40, 32],  # rimosso crf=24
+    }
+
+    for codec, crf_values in codecs.items():
+        print(f"\n=== {codec.upper()} ===")
+        n_frames = 24 if codec == "av1" else 120
+
+        for crf in crf_values:
+            psnr_seq, msssim_seq, lpips_seq, bpp_seq, fps_seq = [], [], [], [], []
+
+            for seq_name in tqdm(SEQUENCES, desc=f"{codec} crf={crf}"):
+                yuv_path = os.path.join(UVG_DIR, seq_name)
+                try:
+                    m = compress_video(yuv_path, codec, crf, n_frames=n_frames)
+                    psnr_seq.append(m["psnr"])
+                    msssim_seq.append(m["ms_ssim"])
+                    lpips_seq.append(m["lpips"])
+                    bpp_seq.append(m["bpp"])
+                    fps_seq.append(m["fps_enc"])
+                    rows.append(
+                        {
+                            "sequence": seq_name.split("_")[0],
+                            "codec": codec,
+                            "crf": crf,
+                            **m,
+                        }
+                    )
+                    # salva dopo ogni sequenza
+                    pd.DataFrame(rows).to_csv(out, index=False)
+                except Exception as e:
+                    print(f"  ERRORE {seq_name}: {e}")
+
+            if psnr_seq:
+                print(
+                    f"  crf={crf} | "
+                    f"bpp={np.mean(bpp_seq):.4f} | "
+                    f"psnr={np.mean(psnr_seq):.2f}dB | "
+                    f"ms_ssim={np.mean(msssim_seq):.4f} | "
+                    f"lpips={np.mean(lpips_seq):.4f} | "
+                    f"fps={np.mean(fps_seq):.1f}"
+                )
+
+    df = pd.DataFrame(rows)
+    df.to_csv(out, index=False)
+    print(f"\nRisultati salvati in {out}")
+    print("\n--- Curva R-D media per codec ---")
+    print(
+        df.groupby(["codec", "crf"])[["bpp", "psnr", "ms_ssim", "lpips", "fps_enc"]]
+        .mean()
+        .to_string()
+    )
+
+
+if __name__ == "__main__":
+    run_video_benchmark()
+
+
+========================================
+FILE: ./src/benchmark/JXLvsELIC.py
+========================================
+"""
+Confronto completo JXL vs ELIC su Kodak (24 immagini).
+
+ELIC misurato in DUE modalità:
+  1. forward_pass_only: model(x) — solo rete neurale, no codifica entropica
+  2. full_pipeline: model.compress() + model.decompress() — pipeline completa
+
+12 metriche qualità + metriche sistema (tempo, energia, VRAM, bpp reale)
+
+Fix applicati:
+  - LPIPS range [-1,1] (libreria richzhang)
+  - PIL per entrambi i codec (no cv2)
+  - JXL energia = None (è CPU-only, Zeus misura solo GPU)
+  - JXL timing encode + decode separati
+  - VRAM separata per encode e decode
+  - Shape overhead nei bytes (+8)
+  - Warmup completo prima delle misurazioni
+  - Seed per riproducibilità
+"""
+
+import torch
+import random
+import warnings
+import time
+import sys
+import os
+import csv
+import json
+import numpy as np
+from pathlib import Path
+from PIL import Image
+from torchvision import transforms
+
+warnings.filterwarnings("ignore")
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+sys.path.insert(0, "/tmp/elic")
+
+# ================== CONFIG & RIPRODUCIBILITÀ ==================
+SEED = 42
+torch.manual_seed(SEED)
+np.random.seed(SEED)
+random.seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+KODAK_DIR = os.path.expanduser("~/tesi/datasets/kodak")
+ELIC_CHECKPOINTS = {
+    "0.008": "/tmp/elic/elic_0008.pth.tar",
+    "0.032": "/tmp/elic/elic_0032.pth.tar",
+    "0.150": "/tmp/elic/elic_0150.pth.tar",
+    "0.450": "/tmp/elic/elic_0450.pth.tar",
+}
+JXL_DISTANCES = [1.0, 3.0, 7.0, 12.0]
+IDLE_W = 59.8
+
+OUTPUT_CSV = os.path.expanduser("~/tesi/results/jxl_vs_elic_benchmark.csv")
+OUTPUT_JSON = os.path.expanduser("~/tesi/results/jxl_vs_elic_benchmark.json")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+transform = transforms.ToTensor()
+
+# ================== LOG SISTEMA ==================
+print("=" * 80)
+print("JXL vs ELIC BENCHMARK")
+print("=" * 80)
+print(f"Device: {device}")
+if device.type == "cuda":
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"CUDA: {torch.version.cuda}")
+print(f"PyTorch: {torch.__version__}")
+print(f"Idle power (GPU): {IDLE_W} W")
+print(f"Seed: {SEED}")
+print("=" * 80)
+
+# ================== METRICHE SETUP ==================
+from zeus.device.gpu import get_gpus
+import lpips as lpips_lib
+import piq
+from pytorch_msssim import ms_ssim as compute_ms_ssim
+import ssimulacra2 as ssimulacra2_mod
+
+gpu = get_gpus().gpus[0] if device.type == "cuda" else None
+loss_fn_lpips = lpips_lib.LPIPS(net="alex").to(device)
+
+
+def compute_all_metrics(x: torch.Tensor, x_hat: torch.Tensor, orig_path: str) -> dict:
+    """
+    x, x_hat: tensori [1,3,H,W] su device, range [0,1].
+    Ritorna dict con 12 metriche.
+    """
+    m = {}
+
+    # Pixel-level
+    m["psnr"] = piq.psnr(x, x_hat, data_range=1.0).item()
+
+    # Structural
+    m["ssim"] = piq.ssim(x, x_hat, data_range=1.0).item()  # type: ignore
+    m["ms_ssim"] = compute_ms_ssim(x, x_hat, data_range=1.0).item()
+
+    # Perceptual — LPIPS richiede range [-1, 1]
+    with torch.no_grad():
+        x_lpips = x * 2.0 - 1.0
+        x_hat_lpips = x_hat * 2.0 - 1.0
+        m["lpips"] = loss_fn_lpips(x_lpips, x_hat_lpips).item()
+
+    # Deep perceptual
+    m["dists"] = piq.DISTS()(x, x_hat).item()
+
+    # Gradient/Edge
+    m["fsim"] = piq.fsim(x, x_hat, data_range=1.0).item()
+    m["gmsd"] = piq.gmsd(x, x_hat, data_range=1.0).item()
+
+    # Information-theoretic
+    m["vif"] = piq.vif_p(x, x_hat, data_range=1.0).item()
+
+    # Wavelet
+    m["haarpsi"] = piq.haarpsi(x, x_hat, data_range=1.0).item()
+
+    # Multi-scale
+    m["dss"] = piq.dss(x, x_hat, data_range=1.0).item()
+    m["mdsi"] = piq.mdsi(x, x_hat, data_range=1.0).item()
+
+    # Google SSIMULACRA2 (CPU, vuole file paths)
+    try:
+        rec_np = (
+            (x_hat[0].detach().cpu().permute(1, 2, 0).numpy() * 255)
+            .clip(0, 255)
+            .astype(np.uint8)
+        )
+        tmp_path = "/tmp/ssimulacra2_temp_rec.png"
+        Image.fromarray(rec_np).save(tmp_path)
+        m["ssimulacra2"] = ssimulacra2_mod.compute_ssimulacra2(orig_path, tmp_path)
+    except Exception as e:
+        m["ssimulacra2"] = None
+        print(f"    [!] SSIMULACRA2: {e}")
+
+    return m
+
+
+# ================== JXL (CPU-only, end-to-end) ==================
+def benchmark_jxl(img_path: str, distance: float) -> dict:
+    import imagecodecs
+
+    # Carica con PIL (stessa ground truth di ELIC)
+    img_pil = Image.open(img_path).convert("RGB")
+    img_rgb = np.array(img_pil)
+    h, w = img_rgb.shape[:2]
+
+    # Encode
+    t0_c = time.perf_counter()
+    jxl_bytes = imagecodecs.jpegxl_encode(img_rgb, distance=distance, effort=5)
+    t1_c = time.perf_counter()
+
+    # Decode
+    t0_d = time.perf_counter()
+    img_rec = imagecodecs.jpegxl_decode(jxl_bytes)
+    t1_d = time.perf_counter()
+
+    bpp = (len(jxl_bytes) * 8) / (h * w)
+
+    x = (
+        torch.from_numpy(img_rgb).permute(2, 0, 1).unsqueeze(0).float().to(device)
+        / 255.0
+    )
+    x_hat = (
+        torch.from_numpy(img_rec).permute(2, 0, 1).unsqueeze(0).float().to(device)
+        / 255.0
+    )
+
+    metrics = compute_all_metrics(x, x_hat, str(img_path))
+    metrics.update(
+        {
+            "codec": "JXL",
+            "param": f"d={distance}",
+            "image": Path(img_path).name,
+            "bpp": bpp,
+            "file_bytes": len(jxl_bytes),
+            "time_compress_ms": (t1_c - t0_c) * 1000,
+            "time_decompress_ms": (t1_d - t0_d) * 1000,
+            "time_ms": (t1_c - t0_c + t1_d - t0_d) * 1000,
+            # JXL è CPU-only: Zeus misura solo GPU, quindi energia = None
+            "energy_total_j": None,
+            "energy_net_j": None,
+            "energy_compress_j": None,
+            "energy_decompress_j": None,
+            "vram_enc_mb": 0.0,
+            "vram_dec_mb": 0.0,
+            "pipeline": "end_to_end",
+            "note": "CPU-only, no GPU energy",
+        }
+    )
+    return metrics
+
+
+# ================== ELIC ==================
+def load_elic(ckpt_path: str):
+    from Network import TestModel  # type: ignore
+
+    state_dict = torch.load(ckpt_path, map_location=device)
+    model = TestModel()
+    model.load_state_dict(state_dict)
+    model = model.to(device).eval()
+    model.update()
+    return model
+
+
+def pad_image(x: torch.Tensor, multiple: int = 64):
+    h, w = x.shape[2:]
+    pad_h = (multiple - h % multiple) % multiple
+    pad_w = (multiple - w % multiple) % multiple
+    x_pad = torch.nn.functional.pad(x, (0, pad_w, 0, pad_h), mode="reflect")
+    return x_pad, h, w
+
+
+def benchmark_elic_forward(model, img_path: str, lam: str) -> dict:
+    """Forward pass only: model(x). Nessuna codifica aritmetica."""
+    img = Image.open(img_path).convert("RGB")
+    x = transform(img).unsqueeze(0).to(device)
+    x_pad, h, w = pad_image(x)
+
+    torch.cuda.reset_peak_memory_stats()
+    torch.cuda.synchronize()
+    before = gpu.getTotalEnergyConsumption() if gpu is not None else 0
+    t0 = time.perf_counter()
+
+    with torch.no_grad():
+        out = model(x_pad)
+
+    torch.cuda.synchronize()
+    t1 = time.perf_counter()
+    after = gpu.getTotalEnergyConsumption() if gpu is not None else 0
+    vram_mb = torch.cuda.max_memory_allocated() / 1024**2
+
+    x_hat = out["x_hat"][:, :, :h, :w].clamp(0, 1)
+    n_pixels = h * w
+    bpp = sum(
+        (-torch.log2(l).sum() / n_pixels).item() for l in out["likelihoods"].values()
+    )
+    e_total = (after - before) / 1000
+
+    metrics = compute_all_metrics(x, x_hat, str(img_path))
+    metrics.update(
+        {
+            "codec": "ELIC",
+            "param": f"lam={lam}",
+            "image": Path(img_path).name,
+            "bpp": bpp,
+            "file_bytes": int(bpp * n_pixels / 8),
+            "time_ms": (t1 - t0) * 1000,
+            "time_compress_ms": None,
+            "time_decompress_ms": None,
+            "energy_total_j": e_total,
+            "energy_net_j": e_total - IDLE_W * (t1 - t0),
+            "energy_compress_j": None,
+            "energy_decompress_j": None,
+            "vram_enc_mb": vram_mb,
+            "vram_dec_mb": None,
+            "pipeline": "forward_pass_only",
+            "note": "No arithmetic coding, bpp estimated from likelihoods",
+        }
+    )
+    return metrics
+
+
+def count_bytes_recursive(obj):
+    """Conta bytes ricorsivamente nella struttura nidificata di ELIC strings."""
+    if isinstance(obj, bytes):
+        return len(obj)
+    elif isinstance(obj, list):
+        return sum(count_bytes_recursive(item) for item in obj)
+    return 0
+
+
+def benchmark_elic_full(model, img_path: str, lam: str) -> dict:
+    """Pipeline completa: compress() + decompress(). Include codifica aritmetica."""
+    img = Image.open(img_path).convert("RGB")
+    x = transform(img).unsqueeze(0).to(device)
+    x_pad, h, w = pad_image(x)
+    n_pixels = h * w
+
+    # === COMPRESS ===
+    torch.cuda.reset_peak_memory_stats()
+    torch.cuda.synchronize()
+    before_c = gpu.getTotalEnergyConsumption() if gpu is not None else 0
+    t0_c = time.perf_counter()
+
+    out_enc = model.compress(x_pad)
+
+    torch.cuda.synchronize()
+    t1_c = time.perf_counter()
+    after_c = gpu.getTotalEnergyConsumption() if gpu is not None else 0
+    vram_enc_mb = torch.cuda.max_memory_allocated() / 1024**2
+
+    # Bitstream reale + shape overhead
+    total_bytes = count_bytes_recursive(out_enc["strings"]) + 8
+
+    # === DECOMPRESS ===
+    torch.cuda.reset_peak_memory_stats()
+    torch.cuda.synchronize()
+    before_d = gpu.getTotalEnergyConsumption() if gpu is not None else 0
+    t0_d = time.perf_counter()
+
+    out_dec = model.decompress(out_enc["strings"], out_enc["shape"])
+
+    torch.cuda.synchronize()
+    t1_d = time.perf_counter()
+    after_d = gpu.getTotalEnergyConsumption() if gpu is not None else 0
+    vram_dec_mb = torch.cuda.max_memory_allocated() / 1024**2
+
+    x_hat = out_dec["x_hat"][:, :, :h, :w].clamp(0, 1)
+
+    # Tempi
+    t_compress = (t1_c - t0_c) * 1000
+    t_decompress = (t1_d - t0_d) * 1000
+    t_total = t_compress + t_decompress
+
+    # Energia
+    e_compress = (after_c - before_c) / 1000
+    e_decompress = (after_d - before_d) / 1000
+    e_total = e_compress + e_decompress
+    e_net = e_total - IDLE_W * ((t1_c - t0_c) + (t1_d - t0_d))
+
+    metrics = compute_all_metrics(x, x_hat, str(img_path))
+    metrics.update(
+        {
+            "codec": "ELIC",
+            "param": f"lam={lam}",
+            "image": Path(img_path).name,
+            "bpp": (total_bytes * 8) / n_pixels,
+            "file_bytes": total_bytes,
+            "time_ms": t_total,
+            "time_compress_ms": t_compress,
+            "time_decompress_ms": t_decompress,
+            "energy_total_j": e_total,
+            "energy_net_j": e_net,
+            "energy_compress_j": e_compress,
+            "energy_decompress_j": e_decompress,
+            "vram_enc_mb": vram_enc_mb,
+            "vram_dec_mb": vram_dec_mb,
+            "pipeline": "full_pipeline",
+            "note": "Includes arithmetic encode/decode",
+        }
+    )
+    return metrics
+
+
+# ================== MAIN ==================
+METRIC_COLS = [
+    "psnr",
+    "ssim",
+    "ms_ssim",
+    "lpips",
+    "dists",
+    "fsim",
+    "vif",
+    "gmsd",
+    "haarpsi",
+    "dss",
+    "mdsi",
+    "ssimulacra2",
+]
+SYSTEM_COLS = [
+    "codec",
+    "param",
+    "image",
+    "bpp",
+    "file_bytes",
+    "time_ms",
+    "time_compress_ms",
+    "time_decompress_ms",
+    "energy_total_j",
+    "energy_net_j",
+    "energy_compress_j",
+    "energy_decompress_j",
+    "vram_enc_mb",
+    "vram_dec_mb",
+    "pipeline",
+    "note",
+]
+ALL_COLS = SYSTEM_COLS + METRIC_COLS
+
+
+def print_avg(results, codec, param, pipeline=None):
+    subset = [
+        r
+        for r in results
+        if r["codec"] == codec
+        and r["param"] == param
+        and (pipeline is None or r["pipeline"] == pipeline)
+        and r.get("bpp") is not None
+    ]
+    if not subset:
+        return
+    bpp = np.mean([r["bpp"] for r in subset])
+    psnr = np.mean([r["psnr"] for r in subset])
+    lpips_v = np.mean([r["lpips"] for r in subset])
+    t_vals = [r["time_ms"] for r in subset if r["time_ms"] is not None]
+    e_vals = [r["energy_net_j"] for r in subset if r["energy_net_j"] is not None]
+    t_str = f"{np.mean(t_vals):.0f}ms" if t_vals else "N/A"
+    e_str = f"{np.mean(e_vals):.2f}J" if e_vals else "N/A"
+
+    extra = ""
+    tc = [
+        r["time_compress_ms"] for r in subset if r.get("time_compress_ms") is not None
+    ]
+    td = [
+        r["time_decompress_ms"]
+        for r in subset
+        if r.get("time_decompress_ms") is not None
+    ]
+    if tc and td:
+        extra = f" (enc={np.mean(tc):.0f}ms dec={np.mean(td):.0f}ms)"
+
+    print(
+        f"  MEDIA: bpp={bpp:.3f} PSNR={psnr:.2f} LPIPS={lpips_v:.4f} t={t_str}{extra} E_net={e_str}"
+    )
+
+
+def main():
+    imgs = sorted(Path(KODAK_DIR).glob("*.png"))
+    if not imgs:
+        print("[!] Nessuna immagine trovata in", KODAK_DIR)
+        return
+    print(f"\nKodak: {len(imgs)} immagini\n")
+
+    all_results = []
+
+    # =============================================
+    # JXL (end-to-end, CPU)
+    # =============================================
+    print("=" * 70)
+    print("BENCHMARK JXL (end-to-end, CPU-only)")
+    print("=" * 70)
+    for dist in JXL_DISTANCES:
+        print(f"\n--- JXL distance={dist} ---")
+        for i, img in enumerate(imgs):
+            m = benchmark_jxl(str(img), dist)
+            all_results.append(m)
+            if (i + 1) % 8 == 0:
+                print(
+                    f"  [{i+1}/{len(imgs)}] bpp={m['bpp']:.3f} PSNR={m['psnr']:.2f} LPIPS={m['lpips']:.4f}"
+                )
+        print_avg(all_results, "JXL", f"d={dist}")
+
+    # =============================================
+    # ELIC — FORWARD PASS ONLY
+    # =============================================
+    print("\n" + "=" * 70)
+    print("BENCHMARK ELIC — FORWARD PASS ONLY (no arithmetic coding)")
+    print("=" * 70)
+    for lam, ckpt in ELIC_CHECKPOINTS.items():
+        if not os.path.exists(ckpt):
+            print(f"\n--- ELIC lam={lam}: checkpoint non trovato ---")
+            continue
+        print(f"\n--- ELIC lam={lam} (forward only) ---")
+        model = load_elic(ckpt)
+
+        # Warmup: 2 immagini complete
+        for warmup_img in imgs[:2]:
+            x = transform(Image.open(warmup_img).convert("RGB")).unsqueeze(0).to(device)
+            xp, _, _ = pad_image(x)
+            with torch.no_grad():
+                model(xp)
+        torch.cuda.synchronize()
+
+        for i, img in enumerate(imgs):
+            m = benchmark_elic_forward(model, str(img), lam)
+            all_results.append(m)
+            if (i + 1) % 8 == 0:
+                print(
+                    f"  [{i+1}/{len(imgs)}] bpp={m['bpp']:.3f} PSNR={m['psnr']:.2f} LPIPS={m['lpips']:.4f}"
+                )
+        print_avg(all_results, "ELIC", f"lam={lam}", "forward_pass_only")
+
+        del model
+        torch.cuda.empty_cache()
+
+    # =============================================
+    # ELIC — FULL PIPELINE (compress + decompress)
+    # =============================================
+    print("\n" + "=" * 70)
+    print("BENCHMARK ELIC — FULL PIPELINE (con codifica aritmetica)")
+    print("=" * 70)
+    for lam, ckpt in ELIC_CHECKPOINTS.items():
+        if not os.path.exists(ckpt):
+            print(f"\n--- ELIC lam={lam}: checkpoint non trovato ---")
+            continue
+        print(f"\n--- ELIC lam={lam} (full pipeline) ---")
+        model = load_elic(ckpt)
+
+        # Warmup completo: compress + decompress su 2 immagini
+        x = transform(Image.open(imgs[0]).convert("RGB")).unsqueeze(0).to(device)
+        xp, _, _ = pad_image(x)
+        try:
+            for warmup_img in imgs[:2]:
+                x_w = (
+                    transform(Image.open(warmup_img).convert("RGB"))
+                    .unsqueeze(0)
+                    .to(device)
+                )
+                xp_w, _, _ = pad_image(x_w)
+                out_w = model.compress(xp_w)
+                model.decompress(out_w["strings"], out_w["shape"])
+            torch.cuda.synchronize()
+            print("  compress()/decompress() OK")
+        except Exception as e:
+            print(f"  [!] compress()/decompress() FAIL: {e}")
+            print("  SKIP full pipeline per questo lambda")
+            del model
+            torch.cuda.empty_cache()
+            continue
+
+        for i, img in enumerate(imgs):
+            m = benchmark_elic_full(model, str(img), lam)
+            all_results.append(m)
+            if (i + 1) % 8 == 0 and m.get("bpp") is not None:
+                print(
+                    f"  [{i+1}/{len(imgs)}] bpp={m['bpp']:.3f} PSNR={m['psnr']:.2f} "
+                    f"t_enc={m['time_compress_ms']:.0f}ms t_dec={m['time_decompress_ms']:.0f}ms"
+                )
+        print_avg(all_results, "ELIC", f"lam={lam}", "full_pipeline")
+
+        del model
+        torch.cuda.empty_cache()
+
+    # =============================================
+    # SALVATAGGIO
+    # =============================================
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+
+    # CSV per-image
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=ALL_COLS, extrasaction="ignore")
+        writer.writeheader()
+        for r in all_results:
+            writer.writerow(r)
+    print(f"\nCSV: {OUTPUT_CSV}")
+
+    # JSON medie aggregate
+    summary = {}
+    groups = set((r["codec"], r["param"], r["pipeline"]) for r in all_results)
+    for codec, param, pipeline in sorted(groups):
+        subset = [
+            r
+            for r in all_results
+            if r["codec"] == codec
+            and r["param"] == param
+            and r["pipeline"] == pipeline
+            and r.get("bpp") is not None
+        ]
+        if not subset:
+            continue
+        key = f"{codec}_{param}_{pipeline}"
+        summary[key] = {"pipeline": pipeline, "n_images": len(subset)}
+        for col in METRIC_COLS + [
+            "bpp",
+            "file_bytes",
+            "time_ms",
+            "time_compress_ms",
+            "time_decompress_ms",
+            "energy_total_j",
+            "energy_net_j",
+            "energy_compress_j",
+            "energy_decompress_j",
+            "vram_enc_mb",
+            "vram_dec_mb",
+        ]:
+            vals = [r[col] for r in subset if r.get(col) is not None]
+            summary[key][col] = round(float(np.mean(vals)), 6) if vals else None
+
+    with open(OUTPUT_JSON, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"JSON: {OUTPUT_JSON}")
+
+    # =============================================
+    # TABELLA RIEPILOGATIVA
+    # =============================================
+    print("\n" + "=" * 130)
+    print("TABELLA RIEPILOGATIVA (medie su 24 immagini Kodak)")
+    print("=" * 130)
+    h = (
+        f"{'Config':<42} {'bpp':>6} {'PSNR':>6} {'SSIM':>6} {'LPIPS':>6} "
+        f"{'DISTS':>6} {'SSIM2':>7} {'t_ms':>7} {'t_enc':>7} {'t_dec':>7} "
+        f"{'E_net':>7} {'VRAM_e':>7} {'VRAM_d':>7}"
+    )
+    print(h)
+    print("-" * len(h))
+    for key in sorted(summary.keys()):
+        s = summary[key]
+
+        def fmt(v, f=".2f"):
+            return f"{v:{f}}" if v is not None else "N/A"
+
+        print(
+            f"{key:<42} {fmt(s['bpp'],'.3f'):>6} {fmt(s['psnr']):>6} "
+            f"{fmt(s['ssim'],'.4f'):>6} {fmt(s['lpips'],'.4f'):>6} "
+            f"{fmt(s['dists'],'.4f'):>6} {fmt(s.get('ssimulacra2'),'.1f'):>7} "
+            f"{fmt(s.get('time_ms'),'.0f'):>7} {fmt(s.get('time_compress_ms'),'.0f'):>7} "
+            f"{fmt(s.get('time_decompress_ms'),'.0f'):>7} "
+            f"{fmt(s.get('energy_net_j')):>7} "
+            f"{fmt(s.get('vram_enc_mb'),'.0f'):>7} {fmt(s.get('vram_dec_mb'),'.0f'):>7}"
+        )
+
+    print("\n" + "=" * 130)
+    print("LEGENDA:")
+    print("  forward_pass_only: solo model(x), bpp stimato da log2(likelihoods)")
+    print(
+        "  full_pipeline: model.compress() + model.decompress(), bpp da bitstream reale"
+    )
+    print("  end_to_end: JXL encode + decode completo su CPU")
+    print("  E_net: energia GPU netta (totale - idle), None per JXL (CPU-only)")
+    print("  SSIM2: SSIMULACRA2 (metrica psicovisiva di Google, usata da JXL)")
+    print("=" * 130)
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_visqol_audio.py
+========================================
+"""
+ViSQOL AUDIO mode (48kHz) su tutti i codec.
+Speech mode già completata in visqol_benchmark.csv.
+"""
+
+import os
+import glob
+import csv
+import numpy as np
+import librosa
+from pathlib import Path
+
+import visqol_lib_py
+from visqol.pb2 import visqol_config_pb2, similarity_result_pb2  # noqa: F401
+
+RECONSTRUCTIONS_DIR = os.path.expanduser("~/tesi/results/audio/reconstructions")
+DATASETS_DIRS = {
+    "librispeech": os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    "esc50": os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    "musdb": os.path.expanduser("~/tesi/datasets_audio/musdb_10s"),
+}
+OUTPUT_CSV = os.path.expanduser("~/tesi/results/audio/visqol_audio_mode_benchmark.csv")
+
+CODEC_PARAMS = [
+    ("Opus", "12"),
+    ("Opus", "24"),
+    ("Opus", "48"),
+    ("EnCodec", "1.5"),
+    ("EnCodec", "3.0"),
+    ("EnCodec", "6.0"),
+    ("DAC", "8.0"),
+    ("SNAC", "0.8"),
+    ("WavTokenizer", "0.9"),
+]
+
+
+def init_visqol_audio():
+    config = visqol_config_pb2.VisqolConfig()
+    config.audio.sample_rate = 48000  # type: ignore
+    config.options.use_speech_scoring = False  # type: ignore
+    api = visqol_lib_py.VisqolApi()
+    api.Create(config)  # type: ignore
+    return api
+
+
+def find_original(filename: str) -> tuple:
+    for ds_name, ds_path in DATASETS_DIRS.items():
+        for ext in ["wav", "flac"]:
+            candidate = os.path.join(ds_path, f"{filename}.{ext}")
+            if os.path.exists(candidate):
+                return candidate, ds_name
+            matches = glob.glob(
+                os.path.join(ds_path, "**", f"{filename}.{ext}"), recursive=True
+            )
+            if matches:
+                return matches[0], ds_name
+    return None, None
+
+
+def main():
+    print("=" * 60)
+    print("ViSQOL AUDIO MODE (48kHz) - musica/suoni")
+    print("=" * 60)
+
+    api = init_visqol_audio()
+    print("ViSQOL audio mode inizializzato (48kHz)\n")
+
+    all_results = []
+    fieldnames = ["file", "dataset", "codec", "param", "visqol_audio"]
+
+    for codec, param in CODEC_PARAMS:
+        tag = f"{codec}_{param}"
+        rec_files = sorted(glob.glob(os.path.join(RECONSTRUCTIONS_DIR, f"*_{tag}.wav")))
+
+        if not rec_files:
+            print(f"[!] Nessun file per {tag}")
+            continue
+
+        print(f"--- {tag}: {len(rec_files)} file ---")
+        scores = []
+
+        for i, rec_path in enumerate(rec_files):
+            rec_name = Path(rec_path).stem
+            orig_name = rec_name.rsplit(f"_{tag}", 1)[0]
+            orig_path, dataset = find_original(orig_name)
+
+            if orig_path is None:
+                continue
+
+            try:
+                ref, _ = librosa.load(orig_path, sr=48000, mono=True)
+                deg, _ = librosa.load(rec_path, sr=48000, mono=True)
+                min_len = min(len(ref), len(deg))
+                result = api.Measure(
+                    ref[:min_len].astype(np.float64),
+                    deg[:min_len].astype(np.float64),
+                )
+                scores.append(result.moslqo)
+                all_results.append(
+                    {
+                        "file": orig_name,
+                        "dataset": dataset,
+                        "codec": codec,
+                        "param": param,
+                        "visqol_audio": round(result.moslqo, 4),
+                    }
+                )
+            except Exception:
+                pass
+
+            if (i + 1) % 50 == 0:
+                avg = np.mean(scores) if scores else 0
+                print(f"  [{i+1}/{len(rec_files)}] media: {avg:.3f} (n={len(scores)})")
+
+        if scores:
+            print(f"  MEDIA {tag}: {np.mean(scores):.3f} (n={len(scores)})")
+        print()
+
+    # Salva CSV
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in all_results:
+            w.writerow(r)
+    print(f"CSV: {OUTPUT_CSV}")
+
+    # Tabella
+    print(f"\n{'=' * 60}")
+    print("ViSQOL AUDIO MODE (scala 1-5, più alto = meglio)")
+    print(f"{'=' * 60}")
+    print(
+        f"{'Codec':<22} {'Globale':>8} {'LibriS':>8} {'ESC50':>8} {'MUSDB':>8} {'n':>4}"
+    )
+    print("-" * 60)
+
+    for codec, param in CODEC_PARAMS:
+        subset = [r for r in all_results if r["codec"] == codec and r["param"] == param]
+        scores_all = [r["visqol_audio"] for r in subset]
+        if not scores_all:
+            continue
+        glob_avg = f"{np.mean(scores_all):.3f}"
+        ds_avgs = {}
+        for ds in ["librispeech", "esc50", "musdb"]:
+            ds_s = [r["visqol_audio"] for r in subset if r["dataset"] == ds]
+            ds_avgs[ds] = f"{np.mean(ds_s):.3f}" if ds_s else "N/A"
+        tag = f"{codec}_{param}"
+        print(
+            f"{tag:<22} {glob_avg:>8} {ds_avgs['librispeech']:>8} {ds_avgs['esc50']:>8} {ds_avgs['musdb']:>8} {len(scores_all):>4}"
+        )
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_audio.py
+========================================
+import os
+import sys
+import time
+import torch
+import numpy as np
+import soundfile as sf
+import librosa
+from pathlib import Path
+import subprocess
+import tempfile
+from pesq import pesq as pesq_score
+from pystoi import stoi
+import torchaudio
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Variabile globale per evitare di ricaricare il modello EnCodec a ogni file
+_ENCODEC_MODEL = None
+
+def get_encodec_model():
+    global _ENCODEC_MODEL
+    if _ENCODEC_MODEL is None:
+        from encodec.model import EncodecModel
+        print("Caricamento modello EnCodec in VRAM...")
+        _ENCODEC_MODEL = EncodecModel.encodec_model_24khz()
+        _ENCODEC_MODEL.to(device)
+        _ENCODEC_MODEL.eval()
+    return _ENCODEC_MODEL
+
+_DAC_MODEL = None
+
+def get_dac_model():
+    global _DAC_MODEL
+    if _DAC_MODEL is None:
+        import dac
+        print("Caricamento modello DAC in VRAM...")
+        # Usiamo il modello a 24kHz per fare un confronto equo con EnCodec
+        model_path = dac.utils.download(model_type="24khz") 
+        _DAC_MODEL = dac.DAC.load(model_path) #type: ignore
+        _DAC_MODEL.to(device)
+        _DAC_MODEL.eval()
+    return _DAC_MODEL
+
+# --- METRICHE ---
+def load_audio(path: str, target_sr: int = 24000):
+    """Carica l'audio forzando il path a stringa per il linter."""
+    safe_path = str(path)
+    y, sr = librosa.load(safe_path, sr=target_sr, mono=True)
+    return y, target_sr
+
+def compute_pesq(original, reconstructed, sr):
+    try:
+        target_sr = 16000
+        orig_16k = librosa.resample(original, orig_sr=sr, target_sr=target_sr)
+        rec_16k = librosa.resample(reconstructed, orig_sr=sr, target_sr=target_sr)
+        min_len = min(len(orig_16k), len(rec_16k))
+        # Il PESQ va da 1.0 (pessimo) a 4.5 (perfetto)
+        return round(pesq_score(target_sr, orig_16k[:min_len], rec_16k[:min_len], "wb"), 4)
+    except Exception:
+        return 1.0 # Peggior score possibile se fallisce
+
+def compute_mel_distance(original, reconstructed, sr):
+    try:
+        kwargs = {"sr": sr, "n_mels": 128, "fmax": int(8000)}
+        mel1 = librosa.feature.melspectrogram(y=original, **kwargs)
+        mel2 = librosa.feature.melspectrogram(y=reconstructed, **kwargs)
+        min_len = min(mel1.shape[1], mel2.shape[1])
+        diff = librosa.power_to_db(mel1[:, :min_len]) - librosa.power_to_db(mel2[:, :min_len])
+        return round(float(np.sqrt(np.mean(diff**2))), 4)
+    except Exception:
+        return 999.0
+
+# ── CODEC CLASSICI ──────────────────────────────────────────────
+
+def compress_opus(audio_path, bitrate_kbps):
+    y, sr = load_audio(audio_path)
+    duration = len(y) / sr
+
+    with tempfile.TemporaryDirectory() as tmp:
+        wav_in = os.path.join(tmp, "in.wav")
+        opus_f = os.path.join(tmp, "out.opus")
+        wav_out = os.path.join(tmp, "out.wav")
+        sf.write(wav_in, y, sr)
+
+        start = time.perf_counter()
+        subprocess.run(["ffmpeg", "-y", "-i", wav_in, "-c:a", "libopus", "-b:a", f"{bitrate_kbps}k", opus_f], 
+                       capture_output=True, check=True)
+        enc_ms = (time.perf_counter() - start) * 1000
+
+        compressed_bits = os.path.getsize(opus_f) * 8
+        actual_kbps = compressed_bits / duration / 1000
+
+        subprocess.run(["ffmpeg", "-y", "-i", opus_f, wav_out], capture_output=True, check=True)
+        y_rec, _ = librosa.load(wav_out, sr=sr, mono=True)
+        
+        min_len = min(len(y), len(y_rec))
+        y, y_rec = y[:min_len], y_rec[:min_len]
+        
+        pesq_val = compute_pesq(y, y_rec, sr)
+        # TRUCCO ORACLE: Creiamo una metrica dove PIU' BASSO = MEGLIO (come LPIPS)
+        audio_dist = 4.5 - pesq_val 
+
+        return {
+            "kbps": round(actual_kbps, 2),
+            "pesq": pesq_val,
+            "mel_dist": compute_mel_distance(y, y_rec, sr),
+            "audio_dist": round(audio_dist, 4), # Questa è la colonna che userà l'Oracolo!
+            "enc_ms": round(enc_ms, 2)
+        }
+
+# ── ENCODEC (Neurale) ───────────────────────────────────────────
+
+def compress_encodec(audio_path, bandwidth):
+    model = get_encodec_model()
+    y, sr = load_audio(audio_path, target_sr=24000)
+    
+    # Encodec lavora solo se la shape è giusta
+    wav = torch.from_numpy(y).unsqueeze(0).unsqueeze(0).to(device)
+
+    model.set_target_bandwidth(bandwidth)
+
+    torch.cuda.synchronize()
+    start = time.perf_counter()
+    with torch.no_grad():
+        encoded = model.encode(wav)
+        decoded = model.decode(encoded)
+    torch.cuda.synchronize()
+    enc_ms = (time.perf_counter() - start) * 1000
+
+    y_rec = decoded.squeeze().cpu().numpy()
+    min_len = min(len(y), len(y_rec))
+    y, y_rec = y[:min_len], y_rec[:min_len]
+
+    pesq_val = compute_pesq(y, y_rec, sr)
+    audio_dist = 4.5 - pesq_val
+
+    return {
+        "kbps": bandwidth,
+        "pesq": pesq_val,
+        "mel_dist": compute_mel_distance(y, y_rec, sr),
+        "audio_dist": round(audio_dist, 4),
+        "enc_ms": round(enc_ms, 2)
+    }
+
+def compress_dac(audio_path, target_kbps=8.0):
+    """Codec Neurale SOTA: DAC (Descript Audio Codec)"""
+    model = get_dac_model()
+    y, sr = load_audio(audio_path, target_sr=24000)
+    
+    # DAC richiede shape [Batch, Channels, Time]
+    wav = torch.from_numpy(y).unsqueeze(0).unsqueeze(0).to(device)
+    
+    # FIX: Calcoliamo la durata direttamente dall'array in memoria!
+    duration = len(y) / sr
+
+    torch.cuda.synchronize()
+    start = time.perf_counter()
+    with torch.no_grad():
+        # DAC preprocessa, codifica e decodifica nativamente
+        x = model.preprocess(wav, 24000)
+        z, codes, latents, _, _ = model.encode(x)
+        y_rec_tensor = model.decode(z)
+    torch.cuda.synchronize()
+    enc_ms = (time.perf_counter() - start) * 1000
+
+    y_rec = y_rec_tensor.squeeze().cpu().numpy()
+    min_len = min(len(y), len(y_rec))
+    y, y_rec = y[:min_len], y_rec[:min_len]
+
+    pesq_val = compute_pesq(y, y_rec, sr)
+    audio_dist = 4.5 - pesq_val
+    
+    kbps = target_kbps 
+
+    return {
+        "kbps": round(kbps, 2),
+        "pesq": pesq_val,
+        "mel_dist": compute_mel_distance(y, y_rec, sr),
+        "audio_dist": round(audio_dist, 4),
+        "enc_ms": round(enc_ms, 2)
+    }
+
+========================================
+FILE: ./src/benchmark/benchmark_fad.py
+========================================
+import os
+import shutil
+import subprocess
+import glob
+import torch
+from pathlib import Path
+
+# ================== HACK PER FADTK / TORCHCODEC ==================
+# Forziamo brutalmente l'uso della CPU per aggirare il bug di libnvrtc.so.13
+# in torchcodec. Nascondendo la GPU, PyTorch disabilita le ottimizzazioni
+# hardware difettose e usa i binari CPU standard.
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+# ================== HEALTH CHECK ==================
+print("=" * 60)
+print("SYSTEM HEALTH CHECK (MODALITÀ CPU FORZATA)")
+print("=" * 60)
+print("✅ GPU intenzionalmente nascosta (CUDA_VISIBLE_DEVICES='')")
+print("✅ Evitato il crash dei driver CUDA in libtorchcodec")
+print(
+    "FADTK estrarrà gli embedding VGGish su CPU. Nessun problema, ci metterà pochi minuti."
+)
+print("=" * 60)
+
+
+# ================== CONFIGURAZIONE ==================
+# Le cartelle originali usate nel benchmark
+DATASETS = [
+    os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    os.path.expanduser("~/tesi/datasets_audio/musdb_10s"),
+]
+RECONSTRUCTIONS_DIR = os.path.expanduser("~/tesi/results/audio/reconstructions")
+FAD_WORKSPACE = os.path.expanduser("~/tesi/results/audio/fad_workspace")
+
+# Codec da testare (uguali a quelli dello script principale)
+CODEC_PARAMS = [
+    "Opus_12",
+    "Opus_24",
+    "Opus_48",
+    "EnCodec_1.5",
+    "EnCodec_3.0",
+    "EnCodec_6.0",
+    "DAC_8.0",
+    "SNAC_0.8",
+]
+
+
+def main():
+    print("\n" + "=" * 60)
+    print("INIZIO VALUTAZIONE FAD (Fréchet Audio Distance)")
+    print("=" * 60)
+
+    # 1. Creiamo una cartella "Reference" unita che contiene tutti i file originali
+    ref_dir = os.path.join(FAD_WORKSPACE, "reference")
+    os.makedirs(ref_dir, exist_ok=True)
+
+    print("1. Preparazione cartella Reference...")
+    copied_ref = 0
+    for ds in DATASETS:
+        files = glob.glob(f"{ds}/**/*.wav", recursive=True) + glob.glob(
+            f"{ds}/**/*.flac", recursive=True
+        )
+        for f in files:
+            dst = os.path.join(ref_dir, Path(f).name)
+            # Copiamo solo se non esiste, evitando PermissionError su file Read-Only
+            if not os.path.exists(dst):
+                shutil.copy(f, dst)
+                copied_ref += 1
+
+    total_ref = len(os.listdir(ref_dir))
+    print(
+        f"   -> {total_ref} file totali in Reference (di cui {copied_ref} copiati in questa sessione)."
+    )
+
+    # 2. Separiamo i file ricostruiti per Codec
+    print("\n2. Smistamento file compressi per Codec...")
+    for cp in CODEC_PARAMS:
+        cp_dir = os.path.join(FAD_WORKSPACE, cp)
+        os.makedirs(cp_dir, exist_ok=True)
+
+        # Cerca tutti i file che finiscono con _Codec_Param.wav
+        rec_files = glob.glob(os.path.join(RECONSTRUCTIONS_DIR, f"*_{cp}.wav"))
+        copied_rec = 0
+        for f in rec_files:
+            dst = os.path.join(cp_dir, Path(f).name)
+            # Copiamo solo se non esiste
+            if not os.path.exists(dst):
+                shutil.copy(f, dst)
+                copied_rec += 1
+
+        total_cp = len(os.listdir(cp_dir))
+        print(
+            f"   -> {cp}: {total_cp} file preparati (di cui {copied_rec} copiati in questa sessione)."
+        )
+
+    # 3. Eseguiamo FADTK
+    print("\n3. Calcolo FAD (Modello: VGGish)...")
+    print("   (L'elaborazione del Reference richiederà qualche minuto la prima volta)")
+    print("-" * 60)
+
+    results = {}
+    for cp in CODEC_PARAMS:
+        cp_dir = os.path.join(FAD_WORKSPACE, cp)
+        if len(os.listdir(cp_dir)) == 0:
+            continue
+
+        print(f"Analisi in corso per {cp}...")
+
+        # Esegue il comando fadtk tramite subprocess.
+        # Grazie all'impostazione di os.environ all'inizio, questo child-process NON vedrà la GPU.
+        cmd = ["fadtk", "vggish", ref_dir, cp_dir]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        # FADTK stampa il risultato nell'output, cerchiamo il numero finale
+        try:
+            out_lines = result.stdout.strip().split("\n")
+            fad_score = float(out_lines[-1].split()[-1])
+            results[cp] = fad_score
+            print(f"   [ FAD per {cp} ]: {fad_score:.4f}")
+        except Exception as e:
+            print(
+                f"   [!] Errore parsing FAD per {cp}. Output raw stdout: {result.stdout.strip()[-100:]}"
+            )
+            if result.stderr:
+                print(
+                    f"       --- DETTAGLIO ERRORE PYTHON ---\n{result.stderr.strip()}\n       -------------------------------"
+                )
+
+    print("\n" + "=" * 60)
+    print("RISULTATI FINALI FAD (Più basso è meglio!)")
+    print("=" * 60)
+    for cp, score in sorted(results.items(), key=lambda item: item[1]):
+        print(f" {cp:<15} | FAD: {score:.4f}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_sota_images.py
+========================================
+"""
+Benchmark SOTA neural image codecs: TCM (CVPR 2023) e DCAE (CVPR 2025)
+su Kodak 24 immagini. Confronto con ELIC, Ballé, Cheng, JXL.
+
+Requisiti:
+  - /tmp/LIC_TCM con checkpoints in checkpoints/
+  - /tmp/DCAE con checkpoints in checkpoints/
+  - CompressAI, timm, thop
+"""
+
+import sys
+import os
+import math
+import time
+import csv
+import numpy as np
+import torch
+import torch.nn.functional as F
+from PIL import Image
+from torchvision import transforms
+from pathlib import Path
+
+# ================== CONFIG ==================
+KODAK_DIR = os.path.expanduser("~/tesi/datasets/kodak")
+OUTPUT_CSV = os.path.expanduser("~/tesi/results/images/sota_neural_benchmark.csv")
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+PAD_MULTIPLE = 64
+
+TCM_CHECKPOINTS = {
+    "0.013": "/tmp/LIC_TCM/checkpoints/tcm_mse_0013.pth.tar",
+    "0.0035": "/tmp/LIC_TCM/checkpoints/tcm_mse_0035.pth.tar",
+}
+
+DCAE_CHECKPOINTS = {
+    "0.013": "/tmp/DCAE/checkpoints/dcae_mse_0013.pth.tar",
+    "0.0035": "/tmp/DCAE/checkpoints/dcae_mse_0035.pth.tar",
+}
+
+
+# ================== UTILS ==================
+def load_kodak():
+    imgs = sorted(Path(KODAK_DIR).glob("*.png"))
+    print(f"Kodak: {len(imgs)} immagini")
+    return imgs
+
+
+def eval_model(net, name, img_paths):
+    """Eval forward pass su tutte le immagini. Ritorna bpp, PSNR, tempo medio."""
+    net.eval()
+    net.update()
+    params_m = sum(p.numel() for p in net.parameters()) / 1e6
+
+    psnrs, bpps, fwd_times = [], [], []
+
+    for i, img_path in enumerate(img_paths):
+        img = Image.open(img_path).convert("RGB")
+        x = transforms.ToTensor()(img).unsqueeze(0).to(DEVICE)
+        h, w = x.shape[2:]
+        pad_h = (PAD_MULTIPLE - h % PAD_MULTIPLE) % PAD_MULTIPLE
+        pad_w = (PAD_MULTIPLE - w % PAD_MULTIPLE) % PAD_MULTIPLE
+        x_pad = F.pad(x, (0, pad_w, 0, pad_h))
+
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            out = net.forward(x_pad)
+        torch.cuda.synchronize()
+        t1 = time.perf_counter()
+
+        x_hat = out["x_hat"][:, :, :h, :w].clamp(0, 1)
+        num_pixels = h * w
+
+        bpp = sum(
+            torch.log(l).sum() / (-math.log(2) * num_pixels)
+            for l in out["likelihoods"].values()
+        ).item()  # type: ignore
+
+        mse = torch.mean((x - x_hat) ** 2).item()
+        psnr = -10 * math.log10(mse) if mse > 1e-10 else 100.0
+
+        psnrs.append(psnr)
+        bpps.append(bpp)
+        fwd_times.append(t1 - t0)
+
+    avg_bpp = np.mean(bpps)
+    avg_psnr = np.mean(psnrs)
+    avg_time = np.mean(fwd_times) * 1000  # ms
+
+    print(
+        f"  {name}: bpp={avg_bpp:.3f}, PSNR={avg_psnr:.2f} dB, "
+        f"fwd={avg_time:.0f}ms, params={params_m:.1f}M"
+    )
+
+    return {
+        "codec": name.split(" ")[0],
+        "lambda": name.split("=")[1] if "=" in name else "?",
+        "bpp": round(avg_bpp, 4),
+        "psnr": round(avg_psnr, 2),
+        "fwd_ms": round(avg_time),
+        "params_M": round(params_m, 1),
+    }
+
+
+# ================== MAIN ==================
+def main():
+    print("=" * 60)
+    print("BENCHMARK SOTA NEURAL IMAGE CODECS (Kodak)")
+    print("=" * 60)
+
+    imgs = load_kodak()
+    results = []
+
+    # --- TCM (CVPR 2023) ---
+    print("\n--- TCM (CVPR 2023) ---")
+    sys.path.insert(0, "/tmp/LIC_TCM")
+    from models import TCM  # type: ignore
+
+    for lam, ckpt_path in TCM_CHECKPOINTS.items():
+        if not os.path.exists(ckpt_path):
+            print(f"  [!] Checkpoint non trovato: {ckpt_path}")
+            continue
+
+        net = TCM(
+            config=[2, 2, 2, 2, 2, 2],
+            head_dim=[8, 16, 32, 32, 16, 8],
+            drop_path_rate=0.0,
+            N=64,
+            M=320,
+        )
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        net.load_state_dict(ckpt["state_dict"])
+        net = net.to(DEVICE)
+
+        r = eval_model(net, f"TCM λ={lam}", imgs)
+        results.append(r)
+        del net
+        torch.cuda.empty_cache()
+
+    # --- DCAE (CVPR 2025) ---
+    print("\n--- DCAE (CVPR 2025) ---")
+    # Reset import per evitare conflitti
+    if "/tmp/LIC_TCM" in sys.path:
+        sys.path.remove("/tmp/LIC_TCM")
+    # Rimuovi moduli TCM dalla cache
+    for mod in list(sys.modules.keys()):
+        if "models" in mod and "compressai" not in mod:
+            del sys.modules[mod]
+
+    sys.path.insert(0, "/tmp/DCAE")
+    from models import DCAE  # type: ignore
+
+    for lam, ckpt_path in DCAE_CHECKPOINTS.items():
+        if not os.path.exists(ckpt_path):
+            print(f"  [!] Checkpoint non trovato: {ckpt_path}")
+            continue
+
+        net = DCAE(
+            head_dim=[8, 16, 32, 32, 16, 8],
+            drop_path_rate=0.0,
+            N=192,
+            M=320,
+        )
+        ckpt = torch.load(ckpt_path, map_location="cpu")
+        sd = {k.replace("module.", ""): v for k, v in ckpt["state_dict"].items()}
+        torch.nn.Module.load_state_dict(net, sd, strict=False)
+        net = net.to(DEVICE)
+
+        r = eval_model(net, f"DCAE λ={lam}", imgs)
+        results.append(r)
+        del net
+        torch.cuda.empty_cache()
+
+    # === SALVA CSV ===
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+    fieldnames = ["codec", "lambda", "bpp", "psnr", "fwd_ms", "params_M"]
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in results:
+            w.writerow(r)
+    print(f"\nCSV: {OUTPUT_CSV}")
+
+    # === TABELLA ===
+    print(f"\n{'=' * 60}")
+    print("CONFRONTO SU KODAK (24 immagini)")
+    print(f"{'=' * 60}")
+    print(f"{'Codec':<20} {'bpp':>6} {'PSNR':>7} {'ms':>5} {'Params':>8}")
+    print("-" * 50)
+    for r in sorted(results, key=lambda x: x["bpp"]):
+        label = f"{r['codec']} λ={r['lambda']}"
+        print(
+            f"{label:<20} {r['bpp']:>6.3f} {r['psnr']:>7.2f} {r['fwd_ms']:>5} {r['params_M']:>7.1f}M"
+        )
+
+    print(f"\nRiferimenti (dalla tesi):")
+    print(f"  ELIC  λ=0.150:  ~0.50 bpp, ~34.5 dB,  15ms fwd,  36.9M")
+    print(f"  Cheng λ=0.150:  ~0.53 bpp, ~34.8 dB,  15ms fwd,  26.6M")
+    print(f"  Ballé λ=0.150:  ~0.77 bpp, ~30.6 dB,   3ms fwd,   5.1M")
+    print(f"  JXL   d=3.0:    ~0.74 bpp, ~33.3 dB,  26ms e2e,   ---")
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_images.py
+========================================
+import os
+import io
+import sys
+import time
+import subprocess
+import tempfile
+import torch
+import numpy as np
+from PIL import Image
+from pathlib import Path
+import pandas as pd
+from tqdm import tqdm
+from pytorch_msssim import ms_ssim
+import lpips
+import imagecodecs
+
+loss_fn_lpips = lpips.LPIPS(net="alex").cuda()
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.utils.energy_monitor import EnergyMonitor
+
+KODAK_DIR = os.path.expanduser("~/tesi/datasets/kodak")
+RESULTS_DIR = os.path.expanduser("~/tesi/results/images")
+
+
+def psnr(img1, img2):
+    mse = np.mean((img1.astype(np.float64) - img2.astype(np.float64)) ** 2)
+    if mse == 0:
+        return 100.0
+    return 20 * np.log10(255.0 / np.sqrt(mse))
+
+
+def compute_msssim(img1_np, img2_np):
+    t1 = torch.from_numpy(img1_np).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    t2 = torch.from_numpy(img2_np).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    return ms_ssim(t1, t2, data_range=1.0).item()
+
+
+def compute_lpips(img1_np, img2_np):
+    def to_tensor(img):
+        t = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+        t = t * 2.0 - 1.0  # LPIPS vuole [-1, 1]
+        return t.cuda()
+
+    with torch.no_grad():
+        d = loss_fn_lpips(to_tensor(img1_np), to_tensor(img2_np))
+    return d.item()
+
+
+def measure_baseline(seconds=3):
+    with EnergyMonitor() as em:
+        time.sleep(seconds)
+    return em.joules() / seconds
+
+
+def compress_jpeg(img_path, quality):
+    img = Image.open(img_path).convert("RGB")
+    w, h = img.size
+    total_pixels = w * h
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    compressed_size_bits = buf.tell() * 8
+    bpp = compressed_size_bits / total_pixels
+    buf.seek(0)
+    img_rec = Image.open(buf).convert("RGB")
+    orig_np = np.array(img)
+    rec_np = np.array(img_rec)
+    return {
+        "bpp": bpp,
+        "psnr": psnr(orig_np, rec_np),
+        "ms_ssim": compute_msssim(orig_np, rec_np),
+        "lpips": compute_lpips(orig_np, rec_np),
+    }
+
+
+def compress_hevc(img_path, crf):
+    img = Image.open(img_path).convert("RGB")
+    w, h = img.size
+    total_pixels = w * h
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_png = os.path.join(tmpdir, "input.png")
+        output_hevc = os.path.join(tmpdir, "output.hevc")
+        output_png = os.path.join(tmpdir, "output.png")
+        img.save(input_png)
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                input_png,
+                "-c:v",
+                "libx265",
+                "-crf",
+                str(crf),
+                "-preset",
+                "medium",
+                "-x265-params",
+                "log-level=error",
+                output_hevc,
+            ],
+            capture_output=True,
+            check=True,
+        )
+        compressed_size_bits = os.path.getsize(output_hevc) * 8
+        bpp = compressed_size_bits / total_pixels
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", output_hevc, output_png],
+            capture_output=True,
+            check=True,
+        )
+        img_rec = Image.open(output_png).convert("RGB")
+        orig_np = np.array(img)
+        rec_np = np.array(img_rec)
+        return {
+            "bpp": bpp,
+            "psnr": psnr(orig_np, rec_np),
+            "ms_ssim": compute_msssim(orig_np, rec_np),
+            "lpips": compute_lpips(orig_np, rec_np),
+        }
+
+
+def run_benchmark(codec, param_name, param_values, compress_fn):
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    images = sorted(Path(KODAK_DIR).glob("*.png"))
+    rows = []
+
+    for val in param_values:
+        start_time = time.time()
+        batch_results = [compress_fn(img_path, val) for img_path in images]
+        elapsed = time.time() - start_time
+        fps = len(images) / elapsed
+        ms_per_image = elapsed / len(images) * 1000
+
+        for img_path, metrics in zip(images, batch_results):
+            rows.append(
+                {
+                    "image": img_path.name,
+                    "codec": codec,
+                    param_name: val,
+                    **metrics,
+                    "fps": round(fps, 3),
+                    "ms_per_image": round(ms_per_image, 2),
+                }
+            )
+
+        print(
+            f"{codec} {param_name}={val} | "
+            f"bpp={np.mean([r['bpp'] for r in batch_results]):.3f} | "
+            f"psnr={np.mean([r['psnr'] for r in batch_results]):.2f} dB | "
+            f"fps={fps:.1f} | ms/img={ms_per_image:.1f}"
+        )
+
+    df = pd.DataFrame(rows)
+    rd_curve = df.groupby(param_name)[
+        ["bpp", "psnr", "ms_ssim", "lpips", "fps", "ms_per_image"]
+    ].mean()
+    print(f"\nCurva R-D {codec} su Kodak:")
+    print(rd_curve.to_string())
+
+    out_path = os.path.join(RESULTS_DIR, f"{codec.lower()}_kodak.csv")
+    df.to_csv(out_path, index=False)
+    return df
+
+def compress_jxl(img_path, distance=1.0):
+    """
+    Codec Classico SOTA: JPEG XL (JXL)
+    distance: 0.0 = lossless, 1.0 = visually lossless (default), fino a 15+ (molto lossy)
+    """
+    img = np.array(Image.open(img_path).convert('RGB'))
+    
+    # effort=5 è il bilanciamento standard di JXL per velocità/compressione
+    start = time.perf_counter()
+    jxl_bytes = imagecodecs.jpegxl_encode(img, distance=distance, effort=5)
+    enc_ms = (time.perf_counter() - start) * 1000
+    
+    img_rec = imagecodecs.jpegxl_decode(jxl_bytes)
+    
+    # JXL restituisce l'immagine in RGB, ce l'abbiamo già pronta come array
+    bpp = (len(jxl_bytes) * 8) / (img.shape[0] * img.shape[1])
+    
+    psnr_val = psnr(img, img_rec)
+    lpips_val = compute_lpips(img, img_rec)
+    
+    return {
+        "bpp": round(bpp, 4),
+        "psnr": round(psnr_val, 2),
+        "lpips": round(lpips_val, 4),
+        "enc_ms": round(enc_ms, 2)
+    }
+
+
+if __name__ == "__main__":
+    print("=== JPEG ===")
+    run_benchmark(
+        "JPEG", "quality", [10, 20, 30, 40, 50, 60, 70, 80, 90, 95], compress_jpeg
+    )
+
+    print("\n=== H.265/HEVC ===")
+    run_benchmark("HEVC", "crf", [51, 45, 40, 35, 30, 25, 20, 15], compress_hevc)
+
+
+
+
+========================================
+FILE: ./src/benchmark/benchmark_audio_full.py
+========================================
+"""
+Benchmark audio completo: Opus vs EnCodec vs DAC vs SNAC.
+VERSIONE REVISIONATA:
+- Opus in-RAM tramite PyAV (Zero I/O disk latency)
+- Dynamic Energy Tracking (Zeus se GPU, RAPL se CPU forzata per mele-con-mele)
+"""
+
+import scipy.signal
+import torch
+import warnings
+import time
+import sys
+import os
+import csv
+import json
+import random
+import glob
+import io
+import numpy as np
+import librosa
+import soundfile as sf
+import av
+from pathlib import Path
+
+warnings.filterwarnings("ignore")
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+
+
+# ================== RIPRODUCIBILITÀ ==================
+def set_seed(seed: int = 42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+set_seed(42)
+
+# ================== CONFIG ==================
+DATASETS = {
+    "librispeech": os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    "esc50": os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    "musdb": os.path.expanduser("~/tesi/datasets_audio/musdb_10s"),
+}
+MAX_DURATION = 10.0
+TARGET_SR = 24000
+
+OUTPUT_CSV = os.path.expanduser("~/tesi/results/audio/audio_benchmark_full.csv")
+OUTPUT_JSON = os.path.expanduser("~/tesi/results/audio/audio_benchmark_full.json")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MAX_PER_DS = 50
+
+
+def align_audio(ref: np.ndarray, est: np.ndarray) -> np.ndarray:
+    """Allinea temporalmente l'audio stimato (est) al riferimento (ref)."""
+    search_len = min(24000, len(ref), len(est))
+    correlation = scipy.signal.correlate(
+        est[:search_len], ref[:search_len], mode="full"
+    )
+    delay = np.argmax(correlation) - search_len + 1
+
+    if delay > 0:
+        est_aligned = est[delay:]
+    elif delay < 0:
+        est_aligned = np.pad(est, (int(-delay), 0), mode="constant")
+    else:
+        est_aligned = est
+
+    return est_aligned
+
+
+# ================== RAPL (MULTI-ZONE) ==================
+def get_rapl_zones() -> list:
+    zones = []
+    for path in glob.glob("/sys/class/powercap/intel-rapl:*"):
+        if path.count(":") == 1:
+            zones.append(path)
+    return zones
+
+
+RAPL_ZONES = get_rapl_zones()
+
+
+def read_cpu_uj() -> dict:
+    energies = {}
+    for zone in RAPL_ZONES:
+        try:
+            with open(f"{zone}/energy_uj", "r") as f:
+                energies[zone] = int(f.read().strip())
+        except Exception:
+            pass
+    return energies
+
+
+def calc_energy_j(before: dict, after: dict) -> float:
+    total_j = 0.0
+    for zone in before:
+        if zone in after:
+            b = before[zone]
+            a = after[zone]
+            if a >= b:
+                total_j += (a - b) / 1e6
+            else:
+                try:
+                    with open(f"{zone}/max_energy_range_uj", "r") as f:
+                        max_val = int(f.read().strip())
+                    total_j += ((max_val - b) + a) / 1e6
+                except Exception:
+                    total_j += (a - b) / 1e6
+    return total_j
+
+
+# ================== ZEUS (GPU) ==================
+from zeus.device.gpu import get_gpus
+
+gpu_obj = get_gpus().gpus[0] if device.type == "cuda" else None
+
+
+# ================== WRAPPER ENERGIA NEURALE ==================
+def measure_neural_inference(model_func, *args):
+    """
+    Misura dinamicamente energia e tempo.
+    Usa la GPU (Zeus) se disponibile, altrimenti usa CPU (RAPL) per test "mele con mele".
+    """
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+        before_gpu = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
+        t0 = time.perf_counter()
+
+        res = model_func(*args)
+
+        torch.cuda.synchronize()
+        t1 = time.perf_counter()
+        after_gpu = gpu_obj.getTotalEnergyConsumption() if gpu_obj else 0.0
+
+        return res, (t1 - t0), None, (after_gpu - before_gpu) / 1000, "Zeus"
+    else:
+        before_cpu = read_cpu_uj()
+        t0 = time.perf_counter()
+
+        res = model_func(*args)
+
+        t1 = time.perf_counter()
+        after_cpu = read_cpu_uj()
+
+        return res, (t1 - t0), calc_energy_j(before_cpu, after_cpu), None, "RAPL"
+
+
+# ================== METRICHE ==================
+from pesq import pesq as compute_pesq
+from pystoi import stoi as compute_stoi
+
+
+def compute_si_sdr(ref: np.ndarray, est: np.ndarray) -> float:
+    min_len = min(len(ref), len(est))
+    ref = ref[:min_len] - np.mean(ref[:min_len])
+    est = est[:min_len] - np.mean(est[:min_len])
+
+    ref_energy = np.sum(ref**2)
+    if ref_energy < 1e-10:
+        return -100.0
+
+    alpha = np.sum(ref * est) / ref_energy
+    target_scaled = alpha * ref
+    noise = est - target_scaled
+    noise_energy = np.sum(noise**2)
+
+    if noise_energy < 1e-10:
+        return 100.0
+    return float(10.0 * np.log10(np.sum(target_scaled**2) / noise_energy))
+
+
+def compute_metrics(
+    orig_24k: np.ndarray, rec_24k: np.ndarray, duration_s: float, process_time_s: float
+) -> dict:
+    m: dict = {}
+    min_len = min(len(orig_24k), len(rec_24k))
+    orig_24k = orig_24k[:min_len]
+    rec_24k = rec_24k[:min_len]
+    orig_16k = librosa.resample(orig_24k, orig_sr=24000, target_sr=16000)
+    rec_16k = librosa.resample(rec_24k, orig_sr=24000, target_sr=16000)
+
+    try:
+        m["pesq"] = compute_pesq(16000, orig_16k, rec_16k, "wb")
+    except Exception:
+        m["pesq"] = None
+    try:
+        m["stoi"] = compute_stoi(orig_16k, rec_16k, 16000, extended=False)
+    except Exception:
+        m["stoi"] = None
+    try:
+        m["sdr"] = compute_si_sdr(orig_24k, rec_24k)
+    except Exception:
+        m["sdr"] = None
+    try:
+        S_orig = librosa.feature.melspectrogram(y=orig_24k, sr=24000, n_mels=80)
+        S_rec = librosa.feature.melspectrogram(y=rec_24k, sr=24000, n_mels=80)
+        m["mel_dist"] = float(
+            np.mean(
+                np.abs(
+                    np.log(np.maximum(S_orig, 1e-10)) - np.log(np.maximum(S_rec, 1e-10))
+                )
+            )
+        )
+    except Exception:
+        m["mel_dist"] = None
+    m["rtf"] = process_time_s / duration_s if duration_s > 0 else None
+    return m
+
+
+# ================== CODEC: OPUS (Subprocess RAM-Disk) ==================
+def compress_opus(audio_24k: np.ndarray, bitrate_kbps: int) -> tuple:
+    import subprocess
+
+    duration_s = len(audio_24k) / 24000
+
+    # Usa /dev/shm (RAM disk su Linux) per zero latenza I/O fisico
+    tmp_in = "/dev/shm/opus_bench_in.wav"
+    tmp_opus = "/dev/shm/opus_bench.opus"
+    tmp_out = "/dev/shm/opus_bench_out.wav"
+
+    sf.write(tmp_in, audio_24k, 24000)
+
+    before = read_cpu_uj()
+    t0 = time.perf_counter()
+
+    # Encode (da WAV in RAM a OPUS in RAM)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            tmp_in,
+            "-c:a",
+            "libopus",
+            "-b:a",
+            f"{bitrate_kbps}k",
+            "-ar",
+            "24000",
+            tmp_opus,
+        ],
+        capture_output=True,
+        check=True,
+    )
+    # Decode (da OPUS in RAM a WAV in RAM)
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", tmp_opus, "-ar", "24000", tmp_out],
+        capture_output=True,
+        check=True,
+    )
+
+    t1 = time.perf_counter()
+    after = read_cpu_uj()
+
+    rec, _ = librosa.load(tmp_out, sr=24000, mono=True)
+    file_bytes = os.path.getsize(tmp_opus) if os.path.exists(tmp_opus) else 0
+    actual_kbps = (file_bytes * 8) / duration_s / 1000 if duration_s > 0 else 0
+
+    # Riallineamento temporale per annullare il pre-skip di Opus e fixare SI-SDR/PESQ
+    rec = align_audio(audio_24k, rec)
+
+    # Pulizia RAM
+    for f in [tmp_in, tmp_opus, tmp_out]:
+        if os.path.exists(f):
+            os.remove(f)
+
+    return rec, {
+        "time_s": t1 - t0,
+        "cpu_energy_j": calc_energy_j(before, after),
+        "gpu_energy_j": None,
+        "file_bytes": file_bytes,
+        "actual_kbps": actual_kbps,
+        "energy_source": "RAPL",
+        "duration_s": duration_s,
+    }
+
+
+# ================== CODEC: ENCODEC ==================
+_encodec_model = None
+
+
+def get_encodec():
+    global _encodec_model
+    if _encodec_model is None:
+        from encodec.model import EncodecModel
+
+        _encodec_model = EncodecModel.encodec_model_24khz().to(device).eval()
+    return _encodec_model
+
+
+def _encodec_run(x, bandwidth):
+    model = get_encodec()
+    model.set_target_bandwidth(bandwidth)
+    with torch.no_grad():
+        frames = model.encode(x)
+        decoded = model.decode(frames)
+    return frames, decoded
+
+
+def compress_encodec(audio_24k: np.ndarray, bandwidth: float) -> tuple:
+    duration_s = len(audio_24k) / 24000
+    x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
+
+    (frames, decoded), t_s, e_cpu, e_gpu, e_src = measure_neural_inference(
+        _encodec_run, x, bandwidth
+    )
+
+    rec = decoded.squeeze().cpu().numpy()
+    total_tokens = sum(f[0].numel() for f in frames)
+    file_bytes = total_tokens * 10 // 8
+
+    return rec, {
+        "time_s": t_s,
+        "cpu_energy_j": e_cpu,
+        "gpu_energy_j": e_gpu,
+        "file_bytes": file_bytes,
+        "actual_kbps": bandwidth,
+        "energy_source": e_src,
+        "duration_s": duration_s,
+    }
+
+
+# ================== CODEC: DAC ==================
+_dac_model = None
+
+
+def get_dac():
+    global _dac_model
+    if _dac_model is None:
+        import dac
+
+        model_path = dac.utils.download(model_type="24khz")
+        _dac_model = dac.DAC.load(str(model_path)).to(device).eval()
+    return _dac_model
+
+
+def _dac_run(x):
+    model = get_dac()
+    with torch.no_grad():
+        z, codes, latents, _, _ = model.encode(x)
+        audio_hat = model.decode(z)
+    return codes, audio_hat
+
+
+def compress_dac(audio_24k: np.ndarray) -> tuple:
+    duration_s = len(audio_24k) / 24000
+    x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
+    original_length = x.shape[-1]
+
+    (codes, audio_hat), t_s, e_cpu, e_gpu, e_src = measure_neural_inference(_dac_run, x)
+
+    rec = audio_hat.squeeze().cpu().numpy()[:original_length]
+    file_bytes = codes.numel() * 10 // 8
+
+    return rec, {
+        "time_s": t_s,
+        "cpu_energy_j": e_cpu,
+        "gpu_energy_j": e_gpu,
+        "file_bytes": file_bytes,
+        "actual_kbps": 8.0,
+        "energy_source": e_src,
+        "duration_s": duration_s,
+    }
+
+
+# ================== CODEC: SNAC ==================
+_snac_model = None
+
+
+def get_snac():
+    global _snac_model
+    if _snac_model is None:
+        from snac import SNAC
+
+        _snac_model = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").to(device).eval()
+    return _snac_model
+
+
+def _snac_run(x):
+    model = get_snac()
+    with torch.no_grad():
+        codes = model.encode(x)
+        audio_hat = model.decode(codes)
+    return codes, audio_hat
+
+
+def compress_snac(audio_24k: np.ndarray) -> tuple:
+    duration_s = len(audio_24k) / 24000
+    x = torch.from_numpy(audio_24k).float().unsqueeze(0).unsqueeze(0).to(device)
+
+    (codes, audio_hat), t_s, e_cpu, e_gpu, e_src = measure_neural_inference(
+        _snac_run, x
+    )
+
+    rec = audio_hat.squeeze().cpu().numpy()
+    file_bytes = sum(c.numel() for c in codes) * 12 // 8
+    actual_kbps = (file_bytes * 8) / duration_s / 1000 if duration_s > 0 else 0
+
+    return rec, {
+        "time_s": t_s,
+        "cpu_energy_j": e_cpu,
+        "gpu_energy_j": e_gpu,
+        "file_bytes": file_bytes,
+        "actual_kbps": actual_kbps,
+        "energy_source": e_src,
+        "duration_s": duration_s,
+    }
+
+
+# ================== MAIN ==================
+def main():
+    print("=" * 70)
+    print("HARDWARE TELEMETRY LOG")
+    print("=" * 70)
+    print(f"Python:  {sys.version.split()[0]}")
+    print(f"PyTorch: {torch.__version__}")
+    if torch.cuda.is_available():
+        print(f"CUDA:    {torch.version.cuda}")
+        print(f"GPU:     {torch.cuda.get_device_name(0)}")
+    else:
+        print("GPU:     CPU Only (Neural Codecs might be extremely slow)")
+    print(f"RAPL:    {len(RAPL_ZONES)} socket(s) detected")
+    print("=" * 70 + "\n")
+
+    if not RAPL_ZONES:
+        print(
+            "[!] Attenzione: Nessuna zona RAPL trovata. Sei su root? Modulo intel_rapl caricato?"
+        )
+        return
+
+    reconstructions_dir = os.path.expanduser("~/tesi/results/audio/reconstructions")
+    os.makedirs(reconstructions_dir, exist_ok=True)
+
+    all_files = []
+    for ds_name, ds_path in DATASETS.items():
+        if not os.path.exists(ds_path):
+            print(f"[!] Dataset {ds_name} non trovato: {ds_path}")
+            continue
+        files = sorted(
+            list(Path(ds_path).rglob("*.wav")) + list(Path(ds_path).rglob("*.flac"))
+        )
+        all_files.extend([(f, ds_name) for f in files])
+        print(f"  {ds_name}: {len(files)} file trovati")
+
+    sampled = []
+    for ds_name in DATASETS:
+        ds_files = [(f, d) for f, d in all_files if d == ds_name]
+        # Ripristiniamo il seed localmente per sicurezza sul sampling
+        np.random.seed(42)
+        if len(ds_files) > MAX_PER_DS:
+            indices = np.random.choice(len(ds_files), MAX_PER_DS, replace=False)
+            ds_files = [ds_files[i] for i in sorted(indices)]
+        sampled.extend(ds_files)
+    all_files = sampled
+    print(f"\nTotale Campionati per Benchmark: {len(all_files)} file\n")
+
+    if not all_files:
+        return
+
+    CODECS = [
+        ("Opus", "12", lambda a: compress_opus(a, 12)),
+        ("Opus", "24", lambda a: compress_opus(a, 24)),
+        ("Opus", "48", lambda a: compress_opus(a, 48)),
+        ("EnCodec", "1.5", lambda a: compress_encodec(a, 1.5)),
+        ("EnCodec", "3.0", lambda a: compress_encodec(a, 3.0)),
+        ("EnCodec", "6.0", lambda a: compress_encodec(a, 6.0)),
+        ("DAC", "8.0", lambda a: compress_dac(a)),
+        ("SNAC", "0.8", lambda a: compress_snac(a)),
+    ]
+
+    ALL_COLS = [
+        "file",
+        "dataset",
+        "codec",
+        "param",
+        "actual_kbps",
+        "pesq",
+        "stoi",
+        "sdr",
+        "mel_dist",
+        "rtf",
+        "time_s",
+        "cpu_energy_j",
+        "gpu_energy_j",
+        "energy_source",
+        "file_bytes",
+        "duration_s",
+    ]
+    all_results = []
+
+    print("Warmup codec neurali...")
+    dummy = np.random.randn(24000).astype(np.float32) * 0.1
+    for codec_name, param, fn in CODECS:
+        if codec_name != "Opus":
+            try:
+                fn(dummy)
+            except Exception as e:
+                print(f"  [!] Warmup fallito per {codec_name} {param}: {e}")
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    print("Warmup completato.\n")
+
+    print("=" * 70)
+    print("BENCHMARK AUDIO (PESQ, STOI, SI-SDR, Mel Dist, RTF, Energia)")
+    print("=" * 70)
+
+    for file_idx, (file_path, ds_name) in enumerate(all_files):
+        try:
+            audio, sr = librosa.load(
+                str(file_path), sr=TARGET_SR, mono=True, duration=MAX_DURATION
+            )
+        except Exception:
+            continue
+
+        if len(audio) < TARGET_SR:
+            continue
+
+        duration_s = len(audio) / TARGET_SR
+
+        if (file_idx + 1) % 10 == 0 or file_idx == 0:
+            print(
+                f"[{file_idx+1}/{len(all_files)}] Analisi in corso: {file_path.name} ({ds_name}, {duration_s:.1f}s)"
+            )
+
+        for codec_name, param, compress_fn in CODECS:
+            row: dict = {
+                "file": file_path.name,
+                "dataset": ds_name,
+                "codec": codec_name,
+                "param": param,
+            }
+            try:
+                rec, sys_m = compress_fn(audio)
+                qual_m = compute_metrics(
+                    audio, rec, sys_m["duration_s"], sys_m["time_s"]
+                )
+                row.update(sys_m)
+                row.update(qual_m)
+
+                # Salva il file per il successivo test di Google ViSQOL
+                out_name = f"{file_path.stem}_{codec_name}_{param}.wav"
+                out_path = os.path.join(reconstructions_dir, out_name)
+                sf.write(out_path, rec, TARGET_SR)
+
+            except Exception as e:
+                for col in ALL_COLS:
+                    row.setdefault(col, None)
+                if (file_idx + 1) % 10 == 0:
+                    print(f"    [!] Errore {codec_name} {param}: {str(e)[:60]}")
+
+            all_results.append(row)
+
+    # === SALVATAGGIO DATI ===
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=ALL_COLS, extrasaction="ignore")
+        writer.writeheader()
+        for r in all_results:
+            writer.writerow(r)
+    print(f"\nSalvataggio RAW Data completato: {OUTPUT_CSV}")
+
+    # Aggregazione Statistica JSON
+    summary: dict = {}
+    groups = set((r["codec"], r["param"]) for r in all_results)
+    for codec, param in sorted(groups):
+        subset = [
+            r
+            for r in all_results
+            if r["codec"] == codec and r["param"] == param and r.get("pesq") is not None
+        ]
+        if not subset:
+            continue
+        key = f"{codec}_{param}"
+        summary[key] = {"codec": codec, "param": param, "n_files": len(subset)}
+        for col in [
+            "pesq",
+            "stoi",
+            "sdr",
+            "mel_dist",
+            "rtf",
+            "time_s",
+            "cpu_energy_j",
+            "gpu_energy_j",
+            "actual_kbps",
+        ]:
+            vals = [r[col] for r in subset if r.get(col) is not None]
+            summary[key][col] = round(float(np.mean(vals)), 4) if vals else None
+
+    with open(OUTPUT_JSON, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    # === TABELLA FINALE ===
+    print("\n" + "=" * 110)
+    print("TABELLA RIEPILOGATIVA GLOBALE (Medie)")
+    print("=" * 110)
+    header = (
+        f"{'Codec':<18} {'kbps':>6} {'PESQ':>6} {'STOI':>6} {'SI-SDR':>7} "
+        f"{'MelD':>6} {'RTF':>7} {'E_cpu':>7} {'E_gpu':>7} {'Fonte':>6}"
+    )
+    print(header)
+    print("-" * len(header))
+    for key in sorted(summary.keys()):
+        s = summary[key]
+
+        def fmt(v, f=".2f"):
+            return f"{v:{f}}" if v is not None else "N/A"
+
+        print(
+            f"{key:<18} {fmt(s.get('actual_kbps'),'.1f'):>6} "
+            f"{fmt(s.get('pesq'),'.2f'):>6} {fmt(s.get('stoi'),'.3f'):>6} "
+            f"{fmt(s.get('sdr'),'.1f'):>7} {fmt(s.get('mel_dist'),'.2f'):>6} "
+            f"{fmt(s.get('rtf'),'.4f'):>7} "
+            f"{fmt(s.get('cpu_energy_j'),'.2f'):>7} {fmt(s.get('gpu_energy_j'),'.2f'):>7} "
+            f"{'RAPL' if s.get('cpu_energy_j') is not None else 'Zeus':>6}"
+        )
+
+    print("\n" + "=" * 110)
+    print("DETTAGLIO RIPARTITO PER DATASET")
+    print("=" * 110)
+    for ds in DATASETS:
+        print(f"\n--- {ds.upper()} ---")
+        print(
+            f"  {'Codec':<18} {'PESQ':>6} {'STOI':>6} {'SI-SDR':>7} {'MelD':>6} {'RTF':>7} n"
+        )
+        for key in sorted(summary.keys()):
+            codec, param = summary[key]["codec"], summary[key]["param"]
+            subset = [
+                r
+                for r in all_results
+                if r["codec"] == codec
+                and r["param"] == param
+                and r["dataset"] == ds
+                and r.get("pesq") is not None
+            ]
+            if not subset:
+                continue
+            pesq_avg = np.mean([r["pesq"] for r in subset])
+            stoi_avg = np.mean([r["stoi"] for r in subset if r.get("stoi") is not None])
+            sdr_avg = np.mean([r["sdr"] for r in subset if r.get("sdr") is not None])
+            mel_avg = np.mean(
+                [r["mel_dist"] for r in subset if r.get("mel_dist") is not None]
+            )
+            rtf_avg = np.mean([r["rtf"] for r in subset if r.get("rtf") is not None])
+            print(
+                f"  {key:<18} {pesq_avg:>6.2f} {stoi_avg:>6.3f} {sdr_avg:>7.1f} "
+                f"{mel_avg:>6.2f} {rtf_avg:>7.4f} {len(subset):>3}"
+            )
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_wavtokenizer.py
+========================================
+"""
+Benchmark WavTokenizer (ICLR 2025, music-audio SOTA).
+Fase 1: encode/decode + ViSQOL (richiede protobuf 3.20.3)
+Fase 2: PESQ/STOI/SDR/mel + energia (dopo upgrade protobuf)
+
+Salva ricostruzioni per FAD successivo.
+"""
+
+import sys
+import os
+import time
+import csv
+import glob
+import numpy as np
+import librosa
+import soundfile as sf
+import torch
+import torchaudio
+from pathlib import Path
+
+sys.path.insert(0, "/tmp/WavTokenizer")
+
+# ================== CONFIG ==================
+DATASETS = {
+    "librispeech": os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    "esc50": os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    "musdb": os.path.expanduser("~/tesi/datasets_audio/musdb_10s"),
+}
+REC_DIR = os.path.expanduser("~/tesi/results/audio/reconstructions")
+VISQOL_CSV = os.path.expanduser("~/tesi/results/audio/visqol_benchmark.csv")
+MAX_PER_DS = 50
+TARGET_SR = 24000
+VISQOL_SR = 16000
+CODEC_TAG = "WavTokenizer_0.9"
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ================== CARICA WAVTOKENIZER ==================
+def load_wavtokenizer():
+    from decoder.pretrained import WavTokenizer  # type: ignore
+    from huggingface_hub import hf_hub_download
+
+    repo = "novateur/WavTokenizer-medium-music-audio-75token"
+    config_path = hf_hub_download(
+        repo_id=repo,
+        filename="wavtokenizer_mediumdata_music_audio_frame75_3s_nq1_code4096_dim512_kmeans200_attn.yaml",
+    )
+    model_path = hf_hub_download(
+        repo_id=repo,
+        filename="wavtokenizer_medium_music_audio_320_24k_v2.ckpt",
+    )
+    model = WavTokenizer.from_pretrained0802(config_path, model_path)
+    model = model.to(device).eval()
+    n_params = sum(p.numel() for p in model.parameters()) / 1e6
+    print(f"WavTokenizer music-audio: {n_params:.1f}M params")
+    return model
+
+
+# ================== INIT VISQOL ==================
+def init_visqol():
+    import visqol_lib_py
+    from visqol.pb2 import visqol_config_pb2, similarity_result_pb2  # noqa: F401
+
+    config = visqol_config_pb2.VisqolConfig()
+    config.audio.sample_rate = VISQOL_SR  # type: ignore
+    config.options.use_speech_scoring = True  # type: ignore
+    api = visqol_lib_py.VisqolApi()
+    api.Create(config)  # type: ignore
+    print("ViSQOL inizializzato (speech mode, 16kHz)")
+    return api
+
+
+# ================== RACCOGLI FILE ==================
+def collect_files():
+    all_files = []
+    for ds_name, ds_path in DATASETS.items():
+        if not os.path.exists(ds_path):
+            print(f"[!] {ds_name} non trovato")
+            continue
+        files = sorted(
+            list(Path(ds_path).rglob("*.wav")) + list(Path(ds_path).rglob("*.flac"))
+        )
+        all_files.extend([(f, ds_name) for f in files])
+        print(f"  {ds_name}: {len(files)} file")
+
+    # Campiona
+    sampled = []
+    for ds_name in DATASETS:
+        ds_files = [(f, d) for f, d in all_files if d == ds_name]
+        np.random.seed(42)
+        if len(ds_files) > MAX_PER_DS:
+            indices = np.random.choice(len(ds_files), MAX_PER_DS, replace=False)
+            ds_files = [ds_files[i] for i in sorted(indices)]
+        sampled.extend(ds_files)
+
+    print(f"Campionati: {len(sampled)} file\n")
+    return sampled
+
+
+# ================== MAIN ==================
+def main():
+    print("=" * 60)
+    print("BENCHMARK WavTokenizer (ICLR 2025) + ViSQOL")
+    print("=" * 60)
+
+    model = load_wavtokenizer()
+    visqol_api = init_visqol()
+    files = collect_files()
+    os.makedirs(REC_DIR, exist_ok=True)
+
+    # Warmup
+    print("Warmup...")
+    dummy = torch.randn(1, TARGET_SR).to(device)
+    with torch.no_grad():
+        bid = torch.tensor([0]).to(device)
+        f, c = model.encode_infer(dummy, bandwidth_id=bid)
+        model.decode(f, bandwidth_id=bid)
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+
+    # Benchmark
+    visqol_results = []
+    print(f"\n--- {CODEC_TAG} ---")
+
+    for i, (file_path, ds_name) in enumerate(files):
+        try:
+            audio, sr = librosa.load(
+                str(file_path), sr=TARGET_SR, mono=True, duration=10.0
+            )
+            if len(audio) < TARGET_SR:
+                continue
+
+            wav = torch.from_numpy(audio).float().unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                bid = torch.tensor([0]).to(device)
+                features, codes = model.encode_infer(wav, bandwidth_id=bid)
+                audio_out = model.decode(features, bandwidth_id=bid)
+
+            rec = audio_out.squeeze().cpu().numpy()
+
+            # Salva ricostruzione
+            rec_path = os.path.join(REC_DIR, f"{file_path.stem}_{CODEC_TAG}.wav")
+            min_len = min(len(audio), len(rec))
+            sf.write(rec_path, rec[:min_len], TARGET_SR)
+
+            # ViSQOL
+            ref_16k = librosa.resample(
+                audio[:min_len], orig_sr=24000, target_sr=16000
+            ).astype(np.float64)
+            deg_16k = librosa.resample(
+                rec[:min_len], orig_sr=24000, target_sr=16000
+            ).astype(np.float64)
+
+            result = visqol_api.Measure(ref_16k, deg_16k)
+            visqol_results.append(
+                {
+                    "file": file_path.stem,
+                    "dataset": ds_name,
+                    "codec": "WavTokenizer",
+                    "param": "0.9",
+                    "visqol": round(result.moslqo, 4),
+                }
+            )
+
+        except Exception as e:
+            if (i + 1) % 25 == 0:
+                print(f"  [!] {file_path.name}: {str(e)[:60]}")
+
+        if (i + 1) % 25 == 0:
+            scores = [r["visqol"] for r in visqol_results]
+            avg = np.mean(scores) if scores else 0
+            print(f"  [{i+1}/{len(files)}] ViSQOL: {avg:.3f} (n={len(scores)})")
+
+    # === RISULTATI ===
+    scores = [r["visqol"] for r in visqol_results]
+    print(f"\n{'=' * 60}")
+    print(f"WavTokenizer ViSQOL globale: {np.mean(scores):.3f} (n={len(scores)})")
+    print(f"{'=' * 60}")
+
+    for ds in DATASETS:
+        ds_scores = [r["visqol"] for r in visqol_results if r["dataset"] == ds]
+        if ds_scores:
+            print(f"  {ds}: {np.mean(ds_scores):.3f} (n={len(ds_scores)})")
+
+    # Confronto con altri codec
+    print(f"\n--- Confronto ViSQOL ---")
+    print(f"  SNAC 0.8 kbps:         2.992")
+    print(f"  EnCodec 1.5 kbps:      3.180")
+    print(f"  WavTokenizer 0.9 kbps: {np.mean(scores):.3f}")
+    print(f"  DAC 8.0 kbps:          4.850")
+    print(f"  Opus 24 kbps:          4.715")
+
+    # Append CSV
+    with open(VISQOL_CSV, "a", newline="") as f:
+        w = csv.DictWriter(
+            f, fieldnames=["file", "dataset", "codec", "param", "visqol"]
+        )
+        for r in visqol_results:
+            w.writerow(r)
+    print(f"\nAppeso a {VISQOL_CSV}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_neural_images.py
+========================================
+import os
+import sys
+import time
+import torch
+import numpy as np
+from PIL import Image
+from pathlib import Path
+import pandas as pd
+from tqdm import tqdm
+from pytorch_msssim import ms_ssim
+import lpips
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+
+KODAK_DIR = os.path.expanduser("~/tesi/datasets/kodak")
+RESULTS_DIR = os.path.expanduser("~/tesi/results/images")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Device: {device}")
+
+loss_fn_lpips = lpips.LPIPS(net="alex").to(device)
+
+
+def psnr(img1, img2):
+    mse = np.mean((img1.astype(np.float64) - img2.astype(np.float64)) ** 2)
+    if mse == 0:
+        return 100.0
+    return 20 * np.log10(255.0 / np.sqrt(mse))
+
+
+def compute_msssim(img1_np, img2_np):
+    t1 = torch.from_numpy(img1_np).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    t2 = torch.from_numpy(img2_np).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    return ms_ssim(t1, t2, data_range=1.0).item()
+
+
+def compute_lpips(img1_np, img2_np):
+    def to_tensor(img):
+        t = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+        t = t * 2.0 - 1.0
+        return t.to(device)
+
+    with torch.no_grad():
+        d = loss_fn_lpips(to_tensor(img1_np), to_tensor(img2_np))
+    return d.item()
+
+
+def img_to_tensor(img_path):
+    img = Image.open(img_path).convert("RGB")
+    x = torch.from_numpy(np.array(img)).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    
+    # Padding a multiplo di 64 richiesto da CompressAI
+    h, w = x.shape[2], x.shape[3]
+    pad_h = (64 - h % 64) % 64
+    pad_w = (64 - w % 64) % 64
+    if pad_h > 0 or pad_w > 0:
+        x = torch.nn.functional.pad(x, (0, pad_w, 0, pad_h), mode='reflect')
+    
+    return x.to(device), np.array(img), h, w
+
+
+def compress_neural(model, img_path):
+    x, orig_np, orig_h, orig_w = img_to_tensor(img_path)
+    total_pixels = orig_h * orig_w  # usa dimensioni originali per bpp
+
+    with torch.no_grad():
+        torch.cuda.synchronize()
+        start = time.time()
+        out = model.compress(x)
+        torch.cuda.synchronize()
+        elapsed_enc = time.time() - start
+
+        torch.cuda.synchronize()
+        start = time.time()
+        x_hat = model.decompress(out["strings"], out["shape"])["x_hat"]
+        torch.cuda.synchronize()
+        elapsed_dec = time.time() - start
+
+    # crop alle dimensioni originali
+    x_hat = x_hat[:, :, :orig_h, :orig_w]
+    
+    num_bits = sum(len(s[0]) for s in out["strings"]) * 8
+    bpp = num_bits / total_pixels
+
+    rec_np = (np.nan_to_num(x_hat.squeeze(0).permute(1,2,0).cpu().numpy()) * 255).clip(0,255).astype(np.uint8)
+
+    return {
+        "bpp": bpp,
+        "psnr": psnr(orig_np, rec_np),
+        "ms_ssim": compute_msssim(orig_np, rec_np),
+        "lpips": compute_lpips(orig_np, rec_np),
+        "enc_ms": round(elapsed_enc * 1000, 2),
+        "dec_ms": round(elapsed_dec * 1000, 2)
+    }
+
+
+def run_neural_benchmark():
+    from compressai.zoo import bmshj2018_hyperprior, cheng2020_anchor
+
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    images = sorted(Path(KODAK_DIR).glob("*.png"))
+    rows = []
+
+    # ── Ballé 2018 ──────────────────────────────────────────────
+    qualities = [1, 2, 3, 4, 5, 6, 7, 8]
+    for q in qualities:
+        print(f"\nBallé2018 qualità {q}...")
+        model = bmshj2018_hyperprior(quality=q, pretrained=True).to(device)
+        model.eval()
+
+        results = []
+        start_batch = time.time()
+        for img_path in tqdm(images, desc=f"Ballé2018 q={q}"):
+            metrics = compress_neural(model, img_path)
+            results.append(metrics)
+            rows.append(
+                {"image": img_path.name, "codec": "Balle2018", "quality": q, **metrics}
+            )
+
+            pd.DataFrame(rows).to_csv(
+                os.path.join(RESULTS_DIR, "neural_images_kodak.csv"), index=False
+            )
+
+        elapsed_batch = time.time() - start_batch
+        fps = len(images) / elapsed_batch
+
+        del model
+        torch.cuda.empty_cache()
+
+        print(
+            f"q={q} | bpp={np.mean([r['bpp'] for r in results]):.3f} | "
+            f"psnr={np.mean([r['psnr'] for r in results]):.2f} dB | "
+            f"lpips={np.mean([r['lpips'] for r in results]):.4f} | "
+            f"enc_ms={np.mean([r['enc_ms'] for r in results]):.1f} | "
+            f"fps={fps:.2f}"
+        )
+
+    # ── Cheng 2020 ──────────────────────────────────────────────
+    qualities_cheng = [1, 2, 3, 4, 5, 6]
+    for q in qualities_cheng:
+        print(f"\nCheng2020 qualità {q}...")
+        model = cheng2020_anchor(quality=q, pretrained=True).to(device)
+        model.eval()
+
+        results = []
+        start_batch = time.time()
+        for img_path in tqdm(images, desc=f"Cheng2020 q={q}"):
+            metrics = compress_neural(model, img_path)
+            results.append(metrics)
+            rows.append(
+                {"image": img_path.name, "codec": "Cheng2020", "quality": q, **metrics}
+            )
+
+            pd.DataFrame(rows).to_csv(
+                os.path.join(RESULTS_DIR, "neural_images_kodak.csv"), index=False
+            )
+        elapsed_batch = time.time() - start_batch
+        fps = len(images) / elapsed_batch
+
+        del model
+        torch.cuda.empty_cache()
+
+        print(
+            f"q={q} | bpp={np.mean([r['bpp'] for r in results]):.3f} | "
+            f"psnr={np.mean([r['psnr'] for r in results]):.2f} dB | "
+            f"lpips={np.mean([r['lpips'] for r in results]):.4f} | "
+            f"enc_ms={np.mean([r['enc_ms'] for r in results]):.1f} | "
+            f"fps={fps:.2f}"
+        )
+
+    df = pd.DataFrame(rows)
+    rd_curve = df.groupby(["codec", "quality"])[
+        ["bpp", "psnr", "ms_ssim", "lpips", "enc_ms", "dec_ms"]
+    ].mean()
+    print("\nCurva R-D su Kodak:")
+    print(rd_curve.to_string())
+
+    # salva separati per codec
+    for codec_name in ["Balle2018", "Cheng2020"]:
+        subset = df[df["codec"] == codec_name]
+        out = os.path.join(RESULTS_DIR, f"{codec_name.lower()}_kodak.csv")
+        subset.to_csv(out, index=False)
+        print(f"Salvato {out}")
+
+
+if __name__ == "__main__":
+    run_neural_benchmark()
+
+
+========================================
+FILE: ./src/benchmark/benchmark_wavtokenizer_metrics.py
+========================================
+"""
+WavTokenizer: metriche quality + energia batch.
+Usa le ricostruzioni già salvate in reconstructions/.
+Richiede: protobuf >= 6.0 (ViSQOL NON funziona qui)
+"""
+
+import sys
+import os
+import time
+import csv
+import glob
+import numpy as np
+import librosa
+import torch
+from pathlib import Path
+from pesq import pesq as compute_pesq
+from pystoi import stoi as compute_stoi
+from zeus.device.gpu import get_gpus
+
+sys.path.insert(0, "/tmp/WavTokenizer")
+
+# ================== CONFIG ==================
+REC_DIR = os.path.expanduser("~/tesi/results/audio/reconstructions")
+DATASETS = {
+    "librispeech": os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    "esc50": os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    "musdb": os.path.expanduser("~/tesi/datasets_audio/musdb_10s"),
+}
+OUTPUT_CSV = os.path.expanduser("~/tesi/results/audio/wavtokenizer_metrics.csv")
+CODEC_TAG = "WavTokenizer_0.9"
+TARGET_SR = 24000
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+gpu = get_gpus().gpus[0] if device.type == "cuda" else None
+
+
+# ================== TROVA ORIGINALE ==================
+def find_original(stem: str) -> tuple:
+    for ds_name, ds_path in DATASETS.items():
+        for ext in ["wav", "flac"]:
+            candidate = os.path.join(ds_path, f"{stem}.{ext}")
+            if os.path.exists(candidate):
+                return candidate, ds_name
+            matches = glob.glob(
+                os.path.join(ds_path, "**", f"{stem}.{ext}"), recursive=True
+            )
+            if matches:
+                return matches[0], ds_name
+    return None, None
+
+
+# ================== METRICHE ==================
+def compute_sdr(ref: np.ndarray, est: np.ndarray) -> float:
+    noise = est - ref
+    ref_pow = np.sum(ref**2)
+    noise_pow = np.sum(noise**2)
+    if noise_pow < 1e-10:
+        return 100.0
+    if ref_pow < 1e-10:
+        return -100.0
+    return float(10.0 * np.log10(ref_pow / noise_pow))
+
+
+def compute_mel_distance(ref: np.ndarray, deg: np.ndarray, sr: int = 24000) -> float:
+    S_ref = librosa.feature.melspectrogram(y=ref, sr=sr, n_mels=80)
+    S_deg = librosa.feature.melspectrogram(y=deg, sr=sr, n_mels=80)
+    log_ref = np.log(np.maximum(S_ref, 1e-10))
+    log_deg = np.log(np.maximum(S_deg, 1e-10))
+    min_frames = min(log_ref.shape[1], log_deg.shape[1])
+    return float(np.mean(np.abs(log_ref[:, :min_frames] - log_deg[:, :min_frames])))
+
+
+# ================== FASE 1: METRICHE PER-FILE ==================
+def run_metrics():
+    print("=" * 60)
+    print("FASE 1: Metriche quality WavTokenizer (dalle ricostruzioni)")
+    print("=" * 60)
+
+    rec_files = sorted(glob.glob(os.path.join(REC_DIR, f"*_{CODEC_TAG}.wav")))
+    print(f"{len(rec_files)} ricostruzioni trovate\n")
+
+    if not rec_files:
+        print("[!] Nessuna ricostruzione. Esegui prima benchmark_wavtokenizer.py")
+        return []
+
+    results = []
+    for i, rec_path in enumerate(rec_files):
+        stem = Path(rec_path).stem.rsplit(f"_{CODEC_TAG}", 1)[0]
+        orig_path, ds_name = find_original(stem)
+        if orig_path is None:
+            continue
+
+        ref, _ = librosa.load(orig_path, sr=TARGET_SR, mono=True)
+        deg, _ = librosa.load(rec_path, sr=TARGET_SR, mono=True)
+        ml = min(len(ref), len(deg))
+        ref, deg = ref[:ml], deg[:ml]
+
+        # PESQ e STOI a 16kHz
+        ref16 = librosa.resample(ref, orig_sr=24000, target_sr=16000)
+        deg16 = librosa.resample(deg, orig_sr=24000, target_sr=16000)
+
+        try:
+            p = compute_pesq(16000, ref16, deg16, "wb")
+        except Exception:
+            p = None
+        try:
+            s = compute_stoi(ref16, deg16, 16000, extended=False)
+        except Exception:
+            s = None
+
+        sdr = compute_sdr(ref, deg)
+        mel_d = compute_mel_distance(ref, deg)
+        duration = len(ref) / TARGET_SR
+
+        results.append(
+            {
+                "file": stem,
+                "dataset": ds_name,
+                "codec": "WavTokenizer",
+                "param": "0.9",
+                "pesq": round(p, 4) if p else None,
+                "stoi": round(s, 4) if s else None,
+                "sdr": round(sdr, 4),
+                "mel_dist": round(mel_d, 4),
+                "duration_s": round(duration, 2),
+            }
+        )
+
+        if (i + 1) % 50 == 0:
+            pesq_vals = [r["pesq"] for r in results if r["pesq"]]
+            stoi_vals = [r["stoi"] for r in results if r["stoi"]]
+            print(
+                f"  [{i+1}/{len(rec_files)}] "
+                f"PESQ={np.mean(pesq_vals):.2f} "
+                f"STOI={np.mean(stoi_vals):.3f}"
+            )
+
+    # Stampa risultati
+    pesq_all = [r["pesq"] for r in results if r["pesq"]]
+    stoi_all = [r["stoi"] for r in results if r["stoi"]]
+    sdr_all = [r["sdr"] for r in results]
+    mel_all = [r["mel_dist"] for r in results]
+
+    print(f"\nWavTokenizer 0.9 kbps (n={len(results)}):")
+    print(
+        f"  PESQ: {np.mean(pesq_all):.2f}  "
+        f"STOI: {np.mean(stoi_all):.3f}  "
+        f"SDR: {np.mean(sdr_all):.1f}  "
+        f"MelD: {np.mean(mel_all):.2f}"
+    )
+
+    for ds in DATASETS:
+        sub = [r for r in results if r["dataset"] == ds]
+        if sub:
+            pp = [r["pesq"] for r in sub if r["pesq"]]
+            ss = [r["stoi"] for r in sub if r["stoi"]]
+            sd = [r["sdr"] for r in sub]
+            mm = [r["mel_dist"] for r in sub]
+            print(
+                f"  {ds}: PESQ={np.mean(pp):.2f} STOI={np.mean(ss):.3f} "
+                f"SDR={np.mean(sd):.1f} MelD={np.mean(mm):.2f} (n={len(sub)})"
+            )
+
+    # Salva CSV
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+    fieldnames = [
+        "file",
+        "dataset",
+        "codec",
+        "param",
+        "pesq",
+        "stoi",
+        "sdr",
+        "mel_dist",
+        "duration_s",
+    ]
+    with open(OUTPUT_CSV, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in results:
+            w.writerow(r)
+    print(f"\nCSV: {OUTPUT_CSV}")
+
+    return results
+
+
+# ================== FASE 2: ENERGIA BATCH ==================
+def run_energy():
+    print(f"\n{'=' * 60}")
+    print("FASE 2: Energia batch WavTokenizer")
+    print("=" * 60)
+
+    from decoder.pretrained import WavTokenizer  # type: ignore
+    from huggingface_hub import hf_hub_download
+
+    repo = "novateur/WavTokenizer-medium-music-audio-75token"
+    config_path = hf_hub_download(
+        repo_id=repo,
+        filename="wavtokenizer_mediumdata_music_audio_frame75_3s_nq1_code4096_dim512_kmeans200_attn.yaml",
+    )
+    model_path = hf_hub_download(
+        repo_id=repo,
+        filename="wavtokenizer_medium_music_audio_320_24k_v2.ckpt",
+    )
+    model = WavTokenizer.from_pretrained0802(config_path, model_path).cuda().eval()
+    print(
+        f"Modello caricato: {sum(p.numel() for p in model.parameters())/1e6:.1f}M params"
+    )
+
+    # Carica 50 file in RAM
+    audios = []
+    total_dur = 0
+    files = sorted(list(Path(DATASETS["librispeech"]).rglob("*.flac")))[:50]
+    for f in files:
+        a, _ = librosa.load(str(f), sr=TARGET_SR, mono=True, duration=10.0)
+        if len(a) >= TARGET_SR:
+            audios.append(a)
+            total_dur += len(a) / TARGET_SR
+    print(f"{len(audios)} file, {total_dur:.1f}s totali")
+
+    # Warmup
+    dummy = torch.randn(1, TARGET_SR).cuda()
+    with torch.no_grad():
+        bid = torch.tensor([0]).cuda()
+        ff, cc = model.encode_infer(dummy, bandwidth_id=bid)
+        model.decode(ff, bandwidth_id=bid)
+    torch.cuda.synchronize()
+
+    # Batch energy
+    before = gpu.getTotalEnergyConsumption()  # type: ignore
+    t0 = time.perf_counter()
+    for a in audios:
+        wav = torch.from_numpy(a).float().unsqueeze(0).cuda()
+        with torch.no_grad():
+            bid = torch.tensor([0]).cuda()
+            features, codes = model.encode_infer(wav, bandwidth_id=bid)
+            _ = model.decode(features, bandwidth_id=bid)
+    torch.cuda.synchronize()
+    t1 = time.perf_counter()
+    after = gpu.getTotalEnergyConsumption()  # type: ignore
+
+    wt_j = (after - before) / 1000
+    wt_s = t1 - t0
+    print(
+        f"\nWavTokenizer batch: {wt_j:.2f} J in {wt_s:.1f}s for {total_dur:.0f}s audio"
+    )
+    print(f"  -> {wt_j/total_dur:.4f} J/s audio, RTF={wt_s/total_dur:.4f}")
+
+    print(f"\n--- Confronto energia (J/s audio) ---")
+    print(f"  {'Codec':<22} {'J/s':>6} {'RTF':>8}")
+    print(f"  {'-' * 40}")
+    print(f"  {'SNAC 0.8':<22} {'0.32':>6} {'0.0010':>8}")
+    print(f"  {'Opus 24':<22} {'0.35':>6} {'0.0076':>8}")
+    print(f"  {'WavTokenizer 0.9':<22} {wt_j/total_dur:>6.2f} {wt_s/total_dur:>8.4f}")
+    print(f"  {'EnCodec 3.0':<22} {'0.49':>6} {'0.0023':>8}")
+    print(f"  {'DAC 8.0':<22} {'1.40':>6} {'0.0034':>8}")
+
+
+# ================== MAIN ==================
+if __name__ == "__main__":
+    results = run_metrics()
+    run_energy()
+
+
+========================================
+FILE: ./src/utils/download_datasets.py
+========================================
+import os
+import urllib.request
+from tqdm import tqdm
+
+KODAK_BASE_URL = "http://r0k.us/graphics/kodak/kodak/"
+KODAK_DIR = os.path.expanduser("~/tesi/datasets/kodak")
+
+class DownloadProgress(tqdm):
+    def update_to(self, b=1, bsize=1, tsize=None):
+        if tsize is not None:
+            self.total = tsize
+        self.update(b * bsize - self.n)
+
+def download_kodak():
+    os.makedirs(KODAK_DIR, exist_ok=True)
+    print(f"Scaricando dataset Kodak in {KODAK_DIR}")
+    
+    for i in range(1, 25):
+        filename = f"kodim{i:02d}.png"
+        url = KODAK_BASE_URL + filename
+        dest = os.path.join(KODAK_DIR, filename)
+        
+        if os.path.exists(dest):
+            print(f"  {filename} già presente, skip")
+            continue
+        
+        with DownloadProgress(unit="B", unit_scale=True,
+                              miniters=1, desc=filename) as t:
+            urllib.request.urlretrieve(url, dest, reporthook=t.update_to)
+    
+    print(f"\nDone. {len(os.listdir(KODAK_DIR))} immagini scaricate.")
+
+if __name__ == "__main__":
+    download_kodak()
+
+========================================
+FILE: ./src/utils/energy_monitor.py
+========================================
+import warnings
+
+warnings.filterwarnings("ignore")
+import logging
+
+logging.getLogger("zeus").setLevel(logging.ERROR)
+logging.getLogger("pynvml").setLevel(logging.ERROR)
+
+import logging
+
+logging.getLogger("zeus").setLevel(logging.ERROR)
+
+from zeus.monitor import ZeusMonitor
+
+_monitor = None
+
+
+def get_monitor():
+    global _monitor
+    if _monitor is None:
+        _monitor = ZeusMonitor(gpu_indices=[0])
+    return _monitor
+
+
+class EnergyMonitor:
+    """
+    Monitor energetico basato su Zeus.
+    Misura Joules GPU durante un'operazione.
+    """
+
+    def __init__(self, device_index=0):
+        self.device_index = device_index
+        self._joules = 0.0
+        self._monitor = get_monitor()
+        self._window = f"op_{id(self)}"
+
+    def start(self):
+        self._monitor.begin_window(self._window)
+
+    def stop(self):
+        result = self._monitor.end_window(self._window)
+        self._joules = result.total_energy
+
+    def joules(self):
+        return self._joules
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args):
+        self.stop()
+
+
+def measure_baseline(seconds=3):
+    """Misura potenza GPU a riposo. Ritorna watt medi."""
+    import time
+
+    monitor = get_monitor()
+    window = "baseline_measurement"
+    monitor.begin_window(window)
+    time.sleep(seconds)
+    result = monitor.end_window(window)
+    return result.total_energy / seconds
+
+
+========================================
+FILE: ./src/selector/oracle_telemetry.py
+========================================
+"""
+Hardware Telemetry Profiler
+Formato Long (Tidy Data): una riga per ogni coppia immagine+codec.
+Nessun vincitore pre-calcolato — la policy si applica a posteriori.
+Supporta resume automatico e gestione errori isolata per codec.
+"""
+
+import csv
+import os
+import sys
+import time
+import traceback
+from pathlib import Path
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.benchmark.benchmark_images import compress_jpeg, compress_hevc
+from src.benchmark.benchmark_neural_images import compress_neural
+import torch
+import numpy as np
+import pandas as pd
+
+# ================== CONFIG ==================
+CSV_OUTPUT_PATH = os.path.expanduser("~/tesi/results/oracle/oracle_raw_telemetry.csv")
+SAVE_INTERVAL = 10  # checkpoint ogni 10 immagini
+
+DATASETS = {
+    "kodak": os.path.expanduser("~/tesi/datasets/kodak"),
+    "clic_train": os.path.expanduser("~/tesi/datasets/clic2020/train"),
+    "div2k": os.path.expanduser("~/tesi/datasets/div2k/DIV2K_valid_HR"),
+    "tecnick": os.path.expanduser("~/tesi/datasets/tecnick_flat"),
+    "coco_sample": os.path.expanduser("~/tesi/datasets/coco_sample"),
+}
+
+# Parametri codec — 3 punti per famiglia (basso, medio, alto)
+JPEG_QUALITIES = [30, 60, 90]
+HEVC_CRFS = [45, 35, 25]
+BALLE_QUALITIES = [2, 4, 6]
+CHENG_QUALITIES = [2, 4, 6]
+
+FIELDNAMES = [
+    "image",
+    "dataset",
+    "codec",
+    "param",
+    "bpp",
+    "psnr",
+    "lpips",
+    "enc_ms",
+    "status",
+]
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ================== RESUME ==================
+
+
+def load_done() -> set[tuple[str, str, int]]:
+    """Carica coppie (image, codec, param) già processate per il resume."""
+    done: set[tuple[str, str, int]] = set()
+    if os.path.exists(CSV_OUTPUT_PATH):
+        with open(CSV_OUTPUT_PATH, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["status"] == "OK":
+                    done.add((row["image"], row["codec"], int(row["param"])))
+    return done
+
+
+# ================== PROFILER ==================
+
+
+def run_telemetry_profiler() -> None:
+    os.makedirs(os.path.dirname(CSV_OUTPUT_PATH), exist_ok=True)
+
+    done = load_done()
+    print(f"Resume: {len(done)} misurazioni già completate.")
+
+    # Carica modelli neurali una volta sola
+    print("Caricamento modelli neurali...")
+    from compressai.zoo import bmshj2018_hyperprior, cheng2020_anchor
+
+    balle_models: dict[int, torch.nn.Module] = {}
+    for q in BALLE_QUALITIES:
+        balle_models[q] = (
+            bmshj2018_hyperprior(quality=q, pretrained=True).to(device).eval()
+        )
+
+    cheng_models: dict[int, torch.nn.Module] = {}
+    for q in CHENG_QUALITIES:
+        cheng_models[q] = cheng2020_anchor(quality=q, pretrained=True).to(device).eval()
+
+    print("Modelli caricati.\n")
+
+    # Raccogli tutte le immagini
+    all_images: list[tuple[Path, str]] = []
+    for dataset_name, dataset_path in DATASETS.items():
+        if not os.path.exists(dataset_path):
+            print(f"Dataset {dataset_name} non trovato, skip.")
+            continue
+        imgs = sorted(Path(dataset_path).glob("*.png")) + sorted(
+            Path(dataset_path).glob("*.jpg")
+        )
+        all_images.extend([(img, dataset_name) for img in imgs])
+        print(f"  {dataset_name}: {len(imgs)} immagini")
+
+    print(f"\nTotale: {len(all_images)} immagini\n")
+
+    # Apri CSV in append
+    write_header = not os.path.exists(CSV_OUTPUT_PATH)
+    csvfile = open(CSV_OUTPUT_PATH, "a", newline="")
+    writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES)
+    if write_header:
+        writer.writeheader()
+
+    total_written = 0
+
+    for img_idx, (img_path, dataset_name) in enumerate(all_images):
+        img_name = str(img_path)
+        print(f"[{img_idx + 1}/{len(all_images)}] {img_path.name}")
+
+        # ── JPEG ────────────────────────────────────────────────
+        for q in JPEG_QUALITIES:
+            if (img_name, "JPEG", q) in done:
+                continue
+            row: dict = {
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "JPEG",
+                "param": q,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
+            }
+            try:
+                start = time.perf_counter()
+                m = compress_jpeg(img_path, q)
+                enc_ms = (time.perf_counter() - start) * 1000
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(enc_ms, 2),
+                    }
+                )
+            except Exception as e:
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] JPEG q={q}: {e}")
+            writer.writerow(row)
+            total_written += 1
+
+        # ── HEVC ────────────────────────────────────────────────
+        for crf in HEVC_CRFS:
+            if (img_name, "HEVC", crf) in done:
+                continue
+            row = {
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "HEVC",
+                "param": crf,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
+            }
+            try:
+                start = time.perf_counter()
+                m = compress_hevc(img_path, crf)
+                enc_ms = (time.perf_counter() - start) * 1000
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(enc_ms, 2),
+                    }
+                )
+            except Exception as e:
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] HEVC crf={crf}: {e}")
+            writer.writerow(row)
+            total_written += 1
+
+        # ── Ballé2018 ───────────────────────────────────────────
+        for q in BALLE_QUALITIES:
+            if (img_name, "Balle2018", q) in done:
+                continue
+            row = {
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "Balle2018",
+                "param": q,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
+            }
+            try:
+                m = compress_neural(balle_models[q], img_path)
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(m["enc_ms"], 2),
+                    }
+                )
+            except Exception as e:
+                torch.cuda.empty_cache()
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] Balle2018 q={q}: {e}")
+            writer.writerow(row)
+            total_written += 1
+
+        # ── Cheng2020 ───────────────────────────────────────────
+        for q in CHENG_QUALITIES:
+            if (img_name, "Cheng2020", q) in done:
+                continue
+            row = {
+                "image": img_name,
+                "dataset": dataset_name,
+                "codec": "Cheng2020",
+                "param": q,
+                "bpp": None,
+                "psnr": None,
+                "lpips": None,
+                "enc_ms": None,
+                "status": "OK",
+            }
+            try:
+                m = compress_neural(cheng_models[q], img_path)
+                row.update(
+                    {
+                        "bpp": round(m["bpp"], 5),
+                        "psnr": round(m["psnr"], 4),
+                        "lpips": round(m["lpips"], 5),
+                        "enc_ms": round(m["enc_ms"], 2),
+                    }
+                )
+            except Exception as e:
+                torch.cuda.empty_cache()
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] Cheng2020 q={q}: {e}")
+            writer.writerow(row)
+            total_written += 1
+
+        # Checkpoint periodico
+        if (img_idx + 1) % SAVE_INTERVAL == 0:
+            csvfile.flush()
+            print(f"  -> Checkpoint: {total_written} righe scritte")
+
+    csvfile.flush()
+    csvfile.close()
+    print(f"\nProfilazione completata! File: {CSV_OUTPUT_PATH}")
+    print(f"Righe totali scritte: {total_written}")
+
+
+# ================== POLICY (applicata a posteriori) ==================
+
+# ================== POLICY (applicata a posteriori) ==================
+
+
+def apply_policy(
+    csv_path: str,
+    max_enc_ms: float = 150.0,
+    max_bpp: float = 0.5,
+    mode: str = "performance",  # "performance" o "eco"
+    lpips_threshold: float = 0.15,  # usato solo in modalità eco
+) -> "pd.DataFrame":
+    """
+    Applica una policy decisionale sul CSV raw.
+    Non rilancia nessun benchmark — è solo un filtro sul foglio Excel.
+    """
+
+    df = pd.read_csv(csv_path)
+    df = df[df["status"] == "OK"].copy()
+
+    print(f"\nPolicy: mode={mode}, max_enc_ms={max_enc_ms}, max_bpp={max_bpp}")
+    # 1. Filtro candidati fisicamente ammissibili
+    if mode == "eco":
+        admissible = df[df["bpp"] <= max_bpp]
+    else:
+        admissible = df[(df["enc_ms"] <= max_enc_ms) & (df["bpp"] <= max_bpp)]
+
+    if admissible.empty:
+        print("Nessun candidato rispetta i vincoli fisici.")
+        return pd.DataFrame()
+
+    # 2. Selezione del vincitore per ogni immagine in base al QoS (mode)
+    if mode == "performance":
+        # Cerca la qualità assoluta
+        idx = admissible.groupby("image")["lpips"].idxmin()
+        winners = admissible.loc[idx]
+
+    elif mode == "eco":
+
+        def eco_selector(group):
+            decent_classical = group[
+                (group["lpips"] <= lpips_threshold)
+                & (group["codec"].isin(["JPEG", "HEVC", "JXL"]))
+            ]
+            if not decent_classical.empty:
+                return decent_classical.loc[decent_classical["lpips"].idxmin()]
+            decent_neural = group[group["lpips"] <= lpips_threshold]
+            if not decent_neural.empty:
+                return decent_neural.loc[decent_neural["lpips"].idxmin()]
+            return group.loc[group["lpips"].idxmin()]
+
+        winners = admissible.groupby("image", group_keys=False).apply(eco_selector)
+
+    else:
+        raise ValueError("Modalità non supportata. Usa 'performance' o 'eco'.")
+
+    winners = (
+        winners.reset_index(drop=True)
+        if "image" in winners.columns
+        else winners.reset_index()
+    )
+    print(f"\nDistribuzione vincitori (Profilo {mode.upper()}):")
+    print(winners["codec"].value_counts())
+    print(f"\nTotale immagini elaborate: {len(winners)}")
+
+    # Salva il dataset bilanciato per XGBoost
+    out_file = str(csv_path).replace(".csv", f"_{mode}_winners.csv")
+    winners.to_csv(out_file, index=False)
+    print(f"Dataset dei vincitori salvato in: {out_file}")
+
+    return pd.DataFrame(winners)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--profile", action="store_true", help="Lancia il profiler hardware su GPU"
+    )
+    parser.add_argument(
+        "--policy",
+        type=str,
+        choices=["performance", "eco"],
+        help="Applica policy sul CSV esistente",
+    )
+    parser.add_argument("--max-enc-ms", type=float, default=150.0)
+    parser.add_argument("--max-bpp", type=float, default=0.5)
+    parser.add_argument("--lpips-thresh", type=float, default=0.15)
+    args = parser.parse_args()
+
+    if args.profile:
+        run_telemetry_profiler()
+    elif args.policy:
+        apply_policy(
+            CSV_OUTPUT_PATH,
+            args.max_enc_ms,
+            args.max_bpp,
+            mode=args.policy,
+            lpips_threshold=args.lpips_thresh,
+        )
+    else:
+        # Default: lancia il profiler
+        run_telemetry_profiler()
+
+
+========================================
+FILE: ./src/selector/cli.py
+========================================
+#!/usr/bin/env python3
+"""
+CLI del selettore adattivo.
+Uso: python cli.py --domain image --max-bpp 0.3 --max-lpips 0.3
+"""
+import argparse
+import sys
+import os
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.selector.selector import AdaptiveSelector, UserConstraints
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Selettore adattivo del metodo di compressione ottimo."
+    )
+    parser.add_argument(
+        "--domain",
+        choices=["image", "audio", "video"],
+        required=True,
+        help="Dominio del segnale da comprimere",
+    )
+    parser.add_argument(
+        "--max-bpp",
+        type=float,
+        default=None,
+        help="Bitrate massimo (bpp per immagini, kbps per audio)",
+    )
+    parser.add_argument(
+        "--min-psnr", type=float, default=None, help="PSNR minimo richiesto (dB)"
+    )
+    parser.add_argument(
+        "--max-lpips",
+        type=float,
+        default=None,
+        help="LPIPS massimo (qualità percettiva)",
+    )
+    parser.add_argument(
+        "--max-enc-ms",
+        type=float,
+        default=None,
+        help="Latenza massima di codifica (ms)",
+    )
+    parser.add_argument(
+        "--show-pareto",
+        action="store_true",
+        help="Mostra la frontiera di Pareto completa",
+    )
+
+    args = parser.parse_args()
+
+    selector = AdaptiveSelector()
+
+    constraints = UserConstraints(
+        domain=args.domain,
+        max_bpp=args.max_bpp,
+        min_psnr=args.min_psnr,
+        max_lpips=args.max_lpips,
+        max_enc_ms=args.max_enc_ms,
+    )
+
+    print(selector.explain(constraints))
+
+    # dopo selector.explain(constraints) aggiungi una nota per l'audio
+    if args.domain == "audio":
+        print("(Nota: PSNR = PESQ score, LPIPS = Mel Distance per il dominio audio)")
+
+    if args.show_pareto:
+        print("\n--- Frontiera di Pareto ---")
+        pareto = selector.get_pareto_frontier(args.domain, max_enc_ms=args.max_enc_ms)
+        cols = ["codec", "param_value", "bpp", "psnr", "lpips", "enc_ms"]
+        available = [c for c in cols if c in pareto.columns]
+        print(pareto[available].to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
+
+
+========================================
+FILE: ./src/selector/__init__.py
+========================================
+
+
+========================================
+FILE: ./src/selector/oracle_images_jxl.py
+========================================
+import csv
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.benchmark.benchmark_images import compress_jxl
+
+# ================== CONFIG ==================
+CSV_OUTPUT_PATH = os.path.expanduser("~/tesi/results/oracle/oracle_raw_telemetry.csv")
+SAVE_INTERVAL = 5
+
+DATASETS = {
+    "kodak":       os.path.expanduser("~/tesi/datasets/kodak"),
+    "clic_train":  os.path.expanduser("~/tesi/datasets/clic2020/train"),
+    "div2k":       os.path.expanduser("~/tesi/datasets/div2k/DIV2K_valid_HR"),
+    "tecnick":     os.path.expanduser("~/tesi/datasets/tecnick_flat"),
+    "coco_sample": os.path.expanduser("~/tesi/datasets/coco_sample"),
+}
+
+# JXL distances (0 = lossless, numeri più alti = più compressione/minore qualità)
+# Usiamo 4 livelli per coprire lo spettro R-D in modo equo rispetto a JPEG/HEVC
+JXL_DISTANCES = [1.0, 3.0, 7.0, 12.0]
+
+FIELDNAMES = [
+    "image", "dataset", "codec", "param",
+    "bpp", "psnr", "lpips", "enc_ms", "status"
+]
+
+def load_done():
+    done = set()
+    if os.path.exists(CSV_OUTPUT_PATH):
+        with open(CSV_OUTPUT_PATH, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["status"] == "OK" and row["codec"] == "JXL":
+                    done.add((row["image"], row["codec"], float(row["param"])))
+    return done
+
+def run_jxl_telemetry():
+    done = load_done()
+    print(f"Resume: {len(done)} file JXL già completati.")
+
+    all_images = []
+    for dataset_name, dataset_path in DATASETS.items():
+        for ext in ["*.png", "*.jpg"]:
+            files = list(Path(dataset_path).rglob(ext))
+            all_images.extend([(f, dataset_name) for f in files])
+
+    print(f"\nInizio append JXL su {len(all_images)} immagini...\n")
+
+    csvfile = open(CSV_OUTPUT_PATH, "a", newline="")
+    writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES)
+
+    for idx, (img_path, dataset_name) in enumerate(all_images):
+        # Usa il percorso assoluto in modo che combaci con il CSV esistente
+        img_name = str(img_path)
+        
+        for dist in JXL_DISTANCES:
+            if (img_name, "JXL", float(dist)) in done:
+                continue
+                
+            print(f"[{idx + 1}/{len(all_images)}] Eseguo JXL (d={dist}) su {img_name}")
+            row = {"image": img_name, "dataset": dataset_name, "codec": "JXL", "param": dist, "status": "OK"}
+            
+            try:
+                m = compress_jxl(str(img_path), distance=dist)
+                row.update(m)
+            except Exception as e:
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] Errore JXL: {e}")
+                
+            writer.writerow(row)
+
+        if (idx + 1) % SAVE_INTERVAL == 0:
+            csvfile.flush()
+
+    csvfile.close()
+    print("\nTelemetria JXL completata e integrata nel CSV!")
+
+if __name__ == "__main__":
+    run_jxl_telemetry()
+
+========================================
+FILE: ./src/selector/selector.py
+========================================
+"""
+Selettore adattivo del metodo di compressione.
+Deriva le regole decisionali empiricamente dai dati del benchmark.
+"""
+
+import os
+from dataclasses import dataclass
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+
+RESULTS_DIR = os.path.expanduser("~/tesi/results")
+
+
+# ── Strutture dati ───────────────────────────────────────────────
+
+
+@dataclass
+class UserConstraints:
+    """Vincoli specificati dall'utente."""
+
+    max_bpp: Optional[float] = None  # bitrate massimo
+    min_psnr: Optional[float] = None  # qualità minima (matematica)
+    max_lpips: Optional[float] = None  # qualità minima (percettiva)
+    max_enc_ms: Optional[float] = None  # latenza massima di codifica
+    domain: str = "image"  # "image", "audio", "video"
+
+
+@dataclass
+class SelectionResult:
+    """Risultato della selezione."""
+
+    codec: str
+    param_name: str
+    param_value: float
+    predicted_bpp: float
+    predicted_psnr: float
+    predicted_lpips: float
+    predicted_enc_ms: float
+    reason: str
+
+
+# ── Helper ───────────────────────────────────────────────────────
+
+
+from typing import Any, Optional
+
+
+def _row_to_result(best: Any, reason: str) -> SelectionResult:
+    """Converte una riga pandas in SelectionResult con cast espliciti."""
+    return SelectionResult(
+        codec=str(best["codec"]),
+        param_name=str(best["param_name"]),
+        param_value=float(best["param_value"]),
+        predicted_bpp=float(best["bpp"]),
+        predicted_psnr=float(best["psnr"]),
+        predicted_lpips=float(best.get("lpips", float("nan"))),
+        predicted_enc_ms=float(best["enc_ms"]),
+        reason=reason,
+    )
+
+
+# ── Caricamento dati benchmark ───────────────────────────────────
+
+
+def load_image_data() -> pd.DataFrame:
+    """Carica e unifica tutti i dati benchmark immagini."""
+    dfs = []
+
+    # JPEG
+    df = pd.read_csv(f"{RESULTS_DIR}/images/jpeg_kodak.csv")
+    df = (
+        df.groupby("quality")[
+            ["bpp", "psnr", "ms_ssim", "lpips", "fps", "ms_per_image"]
+        ]
+        .mean()
+        .reset_index()
+    )
+    df["codec"] = "JPEG"
+    df["param_name"] = "quality"
+    df.rename(
+        columns={"quality": "param_value", "ms_per_image": "enc_ms"}, inplace=True
+    )
+    dfs.append(df)
+
+    # HEVC
+    df = pd.read_csv(f"{RESULTS_DIR}/images/hevc_kodak.csv")
+    df = (
+        df.groupby("crf")[["bpp", "psnr", "ms_ssim", "lpips", "fps", "ms_per_image"]]
+        .mean()
+        .reset_index()
+    )
+    df["codec"] = "HEVC"
+    df["param_name"] = "crf"
+    df.rename(columns={"crf": "param_value", "ms_per_image": "enc_ms"}, inplace=True)
+    dfs.append(df)
+
+    # Ballé2018
+    df = pd.read_csv(f"{RESULTS_DIR}/images/balle2018_kodak.csv")
+    df = (
+        df.groupby("quality")[["bpp", "psnr", "ms_ssim", "lpips", "enc_ms", "dec_ms"]]
+        .mean()
+        .reset_index()
+    )
+    df["codec"] = "Balle2018"
+    df["param_name"] = "quality"
+    df.rename(columns={"quality": "param_value"}, inplace=True)
+    dfs.append(df)
+
+    # Cheng2020
+    df = pd.read_csv(f"{RESULTS_DIR}/images/cheng2020_kodak.csv")
+    df = (
+        df.groupby("quality")[["bpp", "psnr", "ms_ssim", "lpips", "enc_ms", "dec_ms"]]
+        .mean()
+        .reset_index()
+    )
+    df["codec"] = "Cheng2020"
+    df["param_name"] = "quality"
+    df.rename(columns={"quality": "param_value"}, inplace=True)
+    dfs.append(df)
+
+    df_all = pd.concat(dfs, ignore_index=True)
+    df_all["domain"] = "image"
+    return df_all
+
+
+def load_audio_data() -> pd.DataFrame:
+    """Carica e unifica tutti i dati benchmark audio."""
+    df = pd.read_csv(f"{RESULTS_DIR}/audio/audio_benchmark.csv")
+
+    result = (
+        df.groupby(["codec", "target_kbps"])[
+            ["bitrate_kbps", "snr_db", "pesq", "stoi", "si_sdr", "mel_dist", "enc_ms"]
+        ]
+        .mean()
+        .reset_index()
+    )
+
+    result.rename(
+        columns={
+            "target_kbps": "param_value",
+            "bitrate_kbps": "bpp",
+            "pesq": "psnr",  # PESQ come metrica qualità principale
+            "mel_dist": "lpips",  # mel_dist come proxy percettivo (più basso = meglio)
+        },
+        inplace=True,
+    )
+
+    result["param_name"] = "bitrate_kbps"
+    result["domain"] = "audio"
+    return result
+
+
+def load_video_data() -> pd.DataFrame:
+    """Carica e unifica tutti i dati benchmark video."""
+    df = pd.read_csv(f"{RESULTS_DIR}/video/video_benchmark.csv")
+
+    result = (
+        df.groupby(["codec", "crf"])[
+            ["bpp", "psnr", "ms_ssim", "lpips", "fps_enc", "enc_time_s"]
+        ]
+        .mean()
+        .reset_index()
+    )
+
+    result["enc_ms"] = result["enc_time_s"] * 1000 / 120  # ms per frame
+    result.rename(columns={"crf": "param_value", "fps_enc": "fps"}, inplace=True)
+    result["param_name"] = "crf"
+    result["codec"] = result["codec"].str.upper()
+    result["domain"] = "video"
+    return result
+
+
+# ── Frontiera di Pareto ──────────────────────────────────────────
+
+
+def compute_pareto_frontier(
+    df: pd.DataFrame, max_enc_ms: Optional[float] = None
+) -> pd.DataFrame:
+    candidates = df.copy()
+    if max_enc_ms is not None:
+        candidates = candidates[candidates["enc_ms"] <= max_enc_ms]
+    if candidates.empty:
+        candidates = df.copy()
+
+    pareto_mask = []
+
+    # usa lpips se disponibile, altrimenti solo 3 dimensioni
+    has_lpips = "lpips" in candidates.columns and candidates["lpips"].notna().all()
+
+    if has_lpips:
+        records = candidates[["bpp", "psnr", "lpips", "enc_ms"]].values
+    else:
+        records = candidates[["bpp", "psnr", "enc_ms"]].values
+
+    for i, point in enumerate(records):
+        dominated = False
+        for j, other in enumerate(records):
+            if i == j:
+                continue
+            if has_lpips:
+                # domina se migliore o uguale su tutte e 4 le dimensioni
+                # bpp↓  psnr↑  lpips↓  enc_ms↓
+                if (
+                    other[0] <= point[0]  # bpp più basso
+                    and other[1] >= point[1]  # psnr più alto
+                    and other[2] <= point[2]  # lpips più basso
+                    and other[3] <= point[3]  # enc_ms più basso
+                    and (
+                        other[0] < point[0]
+                        or other[1] > point[1]
+                        or other[2] < point[2]
+                        or other[3] < point[3]
+                    )
+                ):
+                    dominated = True
+                    break
+            else:
+                if (
+                    other[0] <= point[0]
+                    and other[1] >= point[1]
+                    and other[2] <= point[2]
+                    and (
+                        other[0] < point[0]
+                        or other[1] > point[1]
+                        or other[2] < point[2]
+                    )
+                ):
+                    dominated = True
+                    break
+        pareto_mask.append(not dominated)
+
+    return candidates[pareto_mask].copy()
+
+
+# ── Selettore principale ─────────────────────────────────────────
+
+
+class AdaptiveSelector:
+    """
+    Selettore adattivo del metodo di compressione.
+    Deriva le regole dai dati empirici del benchmark.
+    """
+
+    def __init__(self) -> None:
+        self.image_data = load_image_data()
+        self.audio_data = load_audio_data()
+        self.video_data = load_video_data()
+
+    def select(self, constraints: UserConstraints) -> SelectionResult:
+        """Seleziona il metodo ottimo dato i vincoli utente."""
+        if constraints.domain == "image":
+            return self._select_image(constraints)
+        elif constraints.domain == "audio":
+            return self._select_audio(constraints)
+        elif constraints.domain == "video":
+            return self._select_video(constraints)
+        else:
+            raise ValueError(f"Dominio non supportato: {constraints.domain}")
+
+    def _filter_by_constraints(
+        self, df: pd.DataFrame, constraints: UserConstraints
+    ) -> pd.DataFrame:
+        """Filtra i punti che rispettano tutti i vincoli."""
+        filtered = df.copy()
+        if constraints.max_bpp is not None:
+            filtered = filtered[filtered["bpp"] <= constraints.max_bpp]
+        if constraints.min_psnr is not None:
+            filtered = filtered[filtered["psnr"] >= constraints.min_psnr]
+        if constraints.max_lpips is not None:
+            filtered = filtered[filtered["lpips"] <= constraints.max_lpips]
+        if constraints.max_enc_ms is not None:
+            filtered = filtered[filtered["enc_ms"] <= constraints.max_enc_ms]
+        return filtered
+
+    def _select_image(self, constraints: UserConstraints) -> SelectionResult:
+        df = self.image_data.copy()
+        filtered = self._filter_by_constraints(df, constraints)
+
+        if filtered.empty:
+            filtered = df.copy()
+            reason = (
+                "Nessun codec rispetta tutti i vincoli. "
+                "Selezionato il migliore disponibile."
+            )
+        else:
+            reason = "Selezionato il punto ottimo sulla frontiera di Pareto."
+
+        if constraints.max_lpips is not None or constraints.min_psnr is not None:
+            best = filtered.loc[filtered["lpips"].idxmin()]
+        else:
+            best = filtered.loc[filtered["psnr"].idxmax()]
+
+        return _row_to_result(best, reason)
+
+    def _select_audio(self, constraints: UserConstraints) -> SelectionResult:
+        df = self.audio_data.copy()
+
+        # per l'audio filtra su param_value (target kbps) non su bpp effettivo
+        filtered = df.copy()
+        if constraints.max_bpp is not None:
+            filtered = filtered[filtered["param_value"] <= constraints.max_bpp]
+        if constraints.min_psnr is not None:
+            filtered = filtered[filtered["psnr"] >= constraints.min_psnr]
+        if constraints.max_enc_ms is not None:
+            filtered = filtered[filtered["enc_ms"] <= constraints.max_enc_ms]
+
+        if filtered.empty:
+            filtered = df.copy()
+            reason = (
+                "Nessun codec rispetta tutti i vincoli. "
+                "Selezionato il migliore disponibile."
+            )
+        else:
+            reason = "Selezionato il punto ottimo."
+
+        best = filtered.loc[filtered["psnr"].idxmax()]
+        return _row_to_result(best, reason)
+
+    def _select_video(self, constraints: UserConstraints) -> SelectionResult:
+        df = self.video_data.copy()
+        filtered = self._filter_by_constraints(df, constraints)
+
+        if filtered.empty:
+            filtered = df.copy()
+            reason = (
+                "Nessun codec rispetta tutti i vincoli. "
+                "Selezionato il migliore disponibile."
+            )
+        else:
+            reason = "Selezionato il punto ottimo."
+
+        best = filtered.loc[filtered["psnr"].idxmax()]
+        return _row_to_result(best, reason)
+
+    def get_pareto_frontier(
+        self, domain: str, max_enc_ms: Optional[float] = None
+    ) -> pd.DataFrame:
+        """Restituisce la frontiera di Pareto per il dominio specificato."""
+        if domain == "image":
+            return compute_pareto_frontier(self.image_data, max_enc_ms)
+        elif domain == "audio":
+            return compute_pareto_frontier(self.audio_data, max_enc_ms)
+        elif domain == "video":
+            return compute_pareto_frontier(self.video_data, max_enc_ms)
+        else:
+            raise ValueError(f"Dominio non supportato: {domain}")
+
+    def explain(self, constraints: UserConstraints) -> str:
+        """Spiega la scelta del selettore con il trade-off."""
+        result = self.select(constraints)
+        lines = [
+            f"Codec selezionato: {result.codec}",
+            f"Parametro: {result.param_name} = {result.param_value}",
+            f"Bitrate previsto: {result.predicted_bpp:.3f}",
+            f"PSNR previsto: {result.predicted_psnr:.2f} dB",
+            f"LPIPS previsto: {result.predicted_lpips:.4f}",
+            f"Latenza codifica: {result.predicted_enc_ms:.1f} ms",
+            f"Motivazione: {result.reason}",
+        ]
+        return "\n".join(lines)
+
+
+# ── Test rapido ──────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    selector = AdaptiveSelector()
+
+    print("=" * 60)
+    print("TEST SELETTORE ADATTIVO")
+    print("=" * 60)
+
+    # Scenario 1: immagine, basso bitrate, qualità percettiva
+    print("\nScenario 1: immagine, max 0.3 bpp, qualità percettiva")
+    result = selector.select(
+        UserConstraints(domain="image", max_bpp=0.3, max_lpips=0.3)
+    )
+    print(f"  → {result.codec} (q={result.param_value})")
+    print(
+        f"     bpp={result.predicted_bpp:.3f} | "
+        f"psnr={result.predicted_psnr:.2f}dB | "
+        f"lpips={result.predicted_lpips:.4f} | "
+        f"enc={result.predicted_enc_ms:.1f}ms"
+    )
+    print(f"     {result.reason}")
+
+    # Scenario 2: immagine, vincolo latenza stretto
+    print("\nScenario 2: immagine, max 30ms codifica, max 1 bpp")
+    result = selector.select(
+        UserConstraints(domain="image", max_bpp=1.0, max_enc_ms=30.0)
+    )
+    print(f"  → {result.codec} (q={result.param_value})")
+    print(
+        f"     bpp={result.predicted_bpp:.3f} | "
+        f"psnr={result.predicted_psnr:.2f}dB | "
+        f"enc={result.predicted_enc_ms:.1f}ms"
+    )
+    print(f"     {result.reason}")
+
+    # Scenario 3: audio, basso bitrate
+    print("\nScenario 3: audio, max 12 kbps")
+    result = selector.select(UserConstraints(domain="audio", max_bpp=12.0))
+    print(f"  → {result.codec} ({result.param_value}kbps)")
+    print(
+        f"     PESQ={result.predicted_psnr:.2f} | "
+        f"mel_dist={result.predicted_lpips:.3f} | "
+        f"enc={result.predicted_enc_ms:.1f}ms"
+    )
+    print(f"     {result.reason}")
+
+    # Scenario 4: video, real-time
+    print("\nScenario 4: video, real-time (min 24 fps codifica)")
+    df_video = selector.video_data
+    rt = df_video[df_video["fps"] >= 24].copy()
+    if not rt.empty:
+        best = rt.loc[rt["psnr"].idxmax()]
+        print(f"  → {best['codec']} crf={best['param_value']}")
+        print(
+            f"     bpp={best['bpp']:.4f} | psnr={best['psnr']:.2f}dB | "
+            f"fps={best['fps']:.1f}"
+        )
+
+    # Scenario 5: immagine, qualità alta senza vincolo latenza
+    print("\nScenario 5: immagine, min 35 dB PSNR")
+    result = selector.select(UserConstraints(domain="image", min_psnr=35.0))
+    print(f"  → {result.codec} (q={result.param_value})")
+    print(
+        f"     bpp={result.predicted_bpp:.3f} | "
+        f"psnr={result.predicted_psnr:.2f}dB | "
+        f"lpips={result.predicted_lpips:.4f} | "
+        f"enc={result.predicted_enc_ms:.1f}ms"
+    )
+    print(f"     {result.reason}")
+
+    # Frontiere di Pareto immagini
+    print("\nFrontiera di Pareto — Immagini (latenza ≤ 100ms, uso pratico):")
+    pareto_fast = selector.get_pareto_frontier("image", max_enc_ms=100.0)
+    print(
+        pareto_fast[
+            ["codec", "param_value", "bpp", "psnr", "lpips", "enc_ms"]
+        ].to_string(index=False)
+    )
+
+    print("\nFrontiera di Pareto — Immagini (alta qualità, nessun vincolo latenza):")
+    pareto_all = selector.get_pareto_frontier("image")
+    print(
+        pareto_all[
+            ["codec", "param_value", "bpp", "psnr", "lpips", "enc_ms"]
+        ].to_string(index=False)
+    )
+
+    print("\nFrontiera di Pareto — Video:")
+    pareto_video = selector.get_pareto_frontier("video")
+    print(
+        pareto_video[
+            ["codec", "param_value", "bpp", "psnr", "lpips", "fps", "enc_ms"]
+        ].to_string(index=False)
+    )
+
+
+========================================
+FILE: ./src/selector/feature_extractor_audio.py
+========================================
+import os
+import time
+import librosa
+import numpy as np
+from typing import Dict, Tuple
+
+class AudioFeatureExtractor:
+    """
+    Estrattore di feature spettrali e temporali (11-D) per il routing XGBoost Audio.
+    Ottimizzato per vincoli Edge: sottocampionamento a 16kHz e cap a 5 secondi.
+    """
+    def __init__(self):
+        # Definiamo l'ordine esatto per XGBoost
+        self.feature_names = [
+            "zcr_mean",                 # Quante volte l'onda attraversa lo 0 (rumore vs voce)
+            "zcr_var",
+            "rms_mean",                 # Energia/Volume del segnale
+            "spectral_centroid_mean",   # "Baricentro" (suoni cupi vs brillanti)
+            "spectral_centroid_var",
+            "spectral_bandwidth_mean",  # Larghezza di banda
+            "spectral_rolloff_mean",    # Frequenza sotto la quale si concentra l'85% dell'energia
+            "mfcc_1_mean",              # Inviluppo spettrale (Timbro)
+            "mfcc_2_mean",
+            "mfcc_3_mean",
+            "mfcc_4_mean",
+        ]
+
+    def extract_features(self, audio_path: str) -> Tuple[Dict[str, float], np.ndarray]:
+        if not os.path.exists(audio_path):
+            raise ValueError(f"File non trovato: {audio_path}")
+
+        # TRUCCO EDGE: Forziamo 16kHz e max 5 secondi. 
+        # Caricamento ultra-rapido.
+        y, sr = librosa.load(audio_path, sr=16000, mono=True, duration=5.0)
+        
+        # Se l'audio è vuoto o troppo corto, gestiamo l'errore elegantemente
+        if len(y) == 0:
+            y = np.zeros(16000)
+
+        features = {}
+
+        # 1. Zero-Crossing Rate (ZCR)
+        zcr = librosa.feature.zero_crossing_rate(y)[0]
+        features["zcr_mean"] = float(np.mean(zcr))
+        features["zcr_var"] = float(np.var(zcr))
+
+        # 2. RMS Energy
+        rms = librosa.feature.rms(y=y)[0]
+        features["rms_mean"] = float(np.mean(rms))
+
+        # 3. Spectral Features
+        # Il centroid indica se il suono è spostato verso gli alti (difficile) o i bassi (facile)
+        cent = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+        features["spectral_centroid_mean"] = float(np.mean(cent))
+        features["spectral_centroid_var"] = float(np.var(cent))
+
+        bw = librosa.feature.spectral_bandwidth(y=y, sr=sr)[0]
+        features["spectral_bandwidth_mean"] = float(np.mean(bw))
+
+        rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
+        features["spectral_rolloff_mean"] = float(np.mean(rolloff))
+
+        # 4. MFCC (Mel-Frequency Cepstral Coefficients)
+        # Ne estraiamo 5, scartiamo il primo (indice 0) che è solo l'energia (già misurata da RMS)
+        # I coefficienti da 1 a 4 sono perfetti per catturare il timbro (es. per riconoscere la voce umana)
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=5)[1:] 
+        for i in range(4):
+            features[f"mfcc_{i+1}_mean"] = float(np.mean(mfccs[i]))
+
+        # Array per XGBoost: blindato sull'ordine della lista master
+        feature_array = np.array([features[name] for name in self.feature_names], dtype=np.float32)
+
+        return features, feature_array
+
+
+if __name__ == "__main__":
+    extractor = AudioFeatureExtractor()
+    
+    # Prendi un file a caso scaricato poco fa
+    # Modifica questo path se non corrisponde a un tuo file scaricato
+    test_file = os.path.expanduser("~/tesi/datasets_audio/esc50_sample/1-100032-A-0.wav")
+    
+    if os.path.exists(test_file):
+        start = time.perf_counter()
+        feats, array = extractor.extract_features(test_file)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        
+        print(f"✅ 11 Feature Audio estratte in {elapsed_ms:.2f} ms")
+        print("Feature dizionario:")
+        for k, v in feats.items():
+            print(f"  {k:25}: {v:10.4f}")
+        print(f"\nArray XGBoost shape   : {array.shape}")
+    else:
+        print(f"❌ File di test non trovato: {test_file}")
+
+========================================
+FILE: ./src/selector/oracle_audio.py
+========================================
+import csv
+import os
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.benchmark.benchmark_audio import compress_opus, compress_encodec
+
+# ================== CONFIG ==================
+CSV_OUTPUT_PATH = os.path.expanduser("~/tesi/results/audio/oracle_audio_telemetry.csv")
+SAVE_INTERVAL = 10  # checkpoint ogni 10 file audio
+
+DATASETS = {
+    "librispeech": os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    "esc50":       os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    "musdb":       os.path.expanduser("~/tesi/datasets_audio/musdb_sample"),
+}
+
+# Parametri codec — 3 punti per famiglia (basso, medio, alto)
+OPUS_KBPS    = [12, 24, 48]
+ENCODEC_BW   = [1.5, 3.0, 6.0]
+
+FIELDNAMES = [
+    "file", "dataset", "codec", "param",
+    "kbps", "pesq", "mel_dist", "audio_dist", "enc_ms", "status"
+]
+
+# ================== RESUME ==================
+def load_done():
+    """Carica tuple (file, codec, param) già processate per il resume."""
+    done = set()
+    if os.path.exists(CSV_OUTPUT_PATH):
+        with open(CSV_OUTPUT_PATH, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["status"] == "OK":
+                    done.add((row["file"], row["codec"], float(row["param"])))
+    return done
+
+# ================== PROFILER ==================
+def run_audio_telemetry():
+    os.makedirs(os.path.dirname(CSV_OUTPUT_PATH), exist_ok=True)
+    done = load_done()
+    print(f"Resume: {len(done)} misurazioni audio già completate.")
+
+    all_files = []
+    for dataset_name, dataset_path in DATASETS.items():
+        if not os.path.exists(dataset_path):
+            print(f"Dataset {dataset_name} non trovato in {dataset_path}, skip.")
+            continue
+        
+        # Cerca file .wav o .flac ricorsivamente (LibriSpeech usa .flac)
+        files = list(Path(dataset_path).rglob("*.wav")) + list(Path(dataset_path).rglob("*.flac"))
+        all_files.extend([(f, dataset_name) for f in files])
+        print(f"  {dataset_name}: {len(files)} file audio")
+
+    print(f"\nTotale: {len(all_files)} file da profilare\n")
+
+    write_header = not os.path.exists(CSV_OUTPUT_PATH)
+    csvfile = open(CSV_OUTPUT_PATH, "a", newline="")
+    writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES)
+    if write_header:
+        writer.writeheader()
+
+    total_written = 0
+
+    for idx, (file_path, dataset_name) in enumerate(all_files):
+        file_name = file_path.name
+        print(f"[{idx + 1}/{len(all_files)}] {file_name}")
+
+        # ── OPUS (Classico su CPU) ────────────────────────────────
+        for kbps in OPUS_KBPS:
+            if (file_name, "Opus", float(kbps)) in done:
+                continue
+            row = {"file": file_name, "dataset": dataset_name, "codec": "Opus", "param": kbps, "status": "OK"}
+            try:
+                m = compress_opus(str(file_path), kbps)
+                row.update(m)
+            except Exception as e:
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] Opus {kbps}k: {e}")
+            writer.writerow(row)
+            total_written += 1
+
+        # ── ENCODEC (Neurale su GPU) ──────────────────────────────
+        for bw in ENCODEC_BW:
+            if (file_name, "EnCodec", float(bw)) in done:
+                continue
+            row = {"file": file_name, "dataset": dataset_name, "codec": "EnCodec", "param": bw, "status": "OK"}
+            try:
+                m = compress_encodec(str(file_path), bw)
+                row.update(m)
+            except Exception as e:
+                import torch
+                torch.cuda.empty_cache()
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] EnCodec {bw}k: {e}")
+            writer.writerow(row)
+            total_written += 1
+
+        if (idx + 1) % SAVE_INTERVAL == 0:
+            csvfile.flush()
+
+    csvfile.close()
+    print(f"\nProfilazione Audio completata! File: {CSV_OUTPUT_PATH}")
+
+if __name__ == "__main__":
+    run_audio_telemetry()
+
+========================================
+FILE: ./src/selector/feature_extractor.py
+========================================
+import cv2
+import numpy as np
+import os
+import time
+from typing import Dict, Tuple
+
+class SpatialFeatureExtractor:
+    """
+    Estrattore di feature spaziali (8-D) per il routing XGBoost.
+    Ottimizzato per vincoli Edge (< 15 ms su CPU).
+    """
+    def __init__(self):
+         self.feature_names = [
+            "variance",
+            "entropy",
+            "sobel_mean",
+            "rms_contrast",
+            "laplacian_var",
+            "skewness",
+            "kurtosis",
+            "edge_density",
+            "megapixels",
+            "aspect_ratio",
+        ]
+
+    def extract_features(self, image_path: str) -> Tuple[Dict[str, float], np.ndarray]:
+        img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise ValueError(f"Impossibile leggere immagine: {image_path}")
+
+        img_float = img.astype(np.float32)
+        features = {}
+
+        # 1. Varianza globale
+        features["variance"] = float(np.var(img_float))
+
+        # 2. Entropia Shannon
+        hist = cv2.calcHist([img], [0], None, [256], [0, 256]).ravel()
+        hist = hist / hist.sum()
+        non_zero = hist[hist > 0]
+        features["entropy"] = float(-np.sum(non_zero * np.log2(non_zero)))
+
+        # 3. Magnitudo media gradienti (Sobel)
+        grad_x = cv2.Sobel(img_float, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(img_float, cv2.CV_32F, 0, 1, ksize=3)
+        magnitude = cv2.magnitude(grad_x, grad_y)
+        features["sobel_mean"] = float(np.mean(magnitude))
+
+        # 4. Contrasto RMS
+        features["rms_contrast"] = float(np.std(img_float / 255.0))
+
+        # 5. Laplacian variance (blur detection)
+        lap = cv2.Laplacian(img_float, cv2.CV_32F)
+        features["laplacian_var"] = float(np.var(lap))
+
+        # --- NUOVE FEATURE ---
+        
+        # Statistica di ordine superiore (Momenti)
+        mean_val = np.mean(img_float)
+        std_val = np.std(img_float) + 1e-8  # Evita divisioni per zero
+        
+        # 6. Skewness
+        skewness = np.mean(((img_float - mean_val) / std_val) ** 3)
+        features["skewness"] = float(skewness)
+        
+        # 7. Kurtosi (eccesso)
+        kurtosis = np.mean(((img_float - mean_val) / std_val) ** 4) - 3.0
+        features["kurtosis"] = float(kurtosis)
+
+        # 8. Edge Density (Canny)
+        # Soglie 100-200 sono lo standard aureo per immagini naturali
+        edges = cv2.Canny(img, 100, 200)
+        edge_density = np.count_nonzero(edges) / edges.size
+        features["edge_density"] = float(edge_density)
+
+        # 9. Risoluzione (megapixels)
+        h, w = img.shape[:2]
+        features["megapixels"] = float(h * w) / 1e6
+
+        # 10. Aspect ratio
+        features["aspect_ratio"] = float(w) / float(h)
+
+        # Array per XGBoost: blindato sull'ordine della lista master
+        feature_array = np.array([features[name] for name in self.feature_names], dtype=np.float32)
+
+        return features, feature_array
+
+
+if __name__ == "__main__":
+    extractor = SpatialFeatureExtractor()
+    test_img = os.path.expanduser("~/tesi/datasets/kodak/kodim01.png")
+
+    if os.path.exists(test_img):
+        start = time.perf_counter()
+        feats, array = extractor.extract_features(test_img)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+
+        print(f"✅ 10 Feature estratte in {elapsed_ms:.2f} ms")
+        print("Feature dizionario:")
+        for k, v in feats.items():
+            print(f"  {k:15}: {v:10.4f}")
+        print(f"\nArray XGBoost   : {array.shape}")
+    else:
+        print(f"❌ File di test non trovato: {test_img}")
+
+========================================
+FILE: ./src/selector/train_xgboost.py
+========================================
+"""
+Training del selettore XGBoost sul dataset dell'oracolo.
+Input: oracle_v2_multi.csv + feature estratte da feature_extractor.py
+Output: modello salvato + report accuracy + feature importance
+"""
+
+import os
+import sys
+from typing import Any, cast
+
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.preprocessing import LabelEncoder
+from xgboost import XGBClassifier
+from sklearn.utils.class_weight import compute_sample_weight
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.selector.feature_extractor import SpatialFeatureExtractor
+
+ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_eco_jxl_4class.csv")
+RESULTS_DIR = os.path.expanduser("~/tesi/results/selector")
+MODEL_PATH = os.path.expanduser("~/tesi/results/selector/xgboost_model.pkl")
+FEATURES_CACHE = os.path.expanduser("~/tesi/results/selector/features_cache.csv")
+
+FEATURE_COLS = [
+    "variance",
+    "entropy",
+    "sobel_mean",
+    "rms_contrast",
+    "laplacian_var",
+    "skewness",
+    "kurtosis",
+    "edge_density",
+    "megapixels",
+    "aspect_ratio",
+]
+
+
+def extract_all_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Estrae le 8 feature spaziali per ogni immagine nel dataset."""
+    extractor = SpatialFeatureExtractor()
+
+    # carica cache se esiste
+    if os.path.exists(FEATURES_CACHE):
+        cache = pd.read_csv(FEATURES_CACHE, index_col="image")
+        print(f"Cache feature trovata: {len(cache)} immagini")
+    else:
+        cache = pd.DataFrame()
+
+    rows = []
+    for _, row in df.iterrows():
+        img_path = str(row["image"])
+        
+        feat: dict[str, Any] = {}
+
+        if len(cache) > 0 and img_path in cache.index:
+            feat = {str(k): v for k, v in cache.loc[img_path].to_dict().items()}
+        else:
+            try:
+                feat = cast(dict[str, Any], extractor.extract_features(img_path)[0])
+            except Exception as e:
+                print(f"  ERRORE feature {img_path}: {e}")
+                continue
+
+        feat["image"] = img_path
+        feat["codec"] = str(row["codec"])
+        feat["dataset"] = str(row["dataset"])
+        rows.append(feat)
+
+    features_df = pd.DataFrame(rows)
+
+    # salva cache
+    features_df.set_index("image")[FEATURE_COLS].to_csv(FEATURES_CACHE)
+
+    return features_df
+
+
+def train_xgboost(features_df: pd.DataFrame) -> tuple[XGBClassifier, LabelEncoder, float]:
+    """Addestra XGBoost e valuta sull'hold-out set."""
+
+    X = features_df[FEATURE_COLS].values
+    y_raw = np.array(features_df["codec"].values)
+
+    # encode labels
+    le = LabelEncoder()
+    y = le.fit_transform(y_raw)
+    classes = le.classes_
+    print(f"\nClassi: {classes}")
+    print(f"Distribuzione:\n{pd.Series(y_raw).value_counts()}")
+
+    # split 80/20
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+    print(f"\nTrain: {len(X_train)} immagini, Test: {len(X_test)} immagini")
+
+    # addestra XGBoost
+    model = XGBClassifier(
+        n_estimators=100,
+        max_depth=3,
+        learning_rate=0.1,
+        min_child_weight=1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        eval_metric="mlogloss",
+        verbosity=0,
+    )
+
+    # Calcola il peso per ogni campione nel training set
+    sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+
+    # Passa i pesi al modello
+    model.fit(X_train, y_train, sample_weight=sample_weights)
+
+    model.fit(X_train, y_train)
+
+    # valuta
+    y_pred = model.predict(X_test)
+    accuracy = float((y_pred == y_test).mean())
+    print(f"\nAccuracy hold-out: {accuracy:.3f} ({accuracy * 100:.1f}%)")
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred, target_names=classes))
+
+    # cross-validation
+    cv_scores = cross_val_score(model, X, y, cv=5, scoring="accuracy")
+    print(f"\nCross-validation 5-fold: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+
+    # feature importance
+    importance = pd.Series(model.feature_importances_, index=FEATURE_COLS)
+    importance = importance.sort_values(ascending=False)
+    print("\nFeature importance:")
+    for feat, imp in importance.items():
+        print(f"  {feat:20s}: {imp:.4f}")
+
+    # salva modello e label encoder
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    joblib.dump({"model": model, "label_encoder": le, "features": FEATURE_COLS}, MODEL_PATH)
+    print(f"\nModello salvato in {MODEL_PATH}")
+
+    # plot feature importance + confusion matrix
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    importance.plot(kind="bar", ax=axes[0], color="steelblue")
+    axes[0].set_title("Feature Importance XGBoost")
+    axes[0].set_ylabel("Importance")
+    axes[0].tick_params(axis="x", rotation=45)
+    axes[0].grid(True, alpha=0.3)
+
+    cm = confusion_matrix(y_test, y_pred)
+    im = axes[1].imshow(cm, cmap="Blues")
+    axes[1].set_xticks(range(len(classes)))
+    axes[1].set_yticks(range(len(classes)))
+    axes[1].set_xticklabels(classes, rotation=45)
+    axes[1].set_yticklabels(classes)
+    axes[1].set_xlabel("Predicted")
+    axes[1].set_ylabel("True")
+    axes[1].set_title("Confusion Matrix")
+    for i in range(len(classes)):
+        for j in range(len(classes)):
+            axes[1].text(j, i, cm[i, j], ha="center", va="center")
+    plt.colorbar(im, ax=axes[1])
+
+    plt.tight_layout()
+    plot_path = os.path.join(RESULTS_DIR, "xgboost_results.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    print(f"Plot salvato in {plot_path}")
+
+    return model, le, accuracy
+
+
+if __name__ == "__main__":
+    print("Caricamento dati oracolo...")
+    df = pd.read_csv(ORACLE_CSV)
+    df = df[df["codec"] != "ERROR"].reset_index(drop=True)
+    print(f"Immagini valide: {len(df)}")
+
+    print("\nEstrazione feature spaziali...")
+    features_df = extract_all_features(df)
+    print(f"Feature estratte: {len(features_df)}")
+
+    print("\nTraining XGBoost...")
+    model, le, accuracy = train_xgboost(features_df)
+
+    print(f"\n{'=' * 50}")
+    print(f"RISULTATO FINALE: Accuracy = {accuracy:.1%}")
+    print(f"{'=' * 50}")
+
+========================================
+FILE: ./src/selector/oracle_audio_dac.py
+========================================
+import csv
+import os
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.benchmark.benchmark_audio import compress_dac
+
+# ================== CONFIG ==================
+CSV_OUTPUT_PATH = os.path.expanduser("~/tesi/results/audio/oracle_audio_telemetry.csv")
+SAVE_INTERVAL = 5
+
+DATASETS = {
+    "librispeech": os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    "esc50":       os.path.expanduser("~/tesi/datasets_audio/esc50_sample"),
+    "musdb":       os.path.expanduser("~/tesi/datasets_audio/musdb_sample"),
+}
+
+# DAC 24kHz viaggia nativamente a 8.0 kbps
+DAC_BW = [8.0]
+
+FIELDNAMES = [
+    "file", "dataset", "codec", "param",
+    "kbps", "pesq", "mel_dist", "audio_dist", "enc_ms", "status"
+]
+
+def load_done():
+    done = set()
+    if os.path.exists(CSV_OUTPUT_PATH):
+        with open(CSV_OUTPUT_PATH, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["status"] == "OK" and row["codec"] == "DAC":
+                    done.add((row["file"], row["codec"], float(row["param"])))
+    return done
+
+def run_dac_telemetry():
+    done = load_done()
+    print(f"Resume: {len(done)} file DAC già completati.")
+
+    all_files = []
+    for dataset_name, dataset_path in DATASETS.items():
+        files = list(Path(dataset_path).rglob("*.wav")) + list(Path(dataset_path).rglob("*.flac"))
+        all_files.extend([(f, dataset_name) for f in files])
+
+    print(f"\nInizio append DAC su {len(all_files)} file...\n")
+
+    csvfile = open(CSV_OUTPUT_PATH, "a", newline="")
+    writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES)
+
+    for idx, (file_path, dataset_name) in enumerate(all_files):
+        file_name = file_path.name
+        
+        for bw in DAC_BW:
+            if (file_name, "DAC", float(bw)) in done:
+                continue
+                
+            print(f"[{idx + 1}/{len(all_files)}] Eseguo DAC su {file_name}")
+            row = {"file": file_name, "dataset": dataset_name, "codec": "DAC", "param": bw, "status": "OK"}
+            
+            try:
+                m = compress_dac(str(file_path), bw)
+                row.update(m)
+            except Exception as e:
+                import torch
+                torch.cuda.empty_cache()
+                row["status"] = f"ERROR: {str(e)[:100]}"
+                print(f"  [!] Errore DAC: {e}")
+                
+            writer.writerow(row)
+
+        if (idx + 1) % SAVE_INTERVAL == 0:
+            csvfile.flush()
+
+    csvfile.close()
+    print("\nTelemetria DAC completata e integrata nel CSV!")
+
+if __name__ == "__main__":
+    run_dac_telemetry()
+
+========================================
+FILE: ./src/selector/train_cnn.py
+========================================
+"""
+Training della Micro-CNN per il selettore adattivo.
+Ablation study: confronto con XGBoost su stesso hold-out set.
+Input: oracle_v2_multi.csv + patch a risoluzione nativa (128x128)
+Output: modello salvato + report accuracy + plot training
+"""
+
+import os
+import sys
+from typing import Optional
+from typing import cast
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from pathlib import Path
+from PIL import Image
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+
+ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_raw_telemetry_eco_winners_3class.csv")
+RESULTS_DIR = os.path.expanduser("~/tesi/results/selector")
+MODEL_PATH = os.path.expanduser("~/tesi/results/selector/cnn_model.pth")
+
+IMG_SIZE = 128
+BATCH_SIZE = 32
+EPOCHS = 50
+LR = 1e-3
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ── Dataset ──────────────────────────────────────────────────────
+
+
+class CodecDataset(Dataset):
+    """
+    Dataset di patch a risoluzione nativa con data augmentation.
+    Preserva le alte frequenze spaziali vitali per la compressione.
+    """
+
+    def __init__(self, img_paths: list[str], labels: list[int], is_train: bool = True) -> None:
+        self.img_paths = img_paths
+        self.labels = labels
+        self.is_train = is_train
+
+        # Pipeline per il Training (Augmentation estrema e random crop)
+        if self.is_train:
+            self.transform = transforms.Compose([
+                transforms.RandomCrop(IMG_SIZE, pad_if_needed=True, padding_mode='reflect'),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+        # Pipeline per il Test (Crop centrale deterministico)
+        else:
+            self.transform = transforms.Compose([
+                transforms.CenterCrop(IMG_SIZE),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+
+    def __len__(self) -> int:
+        return len(self.img_paths)
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+        img = Image.open(self.img_paths[idx]).convert("RGB")
+        
+        # Usiamo cast per placare l'ansia di Pylance
+        x = cast(torch.Tensor, self.transform(img))
+        
+        return x, self.labels[idx]
+
+
+# ── Architettura ─────────────────────────────────────────────────
+
+
+class MicroCNN(nn.Module):
+    """
+    Micro-CNN per routing del codec.
+    Input: patch 3x128x128
+    Output: logit per N classi codec
+    """
+
+    def __init__(self, n_classes: int) -> None:
+        super().__init__()
+        self.features = nn.Sequential(
+            # Block 1: 128 -> 64
+            nn.Conv2d(3, 32, 3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            # Block 2: 64 -> 32
+            nn.Conv2d(32, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            # Block 3: 32 -> 16
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            # Block 4: 16 -> 8
+            nn.Conv2d(128, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d(4),
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256 * 4 * 4, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(256, n_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.features(x))
+
+
+# ── Training ─────────────────────────────────────────────────────
+
+
+def train_epoch(
+    model: MicroCNN,
+    loader: DataLoader,
+    optimizer: optim.Optimizer,
+    criterion: nn.Module,
+) -> float:
+    model.train()
+    total_loss = 0.0
+    for x, y in loader:
+        x, y = x.to(DEVICE), y.to(DEVICE)
+        optimizer.zero_grad()
+        loss = criterion(model(x), y)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+    return total_loss / len(loader)
+
+
+def eval_epoch(model: MicroCNN, loader: DataLoader) -> float:
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for x, y in loader:
+            x, y = x.to(DEVICE), y.to(DEVICE)
+            preds = model(x).argmax(dim=1)
+            correct += (preds == y).sum().item()
+            total += len(y)
+    return correct / total
+
+
+def train_cnn(
+    df: pd.DataFrame,
+) -> tuple[MicroCNN, LabelEncoder, float]:
+    """Addestra la Micro-CNN e valuta sull'hold-out set."""
+
+    img_paths = df["image"].tolist()
+    y_raw = np.array(df["codec"].values)
+
+    le = LabelEncoder()
+    y = le.fit_transform(y_raw)
+    classes = le.classes_
+    n_classes = len(classes)
+
+    print(f"\nClassi: {classes}")
+    print(f"Distribuzione:\n{pd.Series(y_raw).value_counts()}")
+
+    # split 80/20 — stesso random_state di XGBoost per confronto equo
+    img_paths_np = np.array(img_paths)
+    y_np = np.array(y)
+
+    idx = np.arange(len(img_paths))
+    idx_train, idx_test = train_test_split(
+        idx, test_size=0.2, random_state=42, stratify=y_np
+    )
+
+    train_paths = img_paths_np[idx_train].tolist()
+    test_paths = img_paths_np[idx_test].tolist()
+    y_train = y_np[idx_train].tolist()
+    y_test_list = y_np[idx_test].tolist()
+
+    print(f"\nTrain: {len(train_paths)} immagini, Test: {len(test_paths)} immagini")
+
+    # Iniettiamo il flag is_train per discriminare i due loader
+    train_loader = DataLoader(
+        CodecDataset(train_paths, y_train, is_train=True),
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+    )
+    test_loader = DataLoader(
+        CodecDataset(test_paths, y_test_list, is_train=False),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+    )
+
+    model = MicroCNN(n_classes=n_classes).to(DEVICE)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+
+    print(f"\nTraining su {DEVICE} per {EPOCHS} epoche...")
+    train_losses = []
+    val_accs = []
+    best_acc = 0.0
+    best_state: Optional[dict] = None
+
+    for epoch in range(1, EPOCHS + 1):
+        loss = train_epoch(model, train_loader, optimizer, criterion)
+        acc = eval_epoch(model, test_loader)
+        scheduler.step()
+        train_losses.append(loss)
+        val_accs.append(acc)
+
+        if acc > best_acc:
+            best_acc = acc
+            best_state = {k: v.clone() for k, v in model.state_dict().items()}
+
+        if epoch % 10 == 0 or epoch == 1:
+            print(f"  Epoch {epoch:3d}/{EPOCHS} | loss={loss:.4f} | val_acc={acc:.3f}")
+
+    # carica il miglior modello
+    if best_state is not None:
+        model.load_state_dict(best_state)
+
+    # valutazione finale
+    model.eval()
+    all_preds = []
+    all_true = []
+    with torch.no_grad():
+        for x, y_batch in test_loader:
+            x = x.to(DEVICE)
+            preds = model(x).argmax(dim=1).cpu().numpy()
+            all_preds.extend(preds)
+            all_true.extend(y_batch.numpy())
+
+    accuracy = float(np.mean(np.array(all_preds) == np.array(all_true)))
+    print(f"\nAccuracy hold-out (best): {accuracy:.3f} ({accuracy * 100:.1f}%)")
+    print("\nClassification Report:")
+    print(classification_report(all_true, all_preds, target_names=classes))
+
+    # salva modello
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    torch.save(
+        {"model_state": model.state_dict(), "label_encoder": le, "n_classes": n_classes},
+        MODEL_PATH,
+    )
+    print(f"\nModello salvato in {MODEL_PATH}")
+
+    # plot training curve + confusion matrix
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    axes[0].plot(train_losses, color="steelblue")
+    axes[0].set_title("Training Loss")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].plot(val_accs, color="darkorange")
+    axes[1].axhline(best_acc, color="red", linestyle="--", label=f"Best: {best_acc:.3f}")
+    axes[1].set_title("Validation Accuracy")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("Accuracy")
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+
+    cm = confusion_matrix(all_true, all_preds)
+    im = axes[2].imshow(cm, cmap="Blues")
+    axes[2].set_xticks(range(len(classes)))
+    axes[2].set_yticks(range(len(classes)))
+    axes[2].set_xticklabels(classes, rotation=45)
+    axes[2].set_yticklabels(classes)
+    axes[2].set_xlabel("Predicted")
+    axes[2].set_ylabel("True")
+    axes[2].set_title("Confusion Matrix CNN")
+    for i in range(len(classes)):
+        for j in range(len(classes)):
+            axes[2].text(j, i, cm[i, j], ha="center", va="center")
+    plt.colorbar(im, ax=axes[2])
+
+    plt.tight_layout()
+    plot_path = os.path.join(RESULTS_DIR, "cnn_results.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    print(f"Plot salvato in {plot_path}")
+
+    return model, le, accuracy
+
+
+# ── Main ─────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    print("Caricamento dati oracolo...")
+    df = pd.read_csv(ORACLE_CSV)
+    df = df[df["codec"] != "ERROR"].reset_index(drop=True)
+    print(f"Immagini valide: {len(df)}")
+
+    print(f"\nDevice: {DEVICE}")
+    print(f"Architettura: MicroCNN 128x128 → {EPOCHS} epoche")
+
+    model, le, accuracy = train_cnn(df)
+
+    print(f"\n{'=' * 50}")
+    print(f"RISULTATO FINALE CNN: Accuracy = {accuracy:.1%}")
+    print(f"{'=' * 50}")
+
+========================================
+FILE: ./src/selector/baseline_selector.py
+========================================
+"""
+Selettore baseline statico per l'ablation study.
+Non usa feature dell'immagine — predice il codec più frequente
+per fascia di bpp nel dataset di training.
+Confrontato con XGBoost e CNN sullo stesso hold-out set.
+"""
+
+import os
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+
+ORACLE_CSV = os.path.expanduser("~/tesi/results/oracle/oracle_v2_multi.csv")
+RESULTS_DIR = os.path.expanduser("~/tesi/results/selector")
+
+
+def train_baseline(df: pd.DataFrame) -> tuple[float, float]:
+    """
+    Selettore statico: per ogni immagine di test predice il codec
+    più frequente nel training set (majority class baseline).
+    Questo è il lower bound — qualsiasi modello serio deve batterlo.
+    """
+    y_raw = np.array(df["winner_codec"].values)
+
+    le = LabelEncoder()
+    # Forziamo np.array per placare Pylance (risolve ArrayLike issue)
+    y = np.array(le.fit_transform(y_raw))
+    classes = np.array(le.classes_)
+
+    print(f"\nClassi: {classes}")
+    print(f"Distribuzione:\n{pd.Series(y_raw).value_counts()}")
+
+    # split 80/20 — stesso random_state di XGBoost e CNN
+    idx = np.arange(len(y))
+    idx_train, idx_test = train_test_split(
+        idx, test_size=0.2, random_state=42, stratify=y
+    )
+    idx_train = np.array(idx_train)
+    idx_test = np.array(idx_test)
+
+    y_train = y[idx_train]
+    y_test = y[idx_test]
+
+    print(f"\nTrain: {len(y_train)} immagini, Test: {len(y_test)} immagini")
+
+    # strategia 1: majority class — predice sempre la classe più frequente
+    majority_class = int(np.bincount(y_train).argmax())
+    y_pred_majority = np.full_like(y_test, majority_class)
+    acc_majority = float((y_pred_majority == y_test).mean())
+
+    print(f"\n--- Baseline Majority Class ---")
+    print(f"Classe predetta sempre: {classes[majority_class]}")
+    print(f"Accuracy: {acc_majority:.3f} ({acc_majority * 100:.1f}%)")
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred_majority, target_names=classes))
+
+    # strategia 2: distribuzione proporzionale — campiona dalla distribuzione del training
+    train_probs = np.bincount(y_train) / len(y_train)
+    np.random.seed(42)
+    y_pred_random = np.random.choice(len(classes), size=len(y_test), p=train_probs)
+    acc_random = float((y_pred_random == y_test).mean())
+
+    print(f"\n--- Baseline Random Proportional ---")
+    print(f"Probabilità per classe: {dict(zip(classes, train_probs.round(3)))}")
+    print(f"Accuracy: {acc_random:.3f} ({acc_random * 100:.1f}%)")
+
+    # plot confusion matrix majority
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    cm = confusion_matrix(y_test, y_pred_majority)
+    im = axes[0].imshow(cm, cmap="Blues")
+    axes[0].set_xticks(range(len(classes)))
+    axes[0].set_yticks(range(len(classes)))
+    axes[0].set_xticklabels(classes, rotation=45)
+    axes[0].set_yticklabels(classes)
+    axes[0].set_xlabel("Predicted")
+    axes[0].set_ylabel("True")
+    axes[0].set_title(f"Baseline Majority\nAccuracy: {acc_majority:.1%}")
+    for i in range(len(classes)):
+        for j in range(len(classes)):
+            axes[0].text(j, i, cm[i, j], ha="center", va="center")
+    plt.colorbar(im, ax=axes[0])
+
+    # distribuzione classi nel dataset
+    class_counts = pd.Series(y_raw).value_counts()
+    axes[1].bar(class_counts.index, class_counts.values, color="steelblue")
+    axes[1].set_title("Distribuzione vincitori nel dataset")
+    axes[1].set_ylabel("Numero immagini")
+    axes[1].tick_params(axis="x", rotation=45)
+    axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plot_path = os.path.join(RESULTS_DIR, "baseline_results.png")
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    print(f"\nPlot salvato in {plot_path}")
+
+    return acc_majority, acc_random
+
+
+def print_ablation_summary(
+    acc_baseline: float,
+    acc_xgboost: float | None = None,
+    acc_cnn: float | None = None,
+) -> None:
+    """Stampa la tabella riassuntiva dell'ablation study."""
+    print(f"\n{'=' * 60}")
+    print("ABLATION STUDY — CONFRONTO SELETTORI")
+    print(f"{'=' * 60}")
+    print(f"{'Selettore':<25} {'Accuracy':>10} {'Latenza':>12} {'Interpretabile':>15}")
+    print(f"{'-' * 60}")
+    print(f"{'Baseline (majority)':<25} {acc_baseline:>10.1%} {'<1ms':>12} {'Sì':>15}")
+    if acc_xgboost is not None:
+        delta = acc_xgboost - acc_baseline
+        print(
+            f"{'XGBoost (8 feature)':<25} {acc_xgboost:>10.1%} "
+            f"{'~40ms':>12} {'Sì':>15}  (+{delta:.1%})"
+        )
+    if acc_cnn is not None:
+        delta = acc_cnn - acc_baseline
+        print(
+            f"{'Micro-CNN (128x128)':<25} {acc_cnn:>10.1%} "
+            f"{'~5ms':>12} {'No':>15}  (+{delta:.1%})"
+        )
+    print(f"{'=' * 60}")
+
+
+if __name__ == "__main__":
+    print("Caricamento dati oracolo...")
+    df = pd.read_csv(ORACLE_CSV)
+    df = df[df["winner_codec"] != "ERROR"].reset_index(drop=True)
+    print(f"Immagini valide: {len(df)}")
+
+    acc_majority, acc_random = train_baseline(df)
+
+    # prova a caricare risultati XGBoost e CNN se disponibili
+    xgboost_acc = None
+    cnn_acc = None
+
+    xgboost_model_path = os.path.join(RESULTS_DIR, "xgboost_model.pkl")
+    if os.path.exists(xgboost_model_path):
+        import joblib
+        from src.selector.feature_extractor import SpatialFeatureExtractor
+        from sklearn.preprocessing import LabelEncoder as LE
+
+        saved = joblib.load(xgboost_model_path)
+        model = saved["model"]
+        le = saved["label_encoder"]
+        feature_cols = saved["features"]
+
+        extractor = SpatialFeatureExtractor()
+        y_raw = np.array(df["winner_codec"].values)
+        le2 = LE()
+        
+        # Risolve l'errore di len(y) forzando np.array
+        y = np.array(le2.fit_transform(y_raw))
+        idx = np.arange(len(y))
+        _, idx_test = train_test_split(idx, test_size=0.2, random_state=42, stratify=y)
+
+        features = []
+        valid_idx = []
+        for i in idx_test:
+            try:
+                feat = extractor.extract_features(str(df.iloc[i]["image"]))
+                features.append([feat[c] for c in feature_cols])
+                valid_idx.append(i)
+            except Exception:
+                continue
+
+        if features:
+            X_test = np.array(features)
+            valid_idx_arr = np.array(valid_idx)
+            
+            # Diviso in passaggi espliciti per evitare l'errore di slicing di Pylance
+            y_subset = y[valid_idx_arr]
+            inverse_y = le2.inverse_transform(y_subset)
+            y_test = np.array(le.transform(inverse_y))
+            
+            y_pred = model.predict(X_test)
+            xgboost_acc = float((y_pred == y_test).mean())
+            print(f"\nXGBoost accuracy (dal file salvato): {xgboost_acc:.1%}")
+
+    print_ablation_summary(acc_majority, xgboost_acc, cnn_acc)
+
+    print(f"\n{'=' * 60}")
+    print(f"BASELINE FINALE: {acc_majority:.1%} (majority class)")
+    print(f"{'=' * 60}")
+
+========================================
+FILE: ./src/selector/tune_audio_policy.py
+========================================
+import os
+import pandas as pd
+
+RAW_CSV = os.path.expanduser("~/tesi/results/audio/oracle_audio_telemetry.csv")
+
+def simulate_policy(max_kbps, min_pesq):
+    # Ricorda: audio_dist = 4.5 - PESQ. Quindi PESQ >= 3.0 significa audio_dist <= 1.5
+    dist_thresh = 4.5 - min_pesq
+    
+    df = pd.read_csv(RAW_CSV)
+    df = df[(df["status"] == "OK") & (df["kbps"] <= max_kbps)]
+    
+    if df.empty:
+        return 0, 0
+        
+    opus_wins = 0
+    encodec_wins = 0
+    
+    for file_name, group in df.groupby("file"):
+        decent_opus = group[(group["audio_dist"] <= dist_thresh) & (group["codec"] == "Opus")]
+        if not decent_opus.empty:
+            opus_wins += 1
+        else:
+            # Fallback a EnCodec se Opus fallisce la soglia
+            decent_encodec = group[(group["audio_dist"] <= dist_thresh) & (group["codec"] == "EnCodec")]
+            if not decent_encodec.empty:
+                encodec_wins += 1
+            else:
+                # Se fanno schifo entrambi, prende il meno peggio assoluto
+                best = group.loc[group["audio_dist"].idxmin()]
+                if best["codec"] == "Opus": opus_wins += 1
+                else: encodec_wins += 1
+                
+    return opus_wins, encodec_wins
+
+print("Simulazione Policy Eco-Mode Audio (Ricerca del Fallback Neurale)\n")
+print(f"{'Max KBPS':<10} | {'Min PESQ':<10} | {'Opus Wins':<12} | {'EnCodec Wins':<12}")
+print("-" * 50)
+
+# Testiamo varie combinazioni matematiche
+scenarios = [
+    (48.0, 3.0),  # Quello che hai appena fatto (troppo facile per Opus)
+    (24.0, 3.0),  # Dimezziamo la banda
+    (24.0, 3.5),  # Pretendiamo altissima qualità
+    (12.0, 3.0),  # Soffochiamo Opus a bitrate da modem 56k
+    (12.0, 3.5),
+]
+
+for kbps, pesq in scenarios:
+    o_wins, e_wins = simulate_policy(kbps, pesq)
+    print(f"{kbps:<10} | {pesq:<10} | {o_wins:<12} | {e_wins:<12}")
+
+========================================
+FILE: ./src/selector/train_xgboost_audio.py
+========================================
+import os
+import sys
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from tqdm import tqdm
+import warnings
+import joblib
+
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import classification_report
+from xgboost import XGBClassifier
+
+warnings.filterwarnings('ignore')
+sys.path.insert(0, os.path.expanduser("~/tesi"))
+from src.selector.feature_extractor_audio import AudioFeatureExtractor
+
+# ================== CONFIGURAZIONE ==================
+RAW_CSV = os.path.expanduser("~/tesi/results/audio/oracle_audio_telemetry.csv")
+ECO_CSV = os.path.expanduser("~/tesi/results/audio/oracle_audio_eco_winners.csv")
+FEATURES_CACHE = os.path.expanduser("~/tesi/results/audio/features_audio_cache.csv")
+MODEL_PATH = os.path.expanduser("~/tesi/results/audio/xgboost_audio_model.pkl")
+
+# Percorsi dove cercare i file audio originali per l'estrazione delle feature
+DATASETS_DIRS = [
+    os.path.expanduser("~/tesi/datasets_audio/librispeech_sample"),
+    os.path.expanduser("~/tesi/datasets_audio/esc50_sample")
+]
+
+# --- POLICY ECO-MODE AUDIO ---
+MAX_KBPS = 12.0
+AUDIO_DIST_THRESH = 1.5  # PESQ >= 3.0
+
+FEATURE_COLS = [
+    "zcr_mean", "zcr_var", "rms_mean", "spectral_centroid_mean", 
+    "spectral_centroid_var", "spectral_bandwidth_mean", "spectral_rolloff_mean", 
+    "mfcc_1_mean", "mfcc_2_mean", "mfcc_3_mean", "mfcc_4_mean"
+]
+
+# ================== 1. APPLICAZIONE POLICY ==================
+def apply_eco_policy():
+    print("Applicazione Policy Eco-Mode Audio...")
+    df = pd.read_csv(RAW_CSV)
+    
+    # Filtro 1: Rimuovi errori e tieni solo configurazioni ammissibili per banda
+    df = df[(df["status"] == "OK") & (df["kbps"] <= MAX_KBPS)]
+    
+    if df.empty:
+        raise ValueError("Nessun dato valido trovato nel CSV sotto i 48 kbps.")
+        
+    winners = []
+    for file_name, group in df.groupby("file"):
+        # Cerca un codec Classico (Opus) che sia "decente" (audio_dist <= 1.5)
+        decent_classical = group[(group["audio_dist"] <= AUDIO_DIST_THRESH) & (group["codec"] == "Opus")]
+        
+        if not decent_classical.empty:
+            # Trovato! Vinci il risparmio energetico. Scegli quello con distorsione minore.
+            best_match = decent_classical.loc[decent_classical["audio_dist"].idxmin()]
+        else:
+            # Fallback Neurale: Opus fa schifo su questo file, proviamo EnCodec
+            decent_neural = group[(group["audio_dist"] <= AUDIO_DIST_THRESH) & (group["codec"] == "EnCodec")]
+            if not decent_neural.empty:
+                best_match = decent_neural.loc[decent_neural["audio_dist"].idxmin()]
+            else:
+                # Caso limite: nulla è decente, salva il salvabile prendendo il minimo assoluto
+                best_match = group.loc[group["audio_dist"].idxmin()]
+                
+        winners.append(best_match)
+        
+    winners_df = pd.DataFrame(winners)
+    os.makedirs(os.path.dirname(ECO_CSV), exist_ok=True)
+    winners_df.to_csv(ECO_CSV, index=False)
+    
+    print(f"Totale immagini/audio processati: {len(winners_df)}")
+    print("\nDistribuzione Vincitori (Eco-Mode):")
+    print(winners_df["codec"].value_counts())
+    return winners_df
+
+# ================== 2. ESTRAZIONE FEATURE ==================
+def get_file_path(filename):
+    """Cerca il file audio originale nelle cartelle dei dataset."""
+    for d in DATASETS_DIRS:
+        for ext in ['.wav', '.flac']:
+            # Cerca il file in modo flessibile
+            paths = list(Path(d).rglob(f"{Path(filename).stem}{ext}"))
+            if paths: 
+                return str(paths[0])
+    return None
+
+def extract_all_features(df: pd.DataFrame) -> pd.DataFrame:
+    if os.path.exists(FEATURES_CACHE):
+        print(f"\nCache feature audio trovata ({FEATURES_CACHE}). Caricamento...")
+        return pd.read_csv(FEATURES_CACHE)
+    
+    print("\nEstrazione feature audio in corso (Numba warm-up iniziale)...")
+    extractor = AudioFeatureExtractor()
+    rows = []
+    
+    for _, row in tqdm(df.iterrows(), total=len(df)):
+        file_path = get_file_path(row["file"])
+        if file_path is None:
+            print(f"ATTENZIONE: File sorgente non trovato per {row['file']}")
+            continue
+            
+        try:
+            feats, _ = extractor.extract_features(file_path)
+            feats["file"] = row["file"]
+            feats["codec"] = row["codec"]
+            rows.append(feats)
+        except Exception as e:
+            print(f"Errore nell'estrazione di {row['file']}: {e}")
+            
+    feat_df = pd.DataFrame(rows)
+    feat_df.to_csv(FEATURES_CACHE, index=False)
+    return feat_df
+
+# ================== 3. TRAINING XGBOOST ==================
+def train_xgboost(features_df: pd.DataFrame):
+    print("\nTraining XGBoost Audio...")
+    X = features_df[FEATURE_COLS].values
+    
+    le = LabelEncoder()
+    y = le.fit_transform(features_df["codec"])
+    classes = le.classes_
+    
+    # Parametri già robusti e testati (max_depth 3 per evitare overfitting su dataset piccoli)
+    model = XGBClassifier(
+        n_estimators=100, max_depth=3, learning_rate=0.1, min_child_weight=1,
+        subsample=0.8, colsample_bytree=0.8, random_state=42, eval_metric="mlogloss", verbosity=0
+    )
+    
+    # Hold-out validation (80-20)
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    model.fit(X_tr, y_tr)
+    y_pred = model.predict(X_te)
+    
+    print(f"\nClassi: {classes}")
+    print("\nClassification Report (Hold-out 20%):")
+    print(classification_report(y_te, y_pred, target_names=classes))
+    
+    # Cross Validation a 5 fold
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy')
+    print(f"==================================================")
+    print(f"RISULTATO CV 5-FOLD: {scores.mean():.3f} ± {scores.std():.3f} ({scores.mean()*100:.1f}%)")
+    print(f"==================================================")
+    
+    # Importanza delle Feature
+    importance = pd.Series(model.feature_importances_, index=FEATURE_COLS).sort_values(ascending=False)
+    print("\nTop Feature Importance:")
+    for feat, imp in importance.head(5).items():
+        print(f"  {feat:25}: {imp:.4f}")
+        
+    joblib.dump({"model": model, "label_encoder": le, "features": FEATURE_COLS}, MODEL_PATH)
+    print(f"\nModello salvato in {MODEL_PATH}")
+
+if __name__ == "__main__":
+    if not os.path.exists(RAW_CSV):
+        print(f"ERRORE: CSV Telemetria non trovato in {RAW_CSV}.")
+        print("Devi aspettare che oracle_audio.py finisca!")
+        sys.exit(1)
+        
+    winners_df = apply_eco_policy()
+    
+    # Resettiamo l'indice prima di fonderlo con le feature per evitare problemi (come con le immagini)
+    winners_df = winners_df.reset_index(drop=True)
+    
+    features_df = extract_all_features(winners_df)
+    train_xgboost(features_df)
+
+========================================
+FILE: ./src/test.py
+========================================
+import visqol_lib_py  # type: ignore
+from visqol.pb2 import visqol_config_pb2
+
+
+def measure_visqol(reference_wav_path, degraded_wav_path):
+    config = visqol_config_pb2.VisqolConfig()
+
+    config.audio.sample_rate = 16000  # type: ignore
+    config.options.use_speech_scoring = True  # type: ignore
+
+    api = visqol_lib_py.VisqolApi()  # type: ignore
+    api.Create(config)  # type: ignore
+
+    # similarity_result = api.Measure(reference_wav_path, degraded_wav_path)  # type: ignore
+    # return similarity_result.moslqo  # type: ignore
+
+
+print("ViSQOL importato e caricato! Il C++ comunica con Python! 🎉")
