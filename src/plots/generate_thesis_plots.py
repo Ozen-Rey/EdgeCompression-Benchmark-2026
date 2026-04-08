@@ -1,6 +1,6 @@
 """
-Grafici R-D-E per la tesi — TUTTE e tre le dimensioni.
-8 codec immagini (full pipeline) + 5 codec audio.
+Grafici R-D-E definitivi per la tesi.
+Dati energia corretti (RAPL+Zeus, idle sottratto) per immagini e audio.
 """
 
 import os
@@ -11,7 +11,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
 
 plt.rcParams.update(
     {
@@ -64,65 +63,13 @@ M = {
     "SNAC": "^",
     "WavTokenizer": "P",
 }
+CODEC_ORDER = ["JPEG", "JXL", "HEVC", "Ballé", "Cheng", "ELIC", "TCM", "DCAE"]
 
 
 # ====================================================================
-# DATI
+# CARICAMENTO
 # ====================================================================
-def load_rde():
-    """Unisci PSNR corretto (da 12-metric) con energia (da full pipeline)."""
-
-    # 1. Energia dal full pipeline benchmark
-    energy = pd.read_csv(
-        os.path.expanduser("~/tesi/results/images/full_pipeline_energy_benchmark.csv")
-    )
-    energy = energy[["codec", "param", "image", "energy_j", "time_total_ms"]].copy()
-
-    # 2. Quality (PSNR corretto) dai 12-metric CSV
-    q_dfs = []
-
-    # Ballé, Cheng, JPEG, HEVC
-    q1 = pd.read_csv(
-        os.path.expanduser("~/tesi/results/images/missing_12metric_benchmark.csv")
-    )
-    q_dfs.append(q1[["codec", "param", "image", "bpp", "psnr"]])
-
-    # TCM, DCAE
-    q2 = pd.read_csv(
-        os.path.expanduser("~/tesi/results/images/sota_12metric_benchmark.csv")
-    )
-    q_dfs.append(q2[["codec", "param", "image", "bpp", "psnr"]])
-
-    # JXL, ELIC (forward pass only per PSNR corretto)
-    q3 = pd.read_csv(os.path.expanduser("~/tesi/results/jxl_vs_elic_benchmark.csv"))
-    q3_filt = q3[(q3["codec"] == "JXL") | (q3["pipeline"] == "forward_pass_only")]
-    q_dfs.append(q3_filt[["codec", "param", "image", "bpp", "psnr"]])
-
-    quality = pd.concat(q_dfs, ignore_index=True)
-
-    # 3. ELIC energia dal vecchio benchmark (full pipeline)
-    elic_full = q3[(q3["codec"] == "ELIC") & (q3["pipeline"] == "full_pipeline")]
-    elic_energy = elic_full[["codec", "param", "image"]].copy()
-    elic_energy["energy_j"] = elic_full["energy_net_j"].values
-    elic_energy["time_total_ms"] = elic_full["time_ms"].values
-    energy = pd.concat([energy, elic_energy], ignore_index=True)
-
-    # 4. Merge quality + energy su codec+param+image
-    merged = quality.merge(energy, on=["codec", "param", "image"], how="inner")
-    merged = merged.dropna(subset=["bpp", "psnr", "energy_j"])
-
-    print(f"  R-D-E merge: {len(merged)} righe")
-    for codec in sorted(merged["codec"].unique()):
-        sub = merged[merged["codec"] == codec]
-        print(
-            f"    {codec}: {len(sub)} righe, PSNR={sub['psnr'].mean():.2f}, E={sub['energy_j'].mean():.2f} J"
-        )
-
-    return merged
-
-
 def load_quality():
-    """12 metriche (per SSIMULACRA2 plot)."""
     dfs = []
     for path in [
         "~/tesi/results/jxl_vs_elic_benchmark.csv",
@@ -138,68 +85,86 @@ def load_quality():
             dfs.append(df)
         except Exception:
             pass
-    cols = ["codec", "param", "image", "bpp", "psnr", "ssimulacra2", "lpips", "ssim"]
-    return pd.concat(
-        [d[[c for c in cols if c in d.columns]] for d in dfs], ignore_index=True
+    cols = ["codec", "param", "image", "bpp", "psnr", "ssimulacra2", "lpips"]
+    merged = []
+    for d in dfs:
+        merged.append(d[[c for c in cols if c in d.columns]])
+    return pd.concat(merged, ignore_index=True)
+
+
+def load_energy():
+    return pd.read_csv(
+        os.path.expanduser("~/tesi/results/images/full_pipeline_energy_benchmark.csv")
     )
+
+
+def load_rde(dfq, dfe):
+    q = dfq[["codec", "param", "image", "bpp", "psnr", "ssimulacra2"]].copy()
+    e = dfe[["codec", "param", "image", "energy_total_net_j", "time_total_ms"]].copy()
+    merged = q.merge(e, on=["codec", "param", "image"], how="inner")
+    merged = merged.dropna(subset=["bpp", "psnr", "energy_total_net_j"])
+    merged = merged.rename(columns={"energy_total_net_j": "energy"})
+    return merged
 
 
 def load_audio():
     d = {}
-    d["full"] = pd.read_csv(
-        os.path.expanduser("~/tesi/results/audio/audio_benchmark_full.csv")
-    )
-    d["wt"] = pd.read_csv(
-        os.path.expanduser("~/tesi/results/audio/wavtokenizer_metrics.csv")
-    )
     d["vsp"] = pd.read_csv(
         os.path.expanduser("~/tesi/results/audio/visqol_benchmark.csv")
     )
     d["vau"] = pd.read_csv(
         os.path.expanduser("~/tesi/results/audio/visqol_audio_mode_benchmark.csv")
     )
-    d["fad"] = pd.read_csv(os.path.expanduser("~/tesi/results/audio/fad_benchmark.csv"))
+    d["energy"] = pd.read_csv(
+        os.path.expanduser("~/tesi/results/audio/full_pipeline_energy_benchmark.csv")
+    )
     return d
 
 
 # ====================================================================
-# HELPER
+# HELPERS
 # ====================================================================
-def avg(df, codec):
+def avg_rde(df, codec):
     s = (
         df[df["codec"] == codec]
         .groupby("param")
-        .agg(bpp=("bpp", "mean"), psnr=("psnr", "mean"), energy=("energy_j", "mean"))
+        .agg(bpp=("bpp", "mean"), psnr=("psnr", "mean"), energy=("energy", "mean"))
         .reset_index()
         .sort_values("bpp")
     )
     return s
 
 
-CODEC_ORDER_IMG = ["JPEG", "JXL", "HEVC", "Ballé", "Cheng", "ELIC", "TCM", "DCAE"]
+def avg_metric(df, codec, metric):
+    s = df[df["codec"] == codec].dropna(subset=[metric])
+    if len(s) == 0:
+        return pd.DataFrame()
+    return (
+        s.groupby("param")
+        .agg(bpp=("bpp", "mean"), val=(metric, "mean"))
+        .reset_index()
+        .sort_values("bpp")
+    )
 
 
 # ====================================================================
-# FIG 1: BUBBLE R-D-E (bpp vs PSNR, bolla = energia)
+# FIG 1: Bubble R-D-E
 # ====================================================================
 def fig1(df):
     fig, ax = plt.subplots(figsize=(10, 6))
-    all_e = df.groupby(["codec", "param"])["energy_j"].mean()
-    e_min = max(all_e.min(), 0.01)
-
-    for codec in CODEC_ORDER_IMG:
-        s = avg(df, codec)
+    for codec in CODEC_ORDER:
+        s = avg_rde(df, codec)
         if len(s) == 0:
             continue
         ax.plot(s["bpp"], s["psnr"], color=C[codec], alpha=0.4, linewidth=1, zorder=3)
-        sizes = np.sqrt(np.maximum(s["energy"].values, e_min) / e_min) * 30
+        sizes = np.sqrt(np.maximum(s["energy"].values, 0.01) / 0.01) * 25
         ax.scatter(
             s["bpp"],
             s["psnr"],
             s=sizes,
             c=C[codec],
             marker=M[codec],
-            edgecolors="black",
+            edgecolors="black" if M[codec] != "x" else C[codec],
             linewidth=0.5,
             zorder=5,
             alpha=0.85,
@@ -209,7 +174,8 @@ def fig1(df):
     ax.set_xlabel("Rate — Bitrate (bpp)")
     ax.set_ylabel("Distortion — PSNR (dB) ↑")
     ax.set_title(
-        "Framework R-D-E: Rate vs Distortion vs Energy\n(dimensione bolla ∝ √energia, full pipeline)"
+        "Framework R-D-E: Rate vs Distortion vs Energy\n"
+        "(dimensione bolla ∝ √energia netta, full pipeline)"
     )
     ax.set_xlim(0, 2.0)
     ax.set_ylim(25, 45)
@@ -218,24 +184,26 @@ def fig1(df):
         Line2D(
             [0], [0], color=C[c], marker=M[c], linestyle="none", markersize=8, label=c
         )
-        for c in CODEC_ORDER_IMG
+        for c in CODEC_ORDER
         if c in df["codec"].unique()
     ]
     leg1 = ax.legend(handles=handles, loc="lower right", title="Codec", ncol=2)
     ax.add_artist(leg1)
 
-    for e_ref in [0.05, 1.0, 15, 400]:
+    for e_ref in [0.04, 1, 10, 150]:
         ax.scatter(
             [],
             [],
-            s=np.sqrt(e_ref / e_min) * 30,
+            s=np.sqrt(e_ref / 0.01) * 25,
             c="gray",
             alpha=0.4,
             edgecolors="black",
             linewidth=0.5,
-            label=f"{e_ref:.0f} J" if e_ref >= 1 else f"{e_ref:.2f} J",
+            label=f"{e_ref:.2f} J" if e_ref < 1 else f"{e_ref:.0f} J",
         )
-    ax.legend(loc="upper right", title="Energia (J)", labelspacing=1.2, framealpha=0.9)
+    ax.legend(
+        loc="upper right", title="Energia netta (J)", labelspacing=1.2, framealpha=0.9
+    )
 
     fig.savefig(os.path.join(OUT, "fig1_rde_bubble.pdf"))
     plt.close()
@@ -243,24 +211,18 @@ def fig1(df):
 
 
 # ====================================================================
-# FIG 2: R-D SSIMULACRA2 (8 codec)
+# FIG 2: SSIMULACRA2 vs bpp
 # ====================================================================
 def fig2(dfq):
     fig, ax = plt.subplots(figsize=(9, 5.5))
-    for codec in CODEC_ORDER_IMG:
-        s = dfq[dfq["codec"] == codec].dropna(subset=["ssimulacra2"])
+    for codec in CODEC_ORDER:
+        s = avg_metric(dfq, codec, "ssimulacra2")
         if len(s) == 0:
             continue
-        a = (
-            s.groupby("param")
-            .agg(bpp=("bpp", "mean"), s2=("ssimulacra2", "mean"))
-            .reset_index()
-            .sort_values("bpp")
-        )
         lw = 2.8 if codec == "JXL" else 1.8
         ax.plot(
-            a["bpp"],
-            a["s2"],
+            s["bpp"],
+            s["val"],
             color=C[codec],
             marker=M.get(codec, "o"),
             label=codec,
@@ -270,7 +232,7 @@ def fig2(dfq):
 
     ax.set_xlabel("Rate (bpp)")
     ax.set_ylabel("SSIMULACRA2 (↑ meglio)")
-    ax.set_title("Qualità psicovisiva vs Bitrate — JXL domina anche vs SOTA 2025")
+    ax.set_title("Qualità psicovisiva (Butteraugli/SSIMULACRA2) vs Bitrate")
     ax.legend(loc="lower right", ncol=2)
     ax.set_xlim(0, 2.0)
     ax.axhline(y=0, color="gray", linestyle=":", alpha=0.5)
@@ -281,12 +243,12 @@ def fig2(dfq):
 
 
 # ====================================================================
-# FIG 3: PSNR vs Energia (efficienza qualità/costo)
+# FIG 3: PSNR vs Energia
 # ====================================================================
 def fig3(df):
     fig, ax = plt.subplots(figsize=(9, 5.5))
-    for codec in CODEC_ORDER_IMG:
-        s = avg(df, codec)
+    for codec in CODEC_ORDER:
+        s = avg_rde(df, codec)
         if len(s) == 0:
             continue
         ax.plot(
@@ -299,9 +261,9 @@ def fig3(df):
             linewidth=1.8,
         )
 
-    ax.set_xlabel("Energy — Energia full pipeline (J) →")
-    ax.set_ylabel("Distortion — PSNR (dB) ↑")
-    ax.set_title("Trade-off Qualità vs Energia (full pipeline)")
+    ax.set_xlabel("Energia netta (J) →")
+    ax.set_ylabel("PSNR (dB) ↑")
+    ax.set_title("Trade-off Qualità vs Energia (full pipeline, idle sottratto)")
     ax.set_xscale("log")
     ax.legend(loc="lower right", ncol=2)
 
@@ -311,27 +273,24 @@ def fig3(df):
 
 
 # ====================================================================
-# FIG 4: Energy bar chart a ~34 dB (confronto fair)
+# FIG 4: Energy bar chart immagini
 # ====================================================================
 def fig4(df):
-    # Prendi i punti a qualità medio-alta per confronto
-    targets_raw = {
-        ("JPEG", "q=85"): None,
-        ("JXL", "d=1.0"): None,
-        ("HEVC", "crf=25"): None,
-        ("Ballé", "q=5"): None,
-        ("Cheng", "q=5"): None,
-        ("ELIC", "lam=0.150"): None,
-        ("TCM", "lam=0.013"): None,
-        ("DCAE", "lam=0.013"): None,
-    }
-
+    targets_def = [
+        ("JPEG", "q=85"),
+        ("JXL", "d=1.0"),
+        ("HEVC", "crf=25"),
+        ("Ballé", "q=5"),
+        ("Cheng", "q=5"),
+        ("ELIC", "lam=0.150"),
+        ("TCM", "lam=0.013"),
+        ("DCAE", "lam=0.013"),
+    ]
     targets = []
-    for codec, param in targets_raw:
-        sub = df[(df["codec"] == codec) & (df["param"] == param)]
-        if len(sub) > 0:
-            targets.append((codec, param, sub["psnr"].mean(), sub["energy_j"].mean()))
-
+    for codec, param in targets_def:
+        s = df[(df["codec"] == codec) & (df["param"] == param)]
+        if len(s) > 0:
+            targets.append((codec, param, s["psnr"].mean(), s["energy"].mean()))
     targets.sort(key=lambda x: x[3])
 
     labels = [f"{t[0]}\n{t[1]}\n({t[2]:.0f} dB)" for t in targets]
@@ -347,17 +306,16 @@ def fig4(df):
         linewidth=0.5,
         alpha=0.85,
     )
-
     ax.set_xticks(range(len(targets)))
     ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("Energia full pipeline (J)")
-    ax.set_title("Costo energetico per codec (Kodak, full pipeline)")
+    ax.set_ylabel("Energia netta (J)")
     ax.set_yscale("log")
     ax.set_ylim(0.01, 1000)
+    ax.set_title("Costo energetico per codec immagini (full pipeline, idle sottratto)")
 
     for i, v in enumerate(energies):
         label = f"{v:.2f}" if v < 1 else f"{v:.0f}"
-        ax.text(i, v * 1.3, f"{label} J", ha="center", fontsize=8, fontweight="bold")
+        ax.text(i, v * 1.4, f"{label} J", ha="center", fontsize=8, fontweight="bold")
 
     fig.savefig(os.path.join(OUT, "fig4_energy_bar.pdf"))
     plt.close()
@@ -365,29 +323,35 @@ def fig4(df):
 
 
 # ====================================================================
-# FIG 5: Bottleneck (forward vs full)
+# FIG 5: Bottleneck
 # ====================================================================
-def fig5():
-    codecs = [
-        "Ballé\n(5.1M)",
-        "ELIC\n(36.9M)",
-        "TCM\n(45.2M)",
-        "DCAE\n(119.4M)",
-        "Cheng\n(26.6M)",
+def fig5(dfe):
+    codecs_info = [
+        ("Ballé", "q=5", 3),
+        ("ELIC", "lam=0.150", 15),
+        ("TCM", "lam=0.013", 39),
+        ("DCAE", "lam=0.013", 91),
+        ("Cheng", "q=5", 15),
     ]
-    fwd = [3, 15, 39, 91, 15]
-    full = [27, 134, 100, 127, 3336]
+    codecs_data = []
+    for codec, param, fwd_ms in codecs_info:
+        s = dfe[(dfe["codec"] == codec) & (dfe["param"] == param)]
+        if len(s) > 0:
+            codecs_data.append((codec, fwd_ms, s["time_total_ms"].mean()))
+
+    labels = [c[0] for c in codecs_data]
+    fwd = [c[1] for c in codecs_data]
+    full = [c[2] for c in codecs_data]
     arith = [f - fw for f, fw in zip(full, fwd)]
 
-    x = np.arange(len(codecs))
+    x = np.arange(len(labels))
     w = 0.35
-
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.bar(
         x - w / 2,
         fwd,
         w,
-        label="Forward pass",
+        label="Forward pass (GPU)",
         color="#1f77b4",
         edgecolor="black",
         linewidth=0.5,
@@ -398,24 +362,24 @@ def fig5():
         arith,
         w,
         bottom=fwd,
-        label="Codifica aritmetica",
+        label="Codifica aritmetica (CPU)",
         color="#d62728",
         edgecolor="black",
         linewidth=0.5,
         alpha=0.8,
     )
 
-    for i in range(len(codecs)):
+    for i in range(len(labels)):
         ax.text(
             x[i] + w / 2,
             full[i] * 1.08,
-            f"{full[i]} ms",
+            f"{full[i]:.0f} ms",
             ha="center",
             fontsize=8,
             fontweight="bold",
         )
-        pct = arith[i] / full[i] * 100
-        if arith[i] > 20:
+        if arith[i] > 5:
+            pct = arith[i] / full[i] * 100
             ax.text(
                 x[i] + w / 2,
                 fwd[i] + arith[i] / 2,
@@ -428,7 +392,7 @@ def fig5():
             )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(codecs, fontsize=9)
+    ax.set_xticklabels(labels, fontsize=9)
     ax.set_ylabel("Tempo (ms)")
     ax.set_title("Forward pass vs Codifica aritmetica")
     ax.set_yscale("log")
@@ -441,27 +405,15 @@ def fig5():
 
 
 # ====================================================================
-# FIG 6: Audio — ViSQOL dual mode
+# FIG 6: Audio ViSQOL dual mode
 # ====================================================================
 def fig6(aud):
-    kmap = {
-        "12": 12,
-        "24": 24,
-        "48": 48,
-        "1.5": 1.5,
-        "3.0": 3.0,
-        "6.0": 6.0,
-        "8.0": 8.0,
-        "0.8": 0.8,
-        "0.9": 0.9,
-    }
-
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
 
     for codec in ["Opus", "EnCodec", "DAC", "SNAC", "WavTokenizer"]:
         for ax, dkey, vcol in [(a1, "vsp", "visqol"), (a2, "vau", "visqol_audio")]:
             s = aud[dkey][aud[dkey]["codec"] == codec].copy()
-            s["kbps"] = s["param"].astype(str).map(kmap)
+            s["kbps"] = pd.to_numeric(s["param"], errors="coerce")
             s = s.dropna(subset=["kbps"])
             a = s.groupby("kbps")[vcol].mean().reset_index().sort_values("kbps")
             if len(a) > 0:
@@ -492,13 +444,13 @@ def fig6(aud):
 def fig7(aud):
     va = aud["vau"]
     codec_order = [
-        ("SNAC", "0.8"),
-        ("WavTokenizer", "0.9"),
-        ("EnCodec", "1.5"),
-        ("EnCodec", "6.0"),
-        ("DAC", "8.0"),
-        ("Opus", "12"),
-        ("Opus", "48"),
+        ("SNAC", 0.8),
+        ("WavTokenizer", 0.9),
+        ("EnCodec", 1.5),
+        ("EnCodec", 6.0),
+        ("DAC", 8.0),
+        ("Opus", 12),
+        ("Opus", 48),
     ]
     datasets = ["librispeech", "esc50", "musdb"]
     ds_labels = ["LibriSpeech", "ESC-50", "MUSDB18"]
@@ -510,12 +462,10 @@ def fig7(aud):
 
     for i, (ds, dl, dc) in enumerate(zip(datasets, ds_labels, ds_colors)):
         vals = []
-        for codec, param in codec_order:
-            s = va[
-                (va["codec"] == codec)
-                & (va["param"].astype(str) == param)
-                & (va["dataset"] == ds)
-            ]
+        for codec, param_f in codec_order:
+            s = va[(va["codec"] == codec) & (va["dataset"] == ds)].copy()
+            s["kbps"] = pd.to_numeric(s["param"], errors="coerce")
+            s = s[np.isclose(s["kbps"], param_f, rtol=0.05)]
             vals.append(s["visqol_audio"].mean() if len(s) > 0 else 0)
         ax.bar(
             x + i * w,
@@ -541,31 +491,49 @@ def fig7(aud):
 
 
 # ====================================================================
-# FIG 8: Audio energy
+# FIG 8: Audio energy (dal CSV rigoroso)
 # ====================================================================
-def fig8():
-    codecs = [
-        "SNAC\n0.8 kbps",
-        "Opus\n24 kbps",
-        "EnCodec\n3.0 kbps",
-        "WavTok\n0.9 kbps",
-        "DAC\n8.0 kbps",
+def fig8(aud):
+    ae = aud["energy"]
+    codec_order = [
+        ("Opus", "24"),
+        ("Opus", "12"),
+        ("Opus", "48"),
+        ("SNAC", "0.8"),
+        ("WavTokenizer", "0.9"),
+        ("EnCodec", "3.0"),
+        ("EnCodec", "1.5"),
+        ("DAC", "8.0"),
     ]
-    j = [0.32, 0.35, 0.49, 0.51, 1.40]
-    cc = [C["SNAC"], C["Opus"], C["EnCodec"], C["WavTokenizer"], C["DAC"]]
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.bar(
-        range(len(codecs)), j, color=cc, edgecolor="black", linewidth=0.5, alpha=0.85
+    labels, j_per_s, colors = [], [], []
+    for codec, param in codec_order:
+        s = ae[(ae["codec"] == codec) & (ae["param"].astype(str) == param)]
+        if len(s) == 0:
+            continue
+        total_dur = s["duration_s"].sum()
+        total_e = s["energy_total_net_j"].sum()
+        jps = total_e / total_dur if total_dur > 0 else 0
+        labels.append(f"{codec}\n{param} kbps")
+        j_per_s.append(jps)
+        colors.append(C[codec])
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    bars = ax.bar(
+        range(len(labels)),
+        j_per_s,
+        color=colors,
+        edgecolor="black",
+        linewidth=0.5,
+        alpha=0.85,
     )
-    for i, v in enumerate(j):
-        ax.text(i, v + 0.03, f"{v:.2f}", ha="center", fontsize=10, fontweight="bold")
-    ax.set_xticks(range(len(codecs)))
-    ax.set_xticklabels(codecs, fontsize=9)
-    ax.set_ylabel("Energia (J / s audio)")
-    ax.set_title("Consumo energetico audio — SNAC (neurale) < Opus (classico)")
-    ax.set_ylim(0, 1.7)
-    ax.axhline(y=0.35, color="gray", linestyle="--", alpha=0.5)
+    for i, v in enumerate(j_per_s):
+        ax.text(i, v + 0.02, f"{v:.3f}", ha="center", fontsize=8, fontweight="bold")
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_ylabel("Energia netta (J / s audio)")
+    ax.set_title("Consumo energetico audio (idle sottratto, RAPL+Zeus)")
+    ax.set_ylim(0, 1.1)
 
     fig.savefig(os.path.join(OUT, "fig8_energy_audio.pdf"))
     plt.close()
@@ -573,53 +541,100 @@ def fig8():
 
 
 # ====================================================================
-# FIG 9: Cross-domain asymmetry
+# FIG 9: Cross-domain (dati corretti)
 # ====================================================================
 def fig9():
+    # Gap energetico: Cheng 159J / JPEG 0.04J = ~3980×  |  DAC 0.97 / Opus 0.096 = ~10.1×
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4.5))
 
-    # Energy gap
     a1.bar(
         ["Immagini\n(Cheng/JPEG)"],
-        [3700],
+        [3980],
         color="#d62728",
         edgecolor="black",
         alpha=0.85,
     )
-    a1.bar(["Audio\n(DAC/SNAC)"], [4.4], color="#2ca02c", edgecolor="black", alpha=0.85)
+    a1.bar(
+        ["Audio\n(DAC/Opus)"], [10.1], color="#2ca02c", edgecolor="black", alpha=0.85
+    )
     a1.set_ylabel("Divario energetico massimo (×)")
     a1.set_title("Gap energetico: classico ↔ neurale")
     a1.set_yscale("log")
     a1.set_ylim(1, 10000)
     a1.text(
-        0, 5000, "3700×", ha="center", fontsize=14, fontweight="bold", color="#d62728"
+        0, 5500, "3980×", ha="center", fontsize=14, fontweight="bold", color="#d62728"
     )
-    a1.text(1, 8, "4.4×", ha="center", fontsize=14, fontweight="bold", color="#2ca02c")
+    a1.text(
+        1, 16, "10.1×", ha="center", fontsize=14, fontweight="bold", color="#2ca02c"
+    )
 
-    # Perceptual winner
+    # Percettivo normalizzato
+    classical_pct = [72.5 / 72.5 * 100, 3.57 / 3.67 * 100]
+    neural_pct = [56.1 / 72.5 * 100, 3.67 / 3.67 * 100]
     x = np.arange(2)
     w = 0.3
     a2.bar(
         x - w / 2,
-        [72.5, 3.57],
+        classical_pct,
         w,
-        label="Classico (JXL/Opus)",
+        label="Classico (JXL / Opus 48)",
         color="#2ca02c",
         edgecolor="black",
     )
     a2.bar(
         x + w / 2,
-        [56.1, 3.67],
+        neural_pct,
         w,
-        label="Neurale SOTA (DCAE/DAC)",
+        label="Neurale SOTA (DCAE / DAC)",
         color="#1f77b4",
         edgecolor="black",
     )
+
+    for xi, cv, nv, cr, nr in [
+        (0, classical_pct[0], neural_pct[0], "72.5", "56.1"),
+        (1, classical_pct[1], neural_pct[1], "3.57", "3.67"),
+    ]:
+        a2.text(
+            xi - w / 2,
+            cv + 2,
+            cr,
+            ha="center",
+            fontsize=9,
+            fontweight="bold",
+            color="#2ca02c",
+        )
+        a2.text(
+            xi + w / 2,
+            nv + 2,
+            nr,
+            ha="center",
+            fontsize=9,
+            fontweight="bold",
+            color="#1f77b4",
+        )
+
     a2.set_xticks(x)
     a2.set_xticklabels(["Immagini\n(SSIMULACRA2)", "Audio\n(ViSQOL audio)"])
-    a2.set_ylabel("Score percettivo (↑)")
+    a2.set_ylabel("% del migliore per dominio")
+    a2.set_ylim(0, 115)
     a2.set_title("Vincitore percettivo per dominio")
     a2.legend()
+    a2.annotate(
+        "Classico vince",
+        xy=(0, 108),
+        fontsize=9,
+        ha="center",
+        color="#2ca02c",
+        fontweight="bold",
+    )
+    a2.annotate(
+        "Neurale vince",
+        xy=(1, 108),
+        fontsize=9,
+        ha="center",
+        color="#1f77b4",
+        fontweight="bold",
+    )
 
     fig.suptitle("Asimmetria cross-dominio", fontsize=14)
     plt.subplots_adjust(top=0.85, wspace=0.3)
@@ -630,23 +645,17 @@ def fig9():
 
 
 # ====================================================================
-# FIG 10: R-D PSNR (8 codec, per confronto classico)
+# FIG 10: R-D PSNR classico
 # ====================================================================
 def fig10(dfq):
     fig, ax = plt.subplots(figsize=(9, 5.5))
-    for codec in CODEC_ORDER_IMG:
-        s = dfq[dfq["codec"] == codec].dropna(subset=["psnr"])
+    for codec in CODEC_ORDER:
+        s = avg_metric(dfq, codec, "psnr")
         if len(s) == 0:
             continue
-        a = (
-            s.groupby("param")
-            .agg(bpp=("bpp", "mean"), psnr=("psnr", "mean"))
-            .reset_index()
-            .sort_values("bpp")
-        )
         ax.plot(
-            a["bpp"],
-            a["psnr"],
+            s["bpp"],
+            s["val"],
             color=C[codec],
             marker=M.get(codec, "o"),
             label=codec,
@@ -670,28 +679,31 @@ def fig10(dfq):
 # ====================================================================
 def main():
     print("=" * 60)
-    print("GENERAZIONE GRAFICI R-D-E TESI")
+    print("GENERAZIONE GRAFICI R-D-E TESI (definitivi)")
     print("=" * 60)
 
     print("\nCaricamento dati...")
-    df_rde = load_rde()
-    print(f"  R-D-E: {len(df_rde)} righe, codec: {sorted(df_rde['codec'].unique())}")
     dfq = load_quality()
-    print(f"  Quality: {len(dfq)} righe, codec: {sorted(dfq['codec'].unique())}")
+    dfe = load_energy()
+    df_rde = load_rde(dfq, dfe)
     aud = load_audio()
-    print(f"  Audio: visqol_sp={len(aud['vsp'])}, visqol_au={len(aud['vau'])}")
+
+    print(f"  Qualità img: {len(dfq)} righe, codec: {sorted(dfq['codec'].unique())}")
+    print(f"  Energia img: {len(dfe)} righe, codec: {sorted(dfe['codec'].unique())}")
+    print(f"  R-D-E merge: {len(df_rde)} righe")
+    print(f"  Audio energy: {len(aud['energy'])} righe")
 
     print("\nGenerazione grafici:")
-    fig1(df_rde)  # Bubble R-D-E
-    fig2(dfq)  # SSIMULACRA2 vs bpp
-    fig3(df_rde)  # PSNR vs Energy
-    fig4(df_rde)  # Energy bar
-    fig5()  # Bottleneck
-    fig6(aud)  # Audio ViSQOL dual
-    fig7(aud)  # Audio ViSQOL per dataset
-    fig8()  # Audio energy
-    fig9()  # Cross-domain
-    fig10(dfq)  # R-D PSNR classico
+    fig1(df_rde)
+    fig2(dfq)
+    fig3(df_rde)
+    fig4(df_rde)
+    fig5(dfe)
+    fig6(aud)
+    fig7(aud)
+    fig8(aud)
+    fig9()
+    fig10(dfq)
 
     n = len([f for f in os.listdir(OUT) if f.endswith(".pdf")])
     print(f"\nTutti i grafici in: {OUT}/")
