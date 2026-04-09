@@ -20,3 +20,5 @@ __pycache__/
 .vscode/settings.json
 *.7z
 wget-log*
+external_codecs/
+models/wavtokenizer/

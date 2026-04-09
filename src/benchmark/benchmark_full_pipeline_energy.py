@@ -1,23 +1,33 @@
 """
-Benchmark energetico RIGOROSO per la tesi.
+Benchmark energetico DEFINITIVO per la tesi.
 
-Metodologia:
-  1. Prima di ogni codec/param, misura idle power (CPU + GPU) per 2s
-  2. Esegui il benchmark (compress + decompress su tutto Kodak)
-  3. Energia netta = energia_misurata - idle_power × tempo
+Metodologia a batch per eliminare il rumore su codec veloci:
+  1. Pre-carica TUTTE le immagini in RAM/VRAM (zero I/O durante la misura)
+  2. Warmup (3 immagini × full pipeline)
+  3. Misura idle per 3s (RAPL + Zeus)
+  4. Loop stretto: tutte le immagini × N ripetizioni
+  5. Misura RAPL + Zeus dopo il loop
+  6. Energia netta = (gross - idle × tempo) / (n_immagini × n_ripetizioni)
 
-Codec CPU-only (JPEG, JXL, HEVC):
-  → energia netta = RAPL_netta (Zeus ignorato — non usano GPU)
+N ripetizioni adattive:
+  JPEG: 20 (1ms per immagine → 480ms totali → delta RAPL affidabile)
+  JXL:  10 (~27ms → 6.5s totali)
+  HEVC:  3 (~72ms → 5.2s totali)
+  Ballé: 5 (~28ms → 3.4s totali)
+  ELIC:  3 (~140ms → 10s totali)
+  TCM:   3 (~108ms → 7.8s totali)
+  DCAE:  3 (~109ms → 7.8s totali)
+  Cheng: 1 (~3400ms → 82s totali — già abbastanza lungo)
 
-Codec neurali (Ballé, Cheng, ELIC, TCM, DCAE):
-  → energia netta = RAPL_netta + Zeus_netta
-  → cattura sia forward pass (GPU) sia codifica aritmetica (CPU)
+Codec CPU-only: GPU net = 0 (non usano GPU)
+Codec neurali: tot = CPU net + GPU net
 
-Output: CSV con energy_cpu_net_j, energy_gpu_net_j, energy_total_net_j
+Qualità (bpp, PSNR) misurata in un passo separato non temporizzato.
 """
 
 import sys
 import os
+import gc
 import math
 import time
 import csv
@@ -31,7 +41,7 @@ from torchvision import transforms
 from pathlib import Path
 
 warnings.filterwarnings("ignore")
-torch.backends.cudnn.enabled = False  # Fix per DCAE
+torch.backends.cudnn.enabled = False  # Necessario per DCAE compress/decompress
 
 # ================== CONFIG ==================
 KODAK_DIR = os.path.expanduser("~/tesi/datasets/kodak")
@@ -41,7 +51,7 @@ OUTPUT_CSV = os.path.expanduser(
 DEVICE = "cuda"
 device = torch.device(DEVICE)
 transform = transforms.ToTensor()
-IDLE_DURATION = 2.0  # secondi per misura idle
+IDLE_DURATION = 3.0  # secondi — più lungo = idle più stabile
 
 
 # ================== RAPL ==================
@@ -65,19 +75,18 @@ gpu = get_gpus().gpus[0]
 FIELDNAMES = [
     "codec",
     "param",
-    "image",
-    "bpp",
-    "psnr",
-    "time_total_ms",
-    "energy_cpu_gross_j",
-    "energy_gpu_gross_j",
+    "n_images",
+    "n_repeats",
+    "avg_bpp",
+    "avg_psnr",
+    "total_time_s",
     "energy_cpu_net_j",
     "energy_gpu_net_j",
     "energy_total_net_j",
+    "energy_per_image_j",
     "idle_cpu_w",
     "idle_gpu_w",
     "params_M",
-    "pipeline",
     "is_neural",
 ]
 
@@ -91,13 +100,13 @@ def count_bytes(obj):
     if isinstance(obj, bytes):
         return len(obj)
     elif isinstance(obj, list):
-        return sum(count_bytes(item) for item in obj)
+        return sum(count_bytes(i) for i in obj)
     return 0
 
 
-# ================== IDLE MEASUREMENT ==================
+# ================== IDLE ==================
 def measure_idle():
-    """Misura CPU e GPU idle power in Watts. Dura IDLE_DURATION secondi."""
+    """Misura idle power per IDLE_DURATION secondi. Ritorna (cpu_W, gpu_W)."""
     torch.cuda.synchronize()
     time.sleep(0.5)  # stabilizza
 
@@ -116,25 +125,31 @@ def measure_idle():
     if dr < 0:
         dr += RAPL_MAX
 
-    cpu_idle_w = (dr / 1e6) / dt
-    gpu_idle_w = ((g1 - g0) / 1000) / dt
-
-    return cpu_idle_w, gpu_idle_w
+    return (dr / 1e6) / dt, ((g1 - g0) / 1000) / dt
 
 
-# ================== MEASUREMENT ==================
-def measure_once():
-    """Leggi RAPL+Zeus prima. Ritorna le letture iniziali."""
+# ================== BATCH ENERGY ==================
+def measure_batch_energy(run_fn, n_repeats, cpu_idle_w, gpu_idle_w, is_neural):
+    """
+    Esegue run_fn() per n_repeats volte.
+    run_fn() deve processare TUTTI gli item internamente.
+    Ritorna energia netta totale (cpu, gpu, tot) e tempo.
+    """
+    gc.disable()
     torch.cuda.synchronize()
-    return read_rapl_uj(), gpu.getTotalEnergyConsumption(), time.perf_counter()
 
+    r0 = read_rapl_uj()
+    g0 = gpu.getTotalEnergyConsumption()
+    t0 = time.perf_counter()
 
-def measure_end(r0, g0, t0, cpu_idle_w, gpu_idle_w, is_neural):
-    """Leggi RAPL+Zeus dopo, calcola energia netta."""
+    for _ in range(n_repeats):
+        run_fn()
+
     torch.cuda.synchronize()
     t1 = time.perf_counter()
     r1 = read_rapl_uj()
     g1 = gpu.getTotalEnergyConsumption()
+    gc.enable()
 
     dt = t1 - t0
     dr = r1 - r0
@@ -143,183 +158,187 @@ def measure_end(r0, g0, t0, cpu_idle_w, gpu_idle_w, is_neural):
 
     cpu_gross = dr / 1e6
     gpu_gross = (g1 - g0) / 1000
-
-    cpu_net = cpu_gross - cpu_idle_w * dt
-    gpu_net = gpu_gross - gpu_idle_w * dt
-
-    # Per codec CPU-only, GPU net è rumore — ignora
-    if not is_neural:
-        gpu_net = 0.0
-
-    # Clamp a 0 (il rumore può dare valori negativi per operazioni brevissime)
-    cpu_net = max(cpu_net, 0.0)
-    gpu_net = max(gpu_net, 0.0)
+    cpu_net = max(cpu_gross - cpu_idle_w * dt, 0)
+    gpu_net = max(gpu_gross - gpu_idle_w * dt, 0) if is_neural else 0.0
     total_net = cpu_net + gpu_net
 
     return {
-        "time_s": dt,
-        "cpu_gross": cpu_gross,
-        "gpu_gross": gpu_gross,
         "cpu_net": cpu_net,
         "gpu_net": gpu_net,
         "total_net": total_net,
+        "time_s": dt,
+        "cpu_gross": cpu_gross,
+        "gpu_gross": gpu_gross,
     }
 
 
-# ====================================================================
-# JPEG
-# ====================================================================
-def benchmark_jpeg(imgs, qualities=[10, 30, 60, 85]):
+# ================== PRE-LOAD ==================
+def preload_kodak():
+    """Pre-carica tutte le immagini Kodak come numpy + tensori GPU."""
+    imgs = sorted(Path(KODAK_DIR).glob("*.png"))
+    data = []
+    for img_path in imgs:
+        pil = Image.open(img_path).convert("RGB")
+        rgb = np.array(pil)
+        tensor = transform(pil).unsqueeze(0).to(device)
+        data.append(
+            {
+                "path": img_path,
+                "name": img_path.name,
+                "rgb": rgb,
+                "tensor": tensor,
+                "h": rgb.shape[0],
+                "w": rgb.shape[1],
+            }
+        )
+    return data
+
+
+# ================== JPEG ==================
+def benchmark_jpeg(kodak, qualities=[10, 30, 60, 85], n_repeats=20):
     import imagecodecs
 
     print("\n=== JPEG ===")
     results = []
 
     for q in qualities:
-        cpu_idle, gpu_idle = measure_idle()
-        print(f"  q={q} (idle: CPU={cpu_idle:.1f}W GPU={gpu_idle:.1f}W)")
-
-        for img_path in imgs:
-            img_rgb = np.array(Image.open(img_path).convert("RGB"))
-            h, w = img_rgb.shape[:2]
-
-            # Warmup
-            imagecodecs.jpeg_decode(imagecodecs.jpeg_encode(img_rgb, level=q))
-
-            r0, g0, t0 = measure_once()
-            jpg = imagecodecs.jpeg_encode(img_rgb, level=q)
+        # Qualità (non temporizzata)
+        bpps, psnrs = [], []
+        for d in kodak:
+            jpg = imagecodecs.jpeg_encode(d["rgb"], level=q)
             rec = imagecodecs.jpeg_decode(jpg)
-            e = measure_end(r0, g0, t0, cpu_idle, gpu_idle, is_neural=False)
-
-            bpp = len(jpg) * 8 / (h * w)
-            x = (
-                torch.from_numpy(img_rgb)
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                .float()
-                .to(device)
-                / 255.0
-            )
+            bpps.append(len(jpg) * 8 / (d["h"] * d["w"]))
             x_hat = (
                 torch.from_numpy(rec).permute(2, 0, 1).unsqueeze(0).float().to(device)
                 / 255.0
             )
+            psnrs.append(compute_psnr(d["tensor"], x_hat))
 
-            results.append(
-                {
-                    "codec": "JPEG",
-                    "param": f"q={q}",
-                    "image": Path(img_path).name,
-                    "bpp": round(bpp, 4),
-                    "psnr": round(compute_psnr(x, x_hat), 2),
-                    "time_total_ms": round(e["time_s"] * 1000, 1),
-                    "energy_cpu_gross_j": round(e["cpu_gross"], 4),
-                    "energy_gpu_gross_j": round(e["gpu_gross"], 4),
-                    "energy_cpu_net_j": round(e["cpu_net"], 4),
-                    "energy_gpu_net_j": round(e["gpu_net"], 4),
-                    "energy_total_net_j": round(e["total_net"], 4),
-                    "idle_cpu_w": round(cpu_idle, 1),
-                    "idle_gpu_w": round(gpu_idle, 1),
-                    "params_M": 0,
-                    "pipeline": "end_to_end",
-                    "is_neural": False,
-                }
-            )
+        # Warmup
+        for d in kodak[:3]:
+            imagecodecs.jpeg_decode(imagecodecs.jpeg_encode(d["rgb"], level=q))
 
-        sub = [r for r in results if r["param"] == f"q={q}"]
+        # Idle
+        cpu_idle, gpu_idle = measure_idle()
+
+        # Batch energy
+        def run_all():
+            for d in kodak:
+                rec = imagecodecs.jpeg_decode(
+                    imagecodecs.jpeg_encode(d["rgb"], level=q)
+                )
+
+        e = measure_batch_energy(
+            run_all, n_repeats, cpu_idle, gpu_idle, is_neural=False
+        )
+        n_total = len(kodak) * n_repeats
+        e_per_img = e["total_net"] / n_total
+
         print(
-            f"    bpp={np.mean([r['bpp'] for r in sub]):.3f} net={np.mean([r['energy_total_net_j'] for r in sub]):.4f}J"
+            f"  q={q}: bpp={np.mean(bpps):.3f} PSNR={np.mean(psnrs):.2f} "
+            f"E={e_per_img:.4f} J/img (batch {n_total} ops in {e['time_s']:.1f}s, "
+            f"idle CPU={cpu_idle:.1f}W GPU={gpu_idle:.1f}W)"
+        )
+
+        results.append(
+            {
+                "codec": "JPEG",
+                "param": f"q={q}",
+                "n_images": len(kodak),
+                "n_repeats": n_repeats,
+                "avg_bpp": round(np.mean(bpps), 4),
+                "avg_psnr": round(np.mean(psnrs), 2),
+                "total_time_s": round(e["time_s"], 2),
+                "energy_cpu_net_j": round(e["cpu_net"], 4),
+                "energy_gpu_net_j": round(e["gpu_net"], 4),
+                "energy_total_net_j": round(e["total_net"], 4),
+                "energy_per_image_j": round(e_per_img, 6),
+                "idle_cpu_w": round(cpu_idle, 1),
+                "idle_gpu_w": round(gpu_idle, 1),
+                "params_M": 0,
+                "is_neural": False,
+            }
         )
 
     return results
 
 
-# ====================================================================
-# JXL
-# ====================================================================
-def benchmark_jxl(imgs, distances=[1.0, 3.0, 7.0, 12.0]):
+# ================== JXL ==================
+def benchmark_jxl(kodak, distances=[1.0, 3.0, 7.0, 12.0], n_repeats=10):
     import imagecodecs
 
     print("\n=== JXL ===")
     results = []
 
-    for d in distances:
-        cpu_idle, gpu_idle = measure_idle()
-        print(f"  d={d} (idle: CPU={cpu_idle:.1f}W GPU={gpu_idle:.1f}W)")
-
-        for img_path in imgs:
-            img_rgb = np.array(Image.open(img_path).convert("RGB"))
-            h, w = img_rgb.shape[:2]
-
-            imagecodecs.jpegxl_decode(
-                imagecodecs.jpegxl_encode(img_rgb, distance=d, effort=5)
-            )
-
-            r0, g0, t0 = measure_once()
-            jxl = imagecodecs.jpegxl_encode(img_rgb, distance=d, effort=5)
+    for dist in distances:
+        bpps, psnrs = [], []
+        for d in kodak:
+            jxl = imagecodecs.jpegxl_encode(d["rgb"], distance=dist, effort=5)
             rec = imagecodecs.jpegxl_decode(jxl)
-            e = measure_end(r0, g0, t0, cpu_idle, gpu_idle, is_neural=False)
-
-            bpp = len(jxl) * 8 / (h * w)
-            x = (
-                torch.from_numpy(img_rgb)
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                .float()
-                .to(device)
-                / 255.0
-            )
+            bpps.append(len(jxl) * 8 / (d["h"] * d["w"]))
             x_hat = (
                 torch.from_numpy(rec).permute(2, 0, 1).unsqueeze(0).float().to(device)
                 / 255.0
             )
+            psnrs.append(compute_psnr(d["tensor"], x_hat))
 
-            results.append(
-                {
-                    "codec": "JXL",
-                    "param": f"d={d}",
-                    "image": Path(img_path).name,
-                    "bpp": round(bpp, 4),
-                    "psnr": round(compute_psnr(x, x_hat), 2),
-                    "time_total_ms": round(e["time_s"] * 1000, 1),
-                    "energy_cpu_gross_j": round(e["cpu_gross"], 4),
-                    "energy_gpu_gross_j": round(e["gpu_gross"], 4),
-                    "energy_cpu_net_j": round(e["cpu_net"], 4),
-                    "energy_gpu_net_j": round(e["gpu_net"], 4),
-                    "energy_total_net_j": round(e["total_net"], 4),
-                    "idle_cpu_w": round(cpu_idle, 1),
-                    "idle_gpu_w": round(gpu_idle, 1),
-                    "params_M": 0,
-                    "pipeline": "end_to_end",
-                    "is_neural": False,
-                }
+        for d in kodak[:3]:
+            imagecodecs.jpegxl_decode(
+                imagecodecs.jpegxl_encode(d["rgb"], distance=dist, effort=5)
             )
 
-        sub = [r for r in results if r["param"] == f"d={d}"]
+        cpu_idle, gpu_idle = measure_idle()
+
+        def run_all():
+            for d in kodak:
+                imagecodecs.jpegxl_decode(
+                    imagecodecs.jpegxl_encode(d["rgb"], distance=dist, effort=5)
+                )
+
+        e = measure_batch_energy(
+            run_all, n_repeats, cpu_idle, gpu_idle, is_neural=False
+        )
+        n_total = len(kodak) * n_repeats
+        e_per_img = e["total_net"] / n_total
+
         print(
-            f"    bpp={np.mean([r['bpp'] for r in sub]):.3f} net={np.mean([r['energy_total_net_j'] for r in sub]):.3f}J"
+            f"  d={dist}: bpp={np.mean(bpps):.3f} PSNR={np.mean(psnrs):.2f} "
+            f"E={e_per_img:.4f} J/img ({e['time_s']:.1f}s, idle CPU={cpu_idle:.1f}W)"
+        )
+
+        results.append(
+            {
+                "codec": "JXL",
+                "param": f"d={dist}",
+                "n_images": len(kodak),
+                "n_repeats": n_repeats,
+                "avg_bpp": round(np.mean(bpps), 4),
+                "avg_psnr": round(np.mean(psnrs), 2),
+                "total_time_s": round(e["time_s"], 2),
+                "energy_cpu_net_j": round(e["cpu_net"], 4),
+                "energy_gpu_net_j": round(e["gpu_net"], 4),
+                "energy_total_net_j": round(e["total_net"], 4),
+                "energy_per_image_j": round(e_per_img, 6),
+                "idle_cpu_w": round(cpu_idle, 1),
+                "idle_gpu_w": round(gpu_idle, 1),
+                "params_M": 0,
+                "is_neural": False,
+            }
         )
 
     return results
 
 
-# ====================================================================
-# HEVC
-# ====================================================================
-def benchmark_hevc(imgs, crfs=[25, 35, 45]):
+# ================== HEVC ==================
+def benchmark_hevc(kodak, crfs=[25, 35, 45], n_repeats=3):
     print("\n=== HEVC Intra ===")
     results = []
 
     for crf in crfs:
-        cpu_idle, gpu_idle = measure_idle()
-        print(f"  crf={crf} (idle: CPU={cpu_idle:.1f}W GPU={gpu_idle:.1f}W)")
-
-        for img_path in imgs:
-            img_rgb = np.array(Image.open(img_path).convert("RGB"))
-            h, w = img_rgb.shape[:2]
-            tmp_yuv = "/dev/shm/hevc_in.yuv"
-            tmp_265 = "/dev/shm/hevc_out.265"
-
+        # Pre-converti tutte le immagini in YUV su /dev/shm
+        yuv_paths = []
+        for i, d in enumerate(kodak):
+            yuv_path = f"/dev/shm/hevc_in_{i}.yuv"
             subprocess.run(
                 [
                     "ffmpeg",
@@ -329,18 +348,22 @@ def benchmark_hevc(imgs, crfs=[25, 35, 45]):
                     "-pix_fmt",
                     "rgb24",
                     "-s",
-                    f"{w}x{h}",
+                    f"{d['w']}x{d['h']}",
                     "-i",
                     "pipe:0",
                     "-pix_fmt",
                     "yuv444p",
-                    tmp_yuv,
+                    yuv_path,
                 ],
-                input=img_rgb.tobytes(),
+                input=d["rgb"].tobytes(),
                 capture_output=True,
             )
+            yuv_paths.append(yuv_path)
 
-            r0, g0, t0 = measure_once()
+        # Qualità (non temporizzata)
+        bpps, psnrs = [], []
+        for i, d in enumerate(kodak):
+            hevc_path = f"/dev/shm/hevc_out_{i}.265"
             subprocess.run(
                 [
                     "ffmpeg",
@@ -350,9 +373,9 @@ def benchmark_hevc(imgs, crfs=[25, 35, 45]):
                     "-pix_fmt",
                     "yuv444p",
                     "-s",
-                    f"{w}x{h}",
+                    f"{d['w']}x{d['h']}",
                     "-i",
-                    tmp_yuv,
+                    yuv_paths[i],
                     "-c:v",
                     "libx265",
                     "-preset",
@@ -361,16 +384,16 @@ def benchmark_hevc(imgs, crfs=[25, 35, 45]):
                     f"crf={crf}:keyint=1",
                     "-pix_fmt",
                     "yuv444p",
-                    tmp_265,
+                    hevc_path,
                 ],
                 capture_output=True,
             )
-            dec_result = subprocess.run(
+            dec = subprocess.run(
                 [
                     "ffmpeg",
                     "-y",
                     "-i",
-                    tmp_265,
+                    hevc_path,
                     "-f",
                     "rawvideo",
                     "-pix_fmt",
@@ -379,68 +402,109 @@ def benchmark_hevc(imgs, crfs=[25, 35, 45]):
                 ],
                 capture_output=True,
             )
-            e = measure_end(r0, g0, t0, cpu_idle, gpu_idle, is_neural=False)
+            if dec.returncode == 0 and len(dec.stdout) >= d["h"] * d["w"] * 3:
+                rec = np.frombuffer(dec.stdout, dtype=np.uint8).reshape(
+                    d["h"], d["w"], 3
+                )
+                bpps.append(os.path.getsize(hevc_path) * 8 / (d["h"] * d["w"]))
+                x_hat = (
+                    torch.from_numpy(rec)
+                    .permute(2, 0, 1)
+                    .unsqueeze(0)
+                    .float()
+                    .to(device)
+                    / 255.0
+                )
+                psnrs.append(compute_psnr(d["tensor"], x_hat))
 
-            if dec_result.returncode != 0 or len(dec_result.stdout) < h * w * 3:
-                for f in [tmp_yuv, tmp_265]:
-                    if os.path.exists(f):
-                        os.remove(f)
-                continue
+        cpu_idle, gpu_idle = measure_idle()
 
-            rec = np.frombuffer(dec_result.stdout, dtype=np.uint8).reshape(h, w, 3)
-            bpp = os.path.getsize(tmp_265) * 8 / (h * w)
-            x = (
-                torch.from_numpy(img_rgb)
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                .float()
-                .to(device)
-                / 255.0
-            )
-            x_hat = (
-                torch.from_numpy(rec).permute(2, 0, 1).unsqueeze(0).float().to(device)
-                / 255.0
-            )
+        def run_all():
+            for i, d in enumerate(kodak):
+                hevc_path = f"/dev/shm/hevc_out_{i}.265"
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-f",
+                        "rawvideo",
+                        "-pix_fmt",
+                        "yuv444p",
+                        "-s",
+                        f"{d['w']}x{d['h']}",
+                        "-i",
+                        yuv_paths[i],
+                        "-c:v",
+                        "libx265",
+                        "-preset",
+                        "medium",
+                        "-x265-params",
+                        f"crf={crf}:keyint=1",
+                        "-pix_fmt",
+                        "yuv444p",
+                        hevc_path,
+                    ],
+                    capture_output=True,
+                )
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        hevc_path,
+                        "-f",
+                        "rawvideo",
+                        "-pix_fmt",
+                        "rgb24",
+                        "pipe:1",
+                    ],
+                    capture_output=True,
+                )
 
-            results.append(
-                {
-                    "codec": "HEVC",
-                    "param": f"crf={crf}",
-                    "image": Path(img_path).name,
-                    "bpp": round(bpp, 4),
-                    "psnr": round(compute_psnr(x, x_hat), 2),
-                    "time_total_ms": round(e["time_s"] * 1000, 1),
-                    "energy_cpu_gross_j": round(e["cpu_gross"], 4),
-                    "energy_gpu_gross_j": round(e["gpu_gross"], 4),
-                    "energy_cpu_net_j": round(e["cpu_net"], 4),
-                    "energy_gpu_net_j": round(e["gpu_net"], 4),
-                    "energy_total_net_j": round(e["total_net"], 4),
-                    "idle_cpu_w": round(cpu_idle, 1),
-                    "idle_gpu_w": round(gpu_idle, 1),
-                    "params_M": 0,
-                    "pipeline": "end_to_end",
-                    "is_neural": False,
-                }
-            )
+        e = measure_batch_energy(
+            run_all, n_repeats, cpu_idle, gpu_idle, is_neural=False
+        )
+        n_total = len(kodak) * n_repeats
+        e_per_img = e["total_net"] / n_total
 
-            for f in [tmp_yuv, tmp_265]:
-                if os.path.exists(f):
-                    os.remove(f)
+        print(
+            f"  crf={crf}: bpp={np.mean(bpps):.3f} PSNR={np.mean(psnrs):.2f} "
+            f"E={e_per_img:.4f} J/img ({e['time_s']:.1f}s)"
+        )
 
-        sub = [r for r in results if r["param"] == f"crf={crf}"]
-        if sub:
-            print(
-                f"    bpp={np.mean([r['bpp'] for r in sub]):.3f} net={np.mean([r['energy_total_net_j'] for r in sub]):.3f}J"
-            )
+        results.append(
+            {
+                "codec": "HEVC",
+                "param": f"crf={crf}",
+                "n_images": len(kodak),
+                "n_repeats": n_repeats,
+                "avg_bpp": round(np.mean(bpps), 4),
+                "avg_psnr": round(np.mean(psnrs), 2),
+                "total_time_s": round(e["time_s"], 2),
+                "energy_cpu_net_j": round(e["cpu_net"], 4),
+                "energy_gpu_net_j": round(e["gpu_net"], 4),
+                "energy_total_net_j": round(e["total_net"], 4),
+                "energy_per_image_j": round(e_per_img, 6),
+                "idle_cpu_w": round(cpu_idle, 1),
+                "idle_gpu_w": round(gpu_idle, 1),
+                "params_M": 0,
+                "is_neural": False,
+            }
+        )
+
+        # Cleanup
+        for p in yuv_paths:
+            if os.path.exists(p):
+                os.remove(p)
 
     return results
 
 
-# ====================================================================
-# Neural codec generico
-# ====================================================================
-def benchmark_neural(net, codec_name, param_str, imgs, pad=64, pad_mode="right"):
-    """Full pipeline compress()+decompress() con idle calibration."""
+# ================== NEURAL GENERICO ==================
+def benchmark_neural(
+    net, codec_name, param_str, kodak, pad=64, pad_mode="right", n_repeats=3
+):
+    """Batch energy measurement per codec neurali."""
     net.eval()
     net.update()
     pm = sum(p.numel() for p in net.parameters()) / 1e6
@@ -466,66 +530,75 @@ def benchmark_neural(net, codec_name, param_str, imgs, pad=64, pad_mode="right")
         else:
             return x_hat[:, :, :h, :w]
 
-    # Warmup
-    for wp in imgs[:3]:
-        x = transform(Image.open(wp).convert("RGB")).unsqueeze(0).to(device)
-        xp, padding = do_pad(x)
-        with torch.no_grad():
-            enc = net.compress(xp)
-            net.decompress(enc["strings"], enc["shape"])
+    # Pre-pad tutti i tensori
+    padded_data = []
+    for d in kodak:
+        xp, padding = do_pad(d["tensor"])
+        padded_data.append({"xp": xp, "padding": padding, "h": d["h"], "w": d["w"]})
+
+    # Qualità (non temporizzata)
+    bpps, psnrs = [], []
+    with torch.no_grad():
+        for i, d in enumerate(kodak):
+            pd_ = padded_data[i]
+            enc = net.compress(pd_["xp"])
+            dec = net.decompress(enc["strings"], enc["shape"])
+            x_hat = do_crop(dec["x_hat"], pd_["padding"], pd_["h"], pd_["w"]).clamp(
+                0, 1
+            )
+            total_bytes = count_bytes(enc["strings"]) + 8
+            bpps.append(total_bytes * 8 / (pd_["h"] * pd_["w"]))
+            psnrs.append(compute_psnr(d["tensor"], x_hat))
     torch.cuda.synchronize()
 
-    # Idle measurement DOPO warmup (GPU è warm)
+    # Warmup (3 immagini × 2 ripetizioni)
+    with torch.no_grad():
+        for _ in range(2):
+            for pd_ in padded_data[:3]:
+                enc = net.compress(pd_["xp"])
+                net.decompress(enc["strings"], enc["shape"])
+    torch.cuda.synchronize()
+
+    # Idle (dopo warmup — GPU è calda)
     cpu_idle, gpu_idle = measure_idle()
-    print(f"  {codec_name} {param_str} (idle: CPU={cpu_idle:.1f}W GPU={gpu_idle:.1f}W)")
 
-    results = []
-    for img_path in imgs:
-        x = transform(Image.open(img_path).convert("RGB")).unsqueeze(0).to(device)
-        h, w = x.shape[2:]
-        xp, padding = do_pad(x)
-
-        r0, g0, t0 = measure_once()
+    # Batch energy
+    def run_all():
         with torch.no_grad():
-            enc = net.compress(xp)
-            dec = net.decompress(enc["strings"], enc["shape"])
-        e = measure_end(r0, g0, t0, cpu_idle, gpu_idle, is_neural=True)
+            for pd_ in padded_data:
+                enc = net.compress(pd_["xp"])
+                net.decompress(enc["strings"], enc["shape"])
 
-        x_hat = do_crop(dec["x_hat"], padding, h, w).clamp(0, 1)
-        total_bytes = count_bytes(enc["strings"]) + 8
-        bpp = total_bytes * 8 / (h * w)
+    e = measure_batch_energy(run_all, n_repeats, cpu_idle, gpu_idle, is_neural=True)
+    n_total = len(kodak) * n_repeats
+    e_per_img = e["total_net"] / n_total
 
-        results.append(
-            {
-                "codec": codec_name,
-                "param": param_str,
-                "image": Path(img_path).name,
-                "bpp": round(bpp, 4),
-                "psnr": round(compute_psnr(x, x_hat), 2),
-                "time_total_ms": round(e["time_s"] * 1000, 1),
-                "energy_cpu_gross_j": round(e["cpu_gross"], 4),
-                "energy_gpu_gross_j": round(e["gpu_gross"], 4),
-                "energy_cpu_net_j": round(e["cpu_net"], 4),
-                "energy_gpu_net_j": round(e["gpu_net"], 4),
-                "energy_total_net_j": round(e["total_net"], 4),
-                "idle_cpu_w": round(cpu_idle, 1),
-                "idle_gpu_w": round(gpu_idle, 1),
-                "params_M": round(pm, 1),
-                "pipeline": "full_pipeline",
-                "is_neural": True,
-            }
-        )
-
-    avg_cpu = np.mean([r["energy_cpu_net_j"] for r in results])
-    avg_gpu = np.mean([r["energy_gpu_net_j"] for r in results])
-    avg_tot = np.mean([r["energy_total_net_j"] for r in results])
-    avg_psnr = np.mean([r["psnr"] for r in results])
-    avg_bpp = np.mean([r["bpp"] for r in results])
     print(
-        f"    bpp={avg_bpp:.3f} PSNR={avg_psnr:.2f} CPU_net={avg_cpu:.3f}J GPU_net={avg_gpu:.3f}J TOT_net={avg_tot:.3f}J"
+        f"  {codec_name} {param_str}: bpp={np.mean(bpps):.3f} PSNR={np.mean(psnrs):.2f} "
+        f"E={e_per_img:.3f} J/img "
+        f"(CPU={e['cpu_net']/n_total:.3f} GPU={e['gpu_net']/n_total:.3f}) "
+        f"({e['time_s']:.1f}s, idle CPU={cpu_idle:.1f}W GPU={gpu_idle:.1f}W)"
     )
 
-    return results
+    return [
+        {
+            "codec": codec_name,
+            "param": param_str,
+            "n_images": len(kodak),
+            "n_repeats": n_repeats,
+            "avg_bpp": round(np.mean(bpps), 4),
+            "avg_psnr": round(np.mean(psnrs), 2),
+            "total_time_s": round(e["time_s"], 2),
+            "energy_cpu_net_j": round(e["cpu_net"] / n_total, 4),
+            "energy_gpu_net_j": round(e["gpu_net"] / n_total, 4),
+            "energy_total_net_j": round(e["total_net"] / n_total, 4),
+            "energy_per_image_j": round(e_per_img, 6),
+            "idle_cpu_w": round(cpu_idle, 1),
+            "idle_gpu_w": round(gpu_idle, 1),
+            "params_M": round(pm, 1),
+            "is_neural": True,
+        }
+    ]
 
 
 # ====================================================================
@@ -533,20 +606,20 @@ def benchmark_neural(net, codec_name, param_str, imgs, pad=64, pad_mode="right")
 # ====================================================================
 def main():
     print("=" * 75)
-    print("BENCHMARK ENERGETICO RIGOROSO")
-    print("RAPL+Zeus simultanei, idle sottratto per ogni codec/param")
+    print("BENCHMARK ENERGETICO DEFINITIVO")
+    print("Batch measurement, RAPL+Zeus simultanei, idle 3s, GC disabilitato")
     print("=" * 75)
 
-    imgs = sorted(Path(KODAK_DIR).glob("*.png"))
-    print(f"Kodak: {len(imgs)} immagini")
-    print(f"Idle calibration: {IDLE_DURATION}s per ogni codec/param\n")
+    # Pre-load
+    kodak = preload_kodak()
+    print(f"Kodak: {len(kodak)} immagini pre-caricate\n")
 
     all_results = []
 
     # === CPU CODECS ===
-    all_results.extend(benchmark_jpeg(imgs))
-    all_results.extend(benchmark_jxl(imgs))
-    all_results.extend(benchmark_hevc(imgs))
+    all_results.extend(benchmark_jpeg(kodak, n_repeats=20))
+    all_results.extend(benchmark_jxl(kodak, n_repeats=10))
+    all_results.extend(benchmark_hevc(kodak, n_repeats=3))
 
     # === Ballé ===
     print("\n=== Ballé 2018 ===")
@@ -554,7 +627,9 @@ def main():
 
     for q in [1, 3, 5, 7]:
         net = bmshj2018_hyperprior(quality=q, metric="mse", pretrained=True).to(device)
-        all_results.extend(benchmark_neural(net, "Ballé", f"q={q}", imgs, pad=64))
+        all_results.extend(
+            benchmark_neural(net, "Ballé", f"q={q}", kodak, pad=64, n_repeats=5)
+        )
         del net
         torch.cuda.empty_cache()
 
@@ -564,13 +639,18 @@ def main():
 
     for q in [1, 3, 5]:
         net = cheng2020_attn(quality=q, metric="mse", pretrained=True).to(device)
-        all_results.extend(benchmark_neural(net, "Cheng", f"q={q}", imgs, pad=64))
+        all_results.extend(
+            benchmark_neural(net, "Cheng", f"q={q}", kodak, pad=64, n_repeats=1)
+        )
         del net
         torch.cuda.empty_cache()
 
     # === ELIC ===
+    # NOTA: richiede fix import in /tmp/elic/Network.py per CompressAI >= 1.2.0:
+    #   GaussianConditional → from compressai.entropy_models
+    #   ste_round → quantize_ste
     print("\n=== ELIC ===")
-    sys.path.insert(0, "/tmp/elic")
+    sys.path.insert(0, os.path.expanduser("~/tesi/external_codecs/elic"))
     try:
         from Network import TestModel  # type: ignore
 
@@ -588,18 +668,21 @@ def main():
             net = TestModel()
             net.load_state_dict(sd)
             net = net.to(device)
-            all_results.extend(benchmark_neural(net, "ELIC", param, imgs, pad=64))
+            all_results.extend(
+                benchmark_neural(net, "ELIC", param, kodak, pad=64, n_repeats=3)
+            )
             del net
             torch.cuda.empty_cache()
-    except ImportError:
-        print("  [!] ELIC non disponibile (/tmp/elic)")
+    except ImportError as e:
+        print(f"  [!] ELIC: {e}")
 
     # === TCM ===
     print("\n=== TCM ===")
+    # Pulisci cache moduli per evitare conflitti TCM↔DCAE
     for mod in list(sys.modules.keys()):
         if "models" in mod and "compressai" not in mod:
             del sys.modules[mod]
-    sys.path.insert(0, "/tmp/LIC_TCM")
+    sys.path.insert(0, os.path.expanduser("~/tesi/external_codecs/LIC_TCM"))
     try:
         from models import TCM  # type: ignore
 
@@ -621,7 +704,9 @@ def main():
             sd = torch.load(ckpt, map_location="cpu")
             net.load_state_dict(sd["state_dict"])
             net = net.to(device)
-            all_results.extend(benchmark_neural(net, "TCM", param, imgs, pad=64))
+            all_results.extend(
+                benchmark_neural(net, "TCM", param, kodak, pad=64, n_repeats=3)
+            )
             del net
             torch.cuda.empty_cache()
     except Exception as e:
@@ -632,7 +717,7 @@ def main():
     for mod in list(sys.modules.keys()):
         if "models" in mod and "compressai" not in mod:
             del sys.modules[mod]
-    sys.path.insert(0, "/tmp/DCAE")
+    sys.path.insert(0, os.path.expanduser("~/tesi/external_codecs/DCAE"))
     try:
         from models import DCAE  # type: ignore
 
@@ -652,7 +737,9 @@ def main():
             }
             net.load_state_dict(dictory)
             all_results.extend(
-                benchmark_neural(net, "DCAE", param, imgs, pad=128, pad_mode="center")
+                benchmark_neural(
+                    net, "DCAE", param, kodak, pad=128, pad_mode="center", n_repeats=3
+                )
             )
             del net
             torch.cuda.empty_cache()
@@ -669,27 +756,21 @@ def main():
     print(f"\nCSV: {OUTPUT_CSV}")
 
     # === TABELLA ===
-    print(f"\n{'=' * 95}")
-    print("RIEPILOGO R-D-E (medie Kodak, idle sottratto)")
-    print(f"{'=' * 95}")
+    print(f"\n{'=' * 90}")
+    print("RIEPILOGO R-D-E DEFINITIVO (batch, idle 3s, GC off)")
+    print(f"{'=' * 90}")
     print(
-        f"{'Codec':<20} {'bpp':>6} {'PSNR':>6} {'CPU_net':>8} {'GPU_net':>8} {'TOT_net':>8} {'t(ms)':>7} {'idle_cpu':>8} {'idle_gpu':>8}"
+        f"{'Codec':<20} {'bpp':>6} {'PSNR':>6} {'E/img':>8} {'CPU/img':>8} {'GPU/img':>8} {'reps':>5} {'time':>7}"
     )
-    print("-" * 95)
+    print("-" * 90)
 
-    groups = set((r["codec"], r["param"]) for r in all_results)
-    for codec, param in sorted(groups):
-        sub = [r for r in all_results if r["codec"] == codec and r["param"] == param]
-        bpp = np.mean([r["bpp"] for r in sub])
-        psnr = np.mean([r["psnr"] for r in sub])
-        cpu_n = np.mean([r["energy_cpu_net_j"] for r in sub])
-        gpu_n = np.mean([r["energy_gpu_net_j"] for r in sub])
-        tot_n = np.mean([r["energy_total_net_j"] for r in sub])
-        t = np.mean([r["time_total_ms"] for r in sub])
-        ic = sub[0]["idle_cpu_w"]
-        ig = sub[0]["idle_gpu_w"]
+    for r in sorted(all_results, key=lambda x: (x["codec"], x.get("avg_bpp", 0))):
+        cpu_per = r["energy_cpu_net_j"]
+        gpu_per = r["energy_gpu_net_j"]
         print(
-            f"{codec + ' ' + param:<20} {bpp:>6.3f} {psnr:>6.2f} {cpu_n:>8.3f} {gpu_n:>8.3f} {tot_n:>8.3f} {t:>7.0f} {ic:>7.1f}W {ig:>7.1f}W"
+            f"{r['codec']+' '+r['param']:<20} {r['avg_bpp']:>6.3f} {r['avg_psnr']:>6.2f} "
+            f"{r['energy_per_image_j']:>8.4f} {cpu_per:>8.4f} {gpu_per:>8.4f} "
+            f"{r['n_repeats']:>5} {r['total_time_s']:>6.1f}s"
         )
 
 

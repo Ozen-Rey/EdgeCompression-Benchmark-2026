@@ -1,6 +1,7 @@
 """
 Grafici R-D-E definitivi per la tesi.
-Dati energia corretti (RAPL+Zeus, idle sottratto) per immagini e audio.
+Adattato per la metodologia BATCH: gestisce correttamente le medie
+e i tempi totali scalati per numero di immagini e ripetizioni.
 """
 
 import os
@@ -67,7 +68,7 @@ CODEC_ORDER = ["JPEG", "JXL", "HEVC", "Ballé", "Cheng", "ELIC", "TCM", "DCAE"]
 
 
 # ====================================================================
-# CARICAMENTO
+# CARICAMENTO DATI
 # ====================================================================
 def load_quality():
     dfs = []
@@ -86,9 +87,7 @@ def load_quality():
         except Exception:
             pass
     cols = ["codec", "param", "image", "bpp", "psnr", "ssimulacra2", "lpips"]
-    merged = []
-    for d in dfs:
-        merged.append(d[[c for c in cols if c in d.columns]])
+    merged = [d[[c for c in cols if c in d.columns]] for d in dfs]
     return pd.concat(merged, ignore_index=True)
 
 
@@ -99,12 +98,25 @@ def load_energy():
 
 
 def load_rde(dfq, dfe):
-    q = dfq[["codec", "param", "image", "bpp", "psnr", "ssimulacra2"]].copy()
-    e = dfe[["codec", "param", "image", "energy_total_net_j", "time_total_ms"]].copy()
-    merged = q.merge(e, on=["codec", "param", "image"], how="inner")
-    merged = merged.dropna(subset=["bpp", "psnr", "energy_total_net_j"])
-    merged = merged.rename(columns={"energy_total_net_j": "energy"})
-    return merged
+    """
+    FIX POTENTE 1:
+    dfq è per-immagine, dfe è per-batch.
+    Dobbiamo fare la media di dfq PRIMA di unire, e non usare la colonna "image".
+    """
+    # 1. Media delle metriche di qualità
+    q_avg = (
+        dfq.groupby(["codec", "param"])
+        .agg({"bpp": "mean", "psnr": "mean", "ssimulacra2": "mean"})
+        .reset_index()
+    )
+
+    # 2. Estrai l'energia per immagine dal file batch
+    e = dfe[["codec", "param", "energy_per_image_j"]].copy()
+    e = e.rename(columns={"energy_per_image_j": "energy"})
+
+    # 3. Unione pulita
+    merged = q_avg.merge(e, on=["codec", "param"], how="inner")
+    return merged.dropna(subset=["bpp", "psnr", "energy"])
 
 
 def load_audio():
@@ -115,8 +127,9 @@ def load_audio():
     d["vau"] = pd.read_csv(
         os.path.expanduser("~/tesi/results/audio/visqol_audio_mode_benchmark.csv")
     )
+    # FIX: Punta al nuovo file batch
     d["energy"] = pd.read_csv(
-        os.path.expanduser("~/tesi/results/audio/full_pipeline_energy_benchmark.csv")
+        os.path.expanduser("~/tesi/results/audio/audio_energy_rigorous_batch.csv")
     )
     return d
 
@@ -124,19 +137,13 @@ def load_audio():
 # ====================================================================
 # HELPERS
 # ====================================================================
-def avg_rde(df, codec):
-    s = (
-        df[df["codec"] == codec]
-        .groupby("param")
-        .agg(bpp=("bpp", "mean"), psnr=("psnr", "mean"), energy=("energy", "mean"))
-        .reset_index()
-        .sort_values("bpp")
-    )
-    return s
+def avg_rde(df_rde, codec):
+    # df_rde è già una media, basta filtrare
+    return df_rde[df_rde["codec"] == codec].sort_values("bpp")
 
 
-def avg_metric(df, codec, metric):
-    s = df[df["codec"] == codec].dropna(subset=[metric])
+def avg_metric(dfq, codec, metric):
+    s = dfq[dfq["codec"] == codec].dropna(subset=[metric])
     if len(s) == 0:
         return pd.DataFrame()
     return (
@@ -174,8 +181,7 @@ def fig1(df):
     ax.set_xlabel("Rate — Bitrate (bpp)")
     ax.set_ylabel("Distortion — PSNR (dB) ↑")
     ax.set_title(
-        "Framework R-D-E: Rate vs Distortion vs Energy\n"
-        "(dimensione bolla ∝ √energia netta, full pipeline)"
+        "Framework R-D-E: Rate vs Distortion vs Energy\n(dimensione bolla ∝ √energia netta, full pipeline)"
     )
     ax.set_xlim(0, 2.0)
     ax.set_ylim(25, 45)
@@ -261,7 +267,7 @@ def fig3(df):
             linewidth=1.8,
         )
 
-    ax.set_xlabel("Energia netta (J) →")
+    ax.set_xlabel("Energia netta per immagine (J) →")
     ax.set_ylabel("PSNR (dB) ↑")
     ax.set_title("Trade-off Qualità vs Energia (full pipeline, idle sottratto)")
     ax.set_xscale("log")
@@ -290,7 +296,7 @@ def fig4(df):
     for codec, param in targets_def:
         s = df[(df["codec"] == codec) & (df["param"] == param)]
         if len(s) > 0:
-            targets.append((codec, param, s["psnr"].mean(), s["energy"].mean()))
+            targets.append((codec, param, s["psnr"].values[0], s["energy"].values[0]))
     targets.sort(key=lambda x: x[3])
 
     labels = [f"{t[0]}\n{t[1]}\n({t[2]:.0f} dB)" for t in targets]
@@ -308,7 +314,7 @@ def fig4(df):
     )
     ax.set_xticks(range(len(targets)))
     ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("Energia netta (J)")
+    ax.set_ylabel("Energia netta per Immagine (J)")
     ax.set_yscale("log")
     ax.set_ylim(0.01, 1000)
     ax.set_title("Costo energetico per codec immagini (full pipeline, idle sottratto)")
@@ -337,7 +343,12 @@ def fig5(dfe):
     for codec, param, fwd_ms in codecs_info:
         s = dfe[(dfe["codec"] == codec) & (dfe["param"] == param)]
         if len(s) > 0:
-            codecs_data.append((codec, fwd_ms, s["time_total_ms"].mean()))
+            # FIX POTENTE 2: Converti il tempo batch in ms per singola immagine
+            n_img = s["n_images"].values[0]
+            n_rep = s["n_repeats"].values[0]
+            t_tot_s = s["total_time_s"].values[0]
+            time_per_img_ms = (t_tot_s * 1000) / (n_img * n_rep)
+            codecs_data.append((codec, fwd_ms, time_per_img_ms))
 
     labels = [c[0] for c in codecs_data]
     fwd = [c[1] for c in codecs_data]
@@ -393,7 +404,7 @@ def fig5(dfe):
 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=9)
-    ax.set_ylabel("Tempo (ms)")
+    ax.set_ylabel("Tempo (ms per immagine)")
     ax.set_title("Forward pass vs Codifica aritmetica")
     ax.set_yscale("log")
     ax.set_ylim(1, 8000)
@@ -491,31 +502,35 @@ def fig7(aud):
 
 
 # ====================================================================
-# FIG 8: Audio energy (dal CSV rigoroso)
+# FIG 8: Audio energy (dal CSV rigoroso batch)
 # ====================================================================
 def fig8(aud):
     ae = aud["energy"]
     codec_order = [
-        ("Opus", "24"),
-        ("Opus", "12"),
-        ("Opus", "48"),
-        ("SNAC", "0.8"),
-        ("WavTokenizer", "0.9"),
-        ("EnCodec", "3.0"),
-        ("EnCodec", "1.5"),
-        ("DAC", "8.0"),
+        ("Opus", 24),
+        ("Opus", 12),
+        ("Opus", 48),
+        ("SNAC", 0.8),
+        ("WavTokenizer", 0.9),
+        ("EnCodec", 3.0),
+        ("EnCodec", 1.5),
+        ("DAC", 8.0),
     ]
 
     labels, j_per_s, colors = [], [], []
     for codec, param in codec_order:
-        s = ae[(ae["codec"] == codec) & (ae["param"].astype(str) == param)]
+        # FIX POTENTE 3: Converte tutto in float sicuro per matchare "12" con "12.0"
+        s = ae[
+            (ae["codec"] == codec)
+            & (pd.to_numeric(ae["param"], errors="coerce") == float(param))
+        ]
         if len(s) == 0:
             continue
-        total_dur = s["duration_s"].sum()
-        total_e = s["energy_total_net_j"].sum()
-        jps = total_e / total_dur if total_dur > 0 else 0
+
+        # FIX POTENTE 4: Il nuovo CSV ha già j_per_s
+        val = s["j_per_s"].values[0]
         labels.append(f"{codec}\n{param} kbps")
-        j_per_s.append(jps)
+        j_per_s.append(val)
         colors.append(C[codec])
 
     fig, ax = plt.subplots(figsize=(9, 4.5))
@@ -532,8 +547,8 @@ def fig8(aud):
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, fontsize=8)
     ax.set_ylabel("Energia netta (J / s audio)")
-    ax.set_title("Consumo energetico audio (idle sottratto, RAPL+Zeus)")
-    ax.set_ylim(0, 1.1)
+    ax.set_title("Consumo energetico audio (idle sottratto, RAPL+Zeus batch)")
+    ax.set_ylim(0, 1.4)
 
     fig.savefig(os.path.join(OUT, "fig8_energy_audio.pdf"))
     plt.close()
@@ -541,10 +556,9 @@ def fig8(aud):
 
 
 # ====================================================================
-# FIG 9: Cross-domain (dati corretti)
+# FIG 9: Cross-domain
 # ====================================================================
 def fig9():
-    # Gap energetico: Cheng 159J / JPEG 0.04J = ~3980×  |  DAC 0.97 / Opus 0.096 = ~10.1×
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4.5))
 
     a1.bar(
@@ -554,9 +568,12 @@ def fig9():
         edgecolor="black",
         alpha=0.85,
     )
+
+    # Aggiornato con il nuovo gap misurato (14.5x)
     a1.bar(
-        ["Audio\n(DAC/Opus)"], [10.1], color="#2ca02c", edgecolor="black", alpha=0.85
+        ["Audio\n(DAC/Opus)"], [14.5], color="#2ca02c", edgecolor="black", alpha=0.85
     )
+
     a1.set_ylabel("Divario energetico massimo (×)")
     a1.set_title("Gap energetico: classico ↔ neurale")
     a1.set_yscale("log")
@@ -565,10 +582,9 @@ def fig9():
         0, 5500, "3980×", ha="center", fontsize=14, fontweight="bold", color="#d62728"
     )
     a1.text(
-        1, 16, "10.1×", ha="center", fontsize=14, fontweight="bold", color="#2ca02c"
+        1, 20, "14.5×", ha="center", fontsize=14, fontweight="bold", color="#2ca02c"
     )
 
-    # Percettivo normalizzato
     classical_pct = [72.5 / 72.5 * 100, 3.57 / 3.67 * 100]
     neural_pct = [56.1 / 72.5 * 100, 3.67 / 3.67 * 100]
     x = np.arange(2)
@@ -690,7 +706,7 @@ def main():
 
     print(f"  Qualità img: {len(dfq)} righe, codec: {sorted(dfq['codec'].unique())}")
     print(f"  Energia img: {len(dfe)} righe, codec: {sorted(dfe['codec'].unique())}")
-    print(f"  R-D-E merge: {len(df_rde)} righe")
+    print(f"  R-D-E merge: {len(df_rde)} righe aggregate")
     print(f"  Audio energy: {len(aud['energy'])} righe")
 
     print("\nGenerazione grafici:")
