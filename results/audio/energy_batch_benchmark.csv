@@ -1,0 +1,5 @@
+codec,kbps,rtf,j_per_s,batch_j,source
+DAC_8.0,8.0,0.0034,1.4,349.25,Zeus
+EnCodec_3.0,3.0,0.0023,0.49,123.57,Zeus
+Opus_24,24,0.0076,0.35,87.14,RAPL
+SNAC_0.8,0.8,0.001,0.32,80.85,Zeus

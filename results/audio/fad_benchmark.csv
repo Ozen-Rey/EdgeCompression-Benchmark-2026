@@ -1,0 +1,10 @@
+codec,param,fad_vggish
+DAC,8.0,8.0428
+EnCodec,1.5,11.7842
+EnCodec,3.0,10.436
+EnCodec,6.0,9.4238
+Opus,12,8.4421
+Opus,24,8.7868
+Opus,48,8.2696
+SNAC,0.8,10.0138
+WavTokenizer,0.9,10.6176

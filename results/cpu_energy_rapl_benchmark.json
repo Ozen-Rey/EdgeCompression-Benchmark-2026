@@ -1,0 +1,112 @@
+{
+  "HEVC_crf=25": {
+    "codec": "HEVC",
+    "param": "crf=25",
+    "n_images": 24,
+    "bpp": 0.6564,
+    "time_total_ms": 142.9,
+    "time_encode_ms": 72.4,
+    "time_decode_ms": 70.5,
+    "cpu_energy_j": 6.745,
+    "cpu_energy_net_j": 3.082
+  },
+  "HEVC_crf=35": {
+    "codec": "HEVC",
+    "param": "crf=35",
+    "n_images": 24,
+    "bpp": 0.1985,
+    "time_total_ms": 122.1,
+    "time_encode_ms": 57.4,
+    "time_decode_ms": 64.8,
+    "cpu_energy_j": 5.72,
+    "cpu_energy_net_j": 2.588
+  },
+  "HEVC_crf=45": {
+    "codec": "HEVC",
+    "param": "crf=45",
+    "n_images": 24,
+    "bpp": 0.0761,
+    "time_total_ms": 99.4,
+    "time_encode_ms": 51.5,
+    "time_decode_ms": 47.9,
+    "cpu_energy_j": 4.69,
+    "cpu_energy_net_j": 2.142
+  },
+  "JPEG_q=30": {
+    "codec": "JPEG",
+    "param": "q=30",
+    "n_images": 24,
+    "bpp": 0.6598,
+    "time_total_ms": 1.2,
+    "time_encode_ms": 0.6,
+    "time_decode_ms": 0.6,
+    "cpu_energy_j": 0.04,
+    "cpu_energy_net_j": 0.009
+  },
+  "JPEG_q=60": {
+    "codec": "JPEG",
+    "param": "q=60",
+    "n_images": 24,
+    "bpp": 1.0366,
+    "time_total_ms": 1.2,
+    "time_encode_ms": 0.6,
+    "time_decode_ms": 0.6,
+    "cpu_energy_j": 0.051,
+    "cpu_energy_net_j": 0.021
+  },
+  "JPEG_q=90": {
+    "codec": "JPEG",
+    "param": "q=90",
+    "n_images": 24,
+    "bpp": 2.3463,
+    "time_total_ms": 1.6,
+    "time_encode_ms": 0.7,
+    "time_decode_ms": 0.9,
+    "cpu_energy_j": 0.062,
+    "cpu_energy_net_j": 0.021
+  },
+  "JXL_d=1.0": {
+    "codec": "JXL",
+    "param": "d=1.0",
+    "n_images": 24,
+    "bpp": 1.7024,
+    "time_total_ms": 29.5,
+    "time_encode_ms": 24.1,
+    "time_decode_ms": 5.4,
+    "cpu_energy_j": 1.214,
+    "cpu_energy_net_j": 0.458
+  },
+  "JXL_d=12.0": {
+    "codec": "JXL",
+    "param": "d=12.0",
+    "n_images": 24,
+    "bpp": 0.2366,
+    "time_total_ms": 32.6,
+    "time_encode_ms": 20.7,
+    "time_decode_ms": 12.0,
+    "cpu_energy_j": 1.393,
+    "cpu_energy_net_j": 0.556
+  },
+  "JXL_d=3.0": {
+    "codec": "JXL",
+    "param": "d=3.0",
+    "n_images": 24,
+    "bpp": 0.7438,
+    "time_total_ms": 26.3,
+    "time_encode_ms": 22.0,
+    "time_decode_ms": 4.4,
+    "cpu_energy_j": 1.113,
+    "cpu_energy_net_j": 0.437
+  },
+  "JXL_d=7.0": {
+    "codec": "JXL",
+    "param": "d=7.0",
+    "n_images": 24,
+    "bpp": 0.3686,
+    "time_total_ms": 33.3,
+    "time_encode_ms": 21.1,
+    "time_decode_ms": 12.1,
+    "cpu_energy_j": 1.399,
+    "cpu_energy_net_j": 0.546
+  }
+}

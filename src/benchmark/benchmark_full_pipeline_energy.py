@@ -18,7 +18,7 @@ N ripetizioni adattive:
   TCM:   3 (~108ms → 7.8s totali)
   DCAE:  3 (~109ms → 7.8s totali)
   Cheng: 1 (~3400ms → 82s totali — già abbastanza lungo)
-
+ w
 Codec CPU-only: GPU net = 0 (non usano GPU)
 Codec neurali: tot = CPU net + GPU net
 

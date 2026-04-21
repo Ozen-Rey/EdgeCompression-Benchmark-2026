@@ -1,24 +1,139 @@
-# Dataset (troppo grandi per git)
+# ============================================================
+# .gitignore per tesi Rate-Distortion-Energy
+# Idea: tracciamo SOLO il codice nostro + il manoscritto + i CSV
+# di risultato (piccoli ma critici per riproducibilità).
+# Tutto il resto (dataset, codec esterni, weights, output binari,
+# bitstream, decoded YUV) è ricreabile o scaricabile, NON va in git.
+# ============================================================
+
+
+# ============== DATASET ==============
+# UVG, Tecnick, MUSDB18, ecc. — pesanti, scaricabili dai siti ufficiali
 datasets/
+datasets_audio/
 
-# Risultati numerici (aggiunti selettivamente)
-results/
 
-# Python
-__pycache__/
-*.pyc
-*.pth.tar
-.cache/
-
-# Jupyter checkpoints
-.ipynb_checkpoints/
-
-# Modelli scaricati da CompressAI/HuggingFace
-*.pth
-
-# Editor
-.vscode/settings.json
-*.7z
-wget-log*
+# ============== CODEC ESTERNI ==============
+# Repo terzi cloni (Microsoft DCVC, ffmpeg, x264, x265, SVT-AV1, vmaf, ...)
+# Contengono codice non nostro + binari + build artifacts.
+# Le SHA dei commit / istruzioni di build le mettiamo in setup.sh.
 external_codecs/
-models/wavtokenizer/
+tools/
+
+
+# ============== MODEL WEIGHTS ==============
+# Checkpoint pretrained dei codec neurali (DCVC-DC, FM, RT, ecc.).
+# Scaricabili dai link ufficiali Microsoft. Pesanti (~700 MB totali).
+models/
+model/
+*.pth
+*.pth.tar
+*.ckpt
+*.safetensors
+
+
+# ============== OUTPUT BINARI ==============
+# Bitstream prodotti dai benchmark (ricreabili rilanciando run_*.py).
+# Pesanti se misurati su molti q_index/CRF.
+bitstreams_video/
+bitstreams_audio/
+bitstreams_image/
+*.265
+*.264
+*.266
+*.ivf
+*.bin
+*.mkv
+*.mp4
+*.webm
+
+# YUV decodificati (sempre temporanei, non dovrebbero mai essere committati)
+*.yuv
+*.y4m
+
+
+# ============== LOG ==============
+# Output dei run benchmark, info debug, telemetria.
+*.log
+*.log.*
+oracle_telemetry*.log
+audio_musdb*.log
+
+
+# ============== PYTHON ==============
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs (se mai li mettessi nella repo)
+venv/
+env/
+.venv/
+.env/
+
+
+# ============== EDITOR / OS ==============
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+
+# ============== JUPYTER ==============
+.ipynb_checkpoints/
+*.ipynb_meta
+
+
+# ============== LATEX (manoscritto tesi) ==============
+# Manteniamo SOLO i .tex e i .bib, non gli artefatti di compilazione.
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.synctex.gz
+*.toc
+*.xdv
+*.dvi
+# il PDF finale non lo committiamo (lo rigeneri da .tex con pdflatex)
+# Se vuoi conservarlo togli le 2 righe seguenti:
+*.pdf
+!figures/**/*.pdf
+# (l'ultima riga eccetto-pattern preserva i .pdf usati come figure)
+
+
+# ============== GRANDI FILE / CACHE ==============
+# Hugging Face / PyTorch cache (di solito già fuori dalla repo, ma per sicurezza)
+.cache/
+.huggingface/
+**/wandb/
+
+
+# ============== RISULTATI: COSA TENIAMO ==============
+# I CSV di benchmark sono PICCOLI (KB/MB) e CRITICI: li teniamo!
+# Quindi NIENTE di esplicito qui: results/ è tracciato per default.
+# Forziamo un po' di ridondanza commentata:
+# !results/
+# !results/**
+
+
+# ============== SCAFFOLDING (cose tue da mantenere fuori dalla repo) ==============
+# Output sperimentali "personali" che non vuoi pushare:
+notes_personali.md
+todo.txt
+TODO_personali/
