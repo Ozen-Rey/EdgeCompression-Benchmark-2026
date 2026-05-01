@@ -1,10 +1,11 @@
 """
-Calcolo qualità per i bitstream SVT-AV1.
+Calcolo qualità SVT-AV1 — VERSIONE PRESET MULTIPLI.
 
-Gemello di quality_x264.py / quality_x265.py.
+Itera su preset NUOVI (p2, p10) — il preset originale (p5) è già stato
+calcolato dalla v1.
 
 Output:
-  ~/tesi/results/video/svtav1_quality.csv
+  ~/tesi/results/video/svtav1_quality.csv (append, con colonna preset)
 """
 
 import os
@@ -27,8 +28,7 @@ from common import (
     bitstream_path,
 )
 
-# Import dei CRF points dallo script energetico per coerenza
-from run_svtav1 import SVTAV1_CRF_POINTS
+from run_svtav1 import SVTAV1_CRF_POINTS, PRESETS
 
 CODEC = "svtav1"
 QUALITY_CSV = RESULTS_DIR / "svtav1_quality.csv"
@@ -37,6 +37,7 @@ QUALITY_FIELDS = [
     "codec",
     "seq",
     "profile",
+    "preset",
     "param",
     "vmaf_mean",
     "psnr_y",
@@ -101,7 +102,7 @@ def compute_vmaf(ref_yuv, dist_bitstream, width, height, fps):
         data = json.load(fh)
     log_path.unlink()
     vmaf_mean = data["pooled_metrics"]["vmaf"]["mean"]
-    print(f"      VMAF={vmaf_mean:.2f} ({elapsed:.0f}s)")
+    print(f"        VMAF={vmaf_mean:.2f} ({elapsed:.0f}s)")
     return vmaf_mean
 
 
@@ -178,7 +179,7 @@ def compute_psnr(ref_yuv, dist_bitstream, width, height, fps):
     psnr_log.unlink(missing_ok=True)
     psnr_yuv = (6 * psnr_y + psnr_u + psnr_v) / 8
     print(
-        f"      PSNR y={psnr_y:.2f} u={psnr_u:.2f} v={psnr_v:.2f} "
+        f"        PSNR y={psnr_y:.2f} u={psnr_u:.2f} v={psnr_v:.2f} "
         f"weighted={psnr_yuv:.2f} ({elapsed:.0f}s)"
     )
     return psnr_y, psnr_u, psnr_v, psnr_yuv
@@ -229,12 +230,11 @@ def compute_ssim(ref_yuv, dist_bitstream, width, height, fps):
         if vals:
             ssim_y = sum(vals) / len(vals)
     ssim_log.unlink(missing_ok=True)
-    print(f"      SSIM Y={ssim_y:.4f} ({elapsed:.0f}s)")
+    print(f"        SSIM Y={ssim_y:.4f} ({elapsed:.0f}s)")
     return ssim_y
 
 
 def compute_ms_ssim(ref_yuv, dist_bitstream, width, height, fps):
-    """Multi-Scale SSIM tramite libvmaf feature."""
     log_path = Path("/dev/shm") / f"__msssim_{dist_bitstream.stem}.json"
     cmd = [
         FFMPEG,
@@ -264,7 +264,7 @@ def compute_ms_ssim(ref_yuv, dist_bitstream, width, height, fps):
     result = subprocess.run(cmd, capture_output=True)
     elapsed = time.time() - t0
     if result.returncode != 0:
-        print(f"      MS-SSIM failed, returning NaN")
+        print(f"        MS-SSIM failed, returning NaN")
         log_path.unlink(missing_ok=True)
         return float("nan")
     try:
@@ -274,63 +274,68 @@ def compute_ms_ssim(ref_yuv, dist_bitstream, width, height, fps):
         ms_ssim = data["pooled_metrics"]["float_ms_ssim"]["mean"]
     except (KeyError, FileNotFoundError):
         ms_ssim = float("nan")
-    print(f"      MS-SSIM Y={ms_ssim:.4f} ({elapsed:.0f}s)")
+    print(f"        MS-SSIM Y={ms_ssim:.4f} ({elapsed:.0f}s)")
     return ms_ssim
 
 
 def main():
     print("=" * 70)
-    print(f"SVT-AV1 QUALITY COMPUTATION")
+    print(f"SVT-AV1 QUALITY COMPUTATION — EXTRA PRESETS")
+    print(f"Presets to evaluate: {[f'p{p}' for p in PRESETS]}")
     print(f"Operating points: CRF ∈ {SVTAV1_CRF_POINTS}")
     print(f"Profiles: {PROFILES}")
     print("=" * 70)
-    print(f"Output CSV: {QUALITY_CSV}")
+    print(f"Output CSV: {QUALITY_CSV} (append)")
 
     setup_dirs()
     init_quality_csv(QUALITY_CSV)
 
     t_start = time.time()
     n_done = 0
-    n_total = len(UVG_SEQUENCES) * len(PROFILES) * len(SVTAV1_CRF_POINTS)
+    n_total = len(UVG_SEQUENCES) * len(PROFILES) * len(PRESETS) * len(SVTAV1_CRF_POINTS)
 
     for seq_name, fname, W, H, fps, n_frames in UVG_SEQUENCES:
         ref_yuv = UVG_DIR / fname
         print(f"\n[{seq_name}]")
         for profile in PROFILES:
-            for crf in SVTAV1_CRF_POINTS:
-                op_id = f"crf{crf}"
-                bs_path = bitstream_path(CODEC, seq_name, profile, op_id, "ivf")
-                if not bs_path.exists():
-                    print(f"  [SKIP] {profile} {op_id}: bitstream missing")
-                    continue
-                print(f"  {profile} {op_id}")
-                try:
-                    vmaf_mean = compute_vmaf(ref_yuv, bs_path, W, H, fps)
-                    psnr_y, psnr_u, psnr_v, psnr_yuv = compute_psnr(
-                        ref_yuv, bs_path, W, H, fps
-                    )
-                    ssim_y = compute_ssim(ref_yuv, bs_path, W, H, fps)
-                    ms_ssim_y = compute_ms_ssim(ref_yuv, bs_path, W, H, fps)
-                    append_quality(
-                        QUALITY_CSV,
-                        {
-                            "codec": CODEC,
-                            "seq": seq_name,
-                            "profile": profile,
-                            "param": f"crf={crf}",
-                            "vmaf_mean": round(vmaf_mean, 3),
-                            "psnr_y": round(psnr_y, 3),
-                            "psnr_u": round(psnr_u, 3),
-                            "psnr_v": round(psnr_v, 3),
-                            "psnr_yuv": round(psnr_yuv, 3),
-                            "ssim_y": round(ssim_y, 5),
-                            "ms_ssim_y": round(ms_ssim_y, 5),
-                            "n_frames": n_frames,
-                        },
-                    )
-                    n_done += 1
-                except Exception as e:
-                    print(f"    [ERROR] {e}")
+            for preset in PRESETS:
+                for crf in SVTAV1_CRF_POINTS:
+                    op_id = f"p{preset}_crf{crf}"
+                    bs_path = bitstream_path(CODEC, seq_name, profile, op_id, "ivf")
+                    if not bs_path.exists():
+                        print(
+                            f"  [SKIP] {profile} p{preset} crf{crf}: bitstream missing"
+                        )
+                        continue
+                    print(f"  {profile} p{preset} crf{crf}")
+                    try:
+                        vmaf_mean = compute_vmaf(ref_yuv, bs_path, W, H, fps)
+                        psnr_y, psnr_u, psnr_v, psnr_yuv = compute_psnr(
+                            ref_yuv, bs_path, W, H, fps
+                        )
+                        ssim_y = compute_ssim(ref_yuv, bs_path, W, H, fps)
+                        ms_ssim_y = compute_ms_ssim(ref_yuv, bs_path, W, H, fps)
+                        append_quality(
+                            QUALITY_CSV,
+                            {
+                                "codec": CODEC,
+                                "seq": seq_name,
+                                "profile": profile,
+                                "preset": f"p{preset}",
+                                "param": f"crf={crf}",
+                                "vmaf_mean": round(vmaf_mean, 3),
+                                "psnr_y": round(psnr_y, 3),
+                                "psnr_u": round(psnr_u, 3),
+                                "psnr_v": round(psnr_v, 3),
+                                "psnr_yuv": round(psnr_yuv, 3),
+                                "ssim_y": round(ssim_y, 5),
+                                "ms_ssim_y": round(ms_ssim_y, 5),
+                                "n_frames": n_frames,
+                            },
+                        )
+                        n_done += 1
+                    except Exception as e:
+                        print(f"    [ERROR] {e}")
 
     elapsed = time.time() - t_start
     print(f"\nDONE. {n_done}/{n_total} in {elapsed:.0f}s ({elapsed/60:.1f} min)")

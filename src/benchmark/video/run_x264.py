@@ -1,22 +1,14 @@
 """
-Benchmark energetico x264 (H.264/AVC).
+Benchmark energetico x264 (H.264/AVC) — VERSIONE PRESET MULTIPLI.
 
-Gemello di run_x265.py. Stesso approccio (CRF fissi, bitrate osservato).
+Modifiche rispetto alla v1:
+  - PRESETS lista di preset x264 (escluso "medium" già fatto)
+  - op_id include il preset → bitstream filename: x264_<seq>_<profile>_<preset>_crf<CRF>.264
+  - CSV include colonna `preset` (post-migration)
+  - Skip se bitstream esiste
 
-Note tecniche x264:
-  - Parametri passati via -x264-params (sintassi "key=val:key2=val2")
-  - "no-B-frame" si ottiene con bframes=0
-  - Preset "medium" coerente con x265
-
-Output:
-  ~/tesi/results/video/x264_energy.csv
-  /dev/shm/bitstreams/x264_*.264
-
-Uso:
-  conda activate tesi-video
-  cd ~/tesi/src/benchmark/video
-  nohup python -u run_x264.py > x264_full_run.log 2>&1 &
-  echo "PID: $!"
+NOTA: il preset originale (medium) è GIÀ stato eseguito ed è nel CSV.
+Questa versione esegue SOLO i nuovi preset (faster, slow).
 """
 
 import os
@@ -48,16 +40,12 @@ from common import (
 
 CODEC = "x264"
 CSV_PATH = RESULTS_DIR / "x264_energy.csv"
-PRESET = "medium"
 
-
-# ================== x264 COMMAND BUILDERS ==================
+# Preset NUOVI da testare (medium già eseguito in run originale, NON ripetiamo)
+PRESETS = ["faster", "slow"]
 
 
 def build_x264_params(profile, n_frames):
-    """
-    Costruisce la stringa -x264-params coerente col profilo.
-    """
     if profile == "LDP":
         params = [
             f"keyint={n_frames}",
@@ -77,7 +65,7 @@ def build_x264_params(profile, n_frames):
     return ":".join(params)
 
 
-def encode_x264_cmd(width, height, fps, n_frames, profile, crf, out_path):
+def encode_x264_cmd(width, height, fps, n_frames, profile, preset, crf, out_path):
     x264_params = build_x264_params(profile, n_frames)
     return [
         FFMPEG,
@@ -98,7 +86,7 @@ def encode_x264_cmd(width, height, fps, n_frames, profile, crf, out_path):
         "-c:v",
         "libx264",
         "-preset",
-        PRESET,
+        preset,
         "-crf",
         str(crf),
         "-x264-params",
@@ -130,11 +118,8 @@ def decode_x264_cmd(bitstream_in, yuv_out, width, height):
     ]
 
 
-# ================== RUNNERS ==================
-
-
-def run_encode(yuv_bytes, width, height, fps, n_frames, profile, crf, out_path):
-    cmd = encode_x264_cmd(width, height, fps, n_frames, profile, crf, out_path)
+def run_encode(yuv_bytes, width, height, fps, n_frames, profile, preset, crf, out_path):
+    cmd = encode_x264_cmd(width, height, fps, n_frames, profile, preset, crf, out_path)
     result = subprocess.run(cmd, input=yuv_bytes, capture_output=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -153,31 +138,35 @@ def run_decode(bitstream_in, yuv_out, width, height):
         )
 
 
-# ================== MEASUREMENT ==================
-
-
-def measure_config(yuv_bytes, seq_name, width, height, fps, n_frames, profile, crf):
-    op_id = f"crf{crf}"
+def measure_config(
+    yuv_bytes, seq_name, width, height, fps, n_frames, profile, preset, crf
+):
+    op_id = f"{preset}_crf{crf}"
     bs_path = bitstream_path(CODEC, seq_name, profile, op_id, "264")
     dec_path = decoded_path(CODEC, seq_name, profile, op_id)
 
-    # Warmup
+    if bs_path.exists() and bs_path.stat().st_size > 1000:
+        print(f"      [SKIP] {bs_path.name} già esiste")
+        return
+
     warmup_bytes = yuv_bytes[: yuv_frame_size_bytes(width, height) * 30]
     warmup_out = BITSTREAMS_DIR / "__warmup.264"
     try:
-        run_encode(warmup_bytes, width, height, fps, 30, profile, crf, warmup_out)
+        run_encode(
+            warmup_bytes, width, height, fps, 30, profile, preset, crf, warmup_out
+        )
     except Exception as e:
-        print(f"    [warmup warning] {e}")
+        print(f"      [warmup warning] {e}")
     finally:
         if warmup_out.exists():
             warmup_out.unlink()
 
-    # Idle cal #1
     cpu_idle_1, gpu_idle_1 = measure_idle()
 
-    # Encode
     def do_encode():
-        run_encode(yuv_bytes, width, height, fps, n_frames, profile, crf, bs_path)
+        run_encode(
+            yuv_bytes, width, height, fps, n_frames, profile, preset, crf, bs_path
+        )
 
     enc_result = measure_phase(do_encode, cpu_idle_1, gpu_idle_1, is_neural=False)
     actual_mbps = compute_actual_mbps(bs_path, n_frames, fps)
@@ -188,6 +177,7 @@ def measure_config(yuv_bytes, seq_name, width, height, fps, n_frames, profile, c
             "codec": CODEC,
             "seq": seq_name,
             "profile": profile,
+            "preset": preset,
             "param": f"crf={crf}",
             "phase": "encode",
             "n_frames": n_frames,
@@ -202,14 +192,12 @@ def measure_config(yuv_bytes, seq_name, width, height, fps, n_frames, profile, c
         },
     )
     print(
-        f"    ENCODE: crf={crf} actual={actual_mbps:.2f}Mbps "
+        f"      ENCODE: {preset} crf={crf} actual={actual_mbps:.2f}Mbps "
         f"time={enc_result['time_s']:.1f}s E_cpu={enc_result['cpu_net_j']:.1f}J"
     )
 
-    # Idle cal #2
     cpu_idle_2, gpu_idle_2 = measure_idle()
 
-    # Decode
     def do_decode():
         run_decode(bs_path, dec_path, width, height)
 
@@ -221,6 +209,7 @@ def measure_config(yuv_bytes, seq_name, width, height, fps, n_frames, profile, c
             "codec": CODEC,
             "seq": seq_name,
             "profile": profile,
+            "preset": preset,
             "param": f"crf={crf}",
             "phase": "decode",
             "n_frames": n_frames,
@@ -235,7 +224,7 @@ def measure_config(yuv_bytes, seq_name, width, height, fps, n_frames, profile, c
         },
     )
     print(
-        f"    DECODE: time={dec_result['time_s']:.3f}s "
+        f"      DECODE: time={dec_result['time_s']:.3f}s "
         f"E_cpu={dec_result['cpu_net_j']:.2f}J"
     )
 
@@ -247,6 +236,11 @@ def run_all():
     print(f"\n[Measurement] starting. CSV: {CSV_PATH}")
     t_start = time.time()
 
+    n_total = (
+        len(UVG_SEQUENCES) * len(PROFILES) * len(PRESETS) * len(CLASSIC_CRF_POINTS)
+    )
+    n_done = 0
+
     for seq_name, fname, W, H, fps, n_frames in UVG_SEQUENCES:
         print(f"\n[{seq_name}] loading YUV ({n_frames} frames, {W}x{H})...")
         yuv_path = UVG_DIR / fname
@@ -254,13 +248,25 @@ def run_all():
 
         for profile in PROFILES:
             print(f"  profile={profile}")
-            for crf in CLASSIC_CRF_POINTS:
-                try:
-                    measure_config(
-                        yuv_bytes, seq_name, W, H, fps, n_frames, profile, crf
-                    )
-                except Exception as e:
-                    print(f"    [ERROR] {profile} crf={crf}: {e}")
+            for preset in PRESETS:
+                print(f"    preset={preset}")
+                for crf in CLASSIC_CRF_POINTS:
+                    n_done += 1
+                    print(f"    [{n_done}/{n_total}]")
+                    try:
+                        measure_config(
+                            yuv_bytes,
+                            seq_name,
+                            W,
+                            H,
+                            fps,
+                            n_frames,
+                            profile,
+                            preset,
+                            crf,
+                        )
+                    except Exception as e:
+                        print(f"      [ERROR] {profile} {preset} crf={crf}: {e}")
 
         del yuv_bytes
 
@@ -270,11 +276,13 @@ def run_all():
 
 def main():
     print("=" * 70)
-    print(f"x264 VIDEO ENERGY BENCHMARK — preset={PRESET}")
+    print(f"x264 VIDEO ENERGY BENCHMARK — EXTRA PRESETS")
+    print(f"Presets to run: {PRESETS}")
+    print(f"  (medium already done in original run)")
     print(f"Operating points: CRF ∈ {CLASSIC_CRF_POINTS}")
     print(f"Profiles: {PROFILES}")
     print("=" * 70)
-    print(f"Output CSV: {CSV_PATH}")
+    print(f"Output CSV: {CSV_PATH} (append mode)")
 
     setup_dirs()
     init_csv(CSV_PATH)
@@ -291,7 +299,7 @@ def main():
     run_all()
 
     print(f"\nDONE. Results: {CSV_PATH}")
-    print(f"Next: python -u quality_x264.py > x264_quality_run.log 2>&1 &")
+    print(f"Next: python -u quality_x264.py > x264_quality_extra.log 2>&1 &")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,67 @@
+{
+  "errors": [],
+  "warnings": [],
+  "info": [],
+  "stats": {
+    "x264": {
+      "energy_rows": "336/336",
+      "quality_rows": "168/168",
+      "E_cpu_encode_medium_J": "med=180 min=45 max=492",
+      "E_cpu_encode_faster_J": "med=127 min=37 max=326",
+      "E_cpu_encode_slow_J": "med=259 min=60 max=725",
+      "energy_keys": 168,
+      "quality_keys": 168,
+      "matched_pairs": 168
+    },
+    "x265": {
+      "energy_rows": "336/336",
+      "quality_rows": "168/168",
+      "E_cpu_encode_medium_J": "med=460 min=95 max=1103",
+      "E_cpu_encode_faster_J": "med=282 min=95 max=571",
+      "E_cpu_encode_slow_J": "med=1131 min=279 max=2786",
+      "energy_keys": 168,
+      "quality_keys": 168,
+      "matched_pairs": 168
+    },
+    "svtav1": {
+      "energy_rows": "336/336",
+      "quality_rows": "168/168",
+      "E_cpu_encode_p5_J": "med=628 min=233 max=1401",
+      "E_cpu_encode_p2_J": "med=4178 min=1549 max=9376",
+      "E_cpu_encode_p10_J": "med=112 min=46 max=230",
+      "energy_keys": 168,
+      "quality_keys": 168,
+      "matched_pairs": 168
+    },
+    "vvenc": {
+      "energy_rows": "336/336",
+      "quality_rows": "168/168",
+      "E_cpu_encode_medium_J": "med=4939 min=1451 max=24443",
+      "E_cpu_encode_faster_J": "med=1028 min=366 max=3345",
+      "E_cpu_encode_slow_J": "med=15372 min=3180 max=112257",
+      "energy_keys": 168,
+      "quality_keys": 168,
+      "matched_pairs": 168
+    },
+    "dcvc_dc": {
+      "energy_rows": "28/28",
+      "quality_rows": "28/28",
+      "E_total_encode_J": "med=74087 min=34374 max=76723"
+    },
+    "dcvc_fm": {
+      "energy_rows": "28/28",
+      "quality_rows": "28/28",
+      "E_total_encode_J": "med=71807 min=32639 max=73147"
+    },
+    "dcvc_rt": {
+      "energy_rows": "28/28",
+      "quality_rows": "28/28",
+      "E_total_encode_J": "med=9383 min=4272 max=9765"
+    },
+    "dcvc_rt_cuda": {
+      "energy_rows": "56/56",
+      "quality_rows": "28/28",
+      "E_total_encode_J": "med=3663 min=1592 max=3889"
+    }
+  }
+}
