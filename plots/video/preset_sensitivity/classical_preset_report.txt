@@ -1,0 +1,31 @@
+Classical preset sensitivity report
+======================================================================
+Reference presets:
+  x264   -> medium
+  x265   -> medium
+  SVT-AV1 -> p5
+  VVenC  -> medium
+
+x264
+----------------------------------------------------------------------
+  faster                E=  0.1072 kJ/seq  E/ref=  0.758  VMAF=  64.537  ΔVMAF= -1.167
+  medium   [reference]  E=  0.1414 kJ/seq  E/ref=  1.000  VMAF=  65.704  ΔVMAF= +0.000
+  slow                  E=  0.2258 kJ/seq  E/ref=  1.597  VMAF=  64.184  ΔVMAF= -1.521
+
+x265
+----------------------------------------------------------------------
+  faster                E=  0.3081 kJ/seq  E/ref=  0.835  VMAF=  70.792  ΔVMAF= -0.291
+  medium   [reference]  E=  0.3691 kJ/seq  E/ref=  1.000  VMAF=  71.083  ΔVMAF= +0.000
+  slow                  E=  1.0102 kJ/seq  E/ref=  2.737  VMAF=  74.177  ΔVMAF= +3.094
+
+SVT-AV1
+----------------------------------------------------------------------
+  p10                   E=  0.1550 kJ/seq  E/ref=  0.202  VMAF=  86.938  ΔVMAF= -0.482
+  p5       [reference]  E=  0.7674 kJ/seq  E/ref=  1.000  VMAF=  87.419  ΔVMAF= +0.000
+  p2                    E=  5.1334 kJ/seq  E/ref=  6.689  VMAF=  88.220  ΔVMAF= +0.801
+
+VVenC
+----------------------------------------------------------------------
+  faster                E=  1.3373 kJ/seq  E/ref=  0.191  VMAF=  73.575  ΔVMAF= -2.825
+  medium   [reference]  E=  7.0063 kJ/seq  E/ref=  1.000  VMAF=  76.400  ΔVMAF= +0.000
+  slow                  E= 25.0424 kJ/seq  E/ref=  3.574  VMAF=  76.861  ΔVMAF= +0.461

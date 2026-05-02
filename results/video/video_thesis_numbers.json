@@ -1,0 +1,218 @@
+{
+  "reference_preset": {
+    "x264 medium": {
+      "bitrate_mbps_mean": 6.343,
+      "bitrate_mbps_min": 1.949,
+      "bitrate_mbps_max": 13.5,
+      "psnr_y_mean_db": 35.304,
+      "vmaf_mean": 65.704,
+      "energy_kj_mean": 0.1414,
+      "energy_kj_min": 0.1079,
+      "energy_kj_max": 0.1911,
+      "encode_energy_j_mean": 131.477,
+      "decode_energy_j_mean": 9.885
+    },
+    "x265 medium": {
+      "bitrate_mbps_mean": 6.204,
+      "bitrate_mbps_min": 1.289,
+      "bitrate_mbps_max": 14.013,
+      "psnr_y_mean_db": 36.592,
+      "vmaf_mean": 71.083,
+      "energy_kj_mean": 0.3691,
+      "energy_kj_min": 0.2307,
+      "energy_kj_max": 0.546,
+      "encode_energy_j_mean": 343.921,
+      "decode_energy_j_mean": 25.156
+    },
+    "SVT-AV1 p5": {
+      "bitrate_mbps_mean": 14.738,
+      "bitrate_mbps_min": 3.493,
+      "bitrate_mbps_max": 33.148,
+      "psnr_y_mean_db": 39.992,
+      "vmaf_mean": 87.419,
+      "energy_kj_mean": 0.7674,
+      "energy_kj_min": 0.7175,
+      "energy_kj_max": 0.7982,
+      "encode_energy_j_mean": 745.687,
+      "decode_energy_j_mean": 21.715
+    },
+    "VVenC medium": {
+      "bitrate_mbps_mean": 3.4,
+      "bitrate_mbps_min": 0.52,
+      "bitrate_mbps_max": 8.605,
+      "psnr_y_mean_db": 37.787,
+      "vmaf_mean": 76.4,
+      "energy_kj_mean": 7.0063,
+      "energy_kj_min": 3.2026,
+      "energy_kj_max": 12.5583,
+      "encode_energy_j_mean": 6911.249,
+      "decode_energy_j_mean": 95.068
+    },
+    "DCVC-DC": {
+      "bitrate_mbps_mean": 2.839,
+      "bitrate_mbps_min": 2.752,
+      "bitrate_mbps_max": 2.928,
+      "psnr_y_mean_db": 38.022,
+      "vmaf_mean": 80.535,
+      "energy_kj_mean": 68.6637,
+      "energy_kj_min": 68.3685,
+      "energy_kj_max": 69.2073,
+      "encode_energy_j_mean": 68663.738,
+      "decode_energy_j_mean": null
+    },
+    "DCVC-FM": {
+      "bitrate_mbps_mean": 3.568,
+      "bitrate_mbps_min": 0.187,
+      "bitrate_mbps_max": 10.687,
+      "psnr_y_mean_db": 35.796,
+      "vmaf_mean": 64.562,
+      "energy_kj_mean": 65.9566,
+      "energy_kj_min": 65.0277,
+      "energy_kj_max": 66.4178,
+      "encode_energy_j_mean": 65956.624,
+      "decode_energy_j_mean": null
+    },
+    "DCVC-RT": {
+      "bitrate_mbps_mean": 4.643,
+      "bitrate_mbps_min": 0.265,
+      "bitrate_mbps_max": 13.475,
+      "psnr_y_mean_db": 36.871,
+      "vmaf_mean": 70.622,
+      "energy_kj_mean": 8.644,
+      "energy_kj_min": 8.4024,
+      "energy_kj_max": 8.8353,
+      "encode_energy_j_mean": 8643.982,
+      "decode_energy_j_mean": null
+    },
+    "DCVC-RT-CUDA": {
+      "bitrate_mbps_mean": 4.647,
+      "bitrate_mbps_min": 0.268,
+      "bitrate_mbps_max": 13.482,
+      "psnr_y_mean_db": 36.869,
+      "vmaf_mean": 70.605,
+      "energy_kj_mean": 6.4521,
+      "energy_kj_min": 6.3577,
+      "energy_kj_max": 6.5196,
+      "encode_energy_j_mean": 3364.992,
+      "decode_energy_j_mean": 3087.119
+    }
+  },
+  "comparisons": {
+    "dcvc_rt_cuda_energy_vs_dcvc_rt_ratio": 0.7464,
+    "dcvc_rt_cuda_energy_reduction_vs_dcvc_rt_percent": 25.36,
+    "dcvc_rt_cuda_vmaf_delta_vs_dcvc_rt": -0.017,
+    "dcvc_rt_cuda_psnr_delta_vs_dcvc_rt_db": -0.002,
+    "vvenc_energy_vs_svtav1_ratio": 9.13,
+    "dcvc_dc_energy_vs_svtav1_ratio": 89.476,
+    "dcvc_fm_energy_vs_svtav1_ratio": 85.948,
+    "dcvc_rt_cuda_energy_vs_svtav1_ratio": 8.408,
+    "svtav1_vmaf_advantage_vs_x265": 16.337,
+    "vvenc_bitrate_vs_svtav1_ratio": 0.231,
+    "vvenc_bitrate_reduction_vs_svtav1_percent": 76.93
+  },
+  "preset_sensitivity": {
+    "svtav1": {
+      "p10": {
+        "is_reference": false,
+        "energy_kj_mean": 0.155,
+        "vmaf_mean": 86.938,
+        "energy_ratio_vs_reference": 0.202,
+        "vmaf_delta_vs_reference": -0.482
+      },
+      "p5": {
+        "is_reference": true,
+        "energy_kj_mean": 0.7674,
+        "vmaf_mean": 87.419,
+        "energy_ratio_vs_reference": 1.0,
+        "vmaf_delta_vs_reference": 0.0
+      },
+      "p2": {
+        "is_reference": false,
+        "energy_kj_mean": 5.1334,
+        "vmaf_mean": 88.22,
+        "energy_ratio_vs_reference": 6.689,
+        "vmaf_delta_vs_reference": 0.801
+      }
+    },
+    "vvenc": {
+      "faster": {
+        "is_reference": false,
+        "energy_kj_mean": 1.3373,
+        "vmaf_mean": 73.575,
+        "energy_ratio_vs_reference": 0.191,
+        "vmaf_delta_vs_reference": -2.825
+      },
+      "medium": {
+        "is_reference": true,
+        "energy_kj_mean": 7.0063,
+        "vmaf_mean": 76.4,
+        "energy_ratio_vs_reference": 1.0,
+        "vmaf_delta_vs_reference": 0.0
+      },
+      "slow": {
+        "is_reference": false,
+        "energy_kj_mean": 25.0424,
+        "vmaf_mean": 76.861,
+        "energy_ratio_vs_reference": 3.574,
+        "vmaf_delta_vs_reference": 0.461
+      }
+    },
+    "x264": {
+      "faster": {
+        "is_reference": false,
+        "energy_kj_mean": 0.1072,
+        "vmaf_mean": 64.537,
+        "energy_ratio_vs_reference": 0.758,
+        "vmaf_delta_vs_reference": -1.167
+      },
+      "medium": {
+        "is_reference": true,
+        "energy_kj_mean": 0.1414,
+        "vmaf_mean": 65.704,
+        "energy_ratio_vs_reference": 1.0,
+        "vmaf_delta_vs_reference": 0.0
+      },
+      "slow": {
+        "is_reference": false,
+        "energy_kj_mean": 0.2258,
+        "vmaf_mean": 64.184,
+        "energy_ratio_vs_reference": 1.597,
+        "vmaf_delta_vs_reference": -1.521
+      }
+    },
+    "x265": {
+      "faster": {
+        "is_reference": false,
+        "energy_kj_mean": 0.3081,
+        "vmaf_mean": 70.792,
+        "energy_ratio_vs_reference": 0.835,
+        "vmaf_delta_vs_reference": -0.291
+      },
+      "medium": {
+        "is_reference": true,
+        "energy_kj_mean": 0.3691,
+        "vmaf_mean": 71.083,
+        "energy_ratio_vs_reference": 1.0,
+        "vmaf_delta_vs_reference": 0.0
+      },
+      "slow": {
+        "is_reference": false,
+        "energy_kj_mean": 1.0102,
+        "vmaf_mean": 74.177,
+        "energy_ratio_vs_reference": 2.737,
+        "vmaf_delta_vs_reference": 3.094
+      }
+    }
+  },
+  "ranges": {
+    "reference_energy_kj_min": 0.1414,
+    "reference_energy_kj_max": 68.6637,
+    "reference_energy_dynamic_range_ratio": 485.72,
+    "reference_vmaf_min": 64.562,
+    "reference_vmaf_max": 87.419,
+    "reference_psnr_y_min_db": 35.304,
+    "reference_psnr_y_max_db": 39.992,
+    "reference_bitrate_mbps_min": 2.839,
+    "reference_bitrate_mbps_max": 14.738
+  }
+}
