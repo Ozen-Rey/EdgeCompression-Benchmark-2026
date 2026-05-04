@@ -566,11 +566,11 @@ def select_best_rde(
             q_n = quality_transform(p.quality)
             d_n = 1.0 - q_n
 
-        cost = (
-            weights["w_R"] * r_n
-            + weights["w_E"] * e_n
-            + weights["w_D"] * d_n
-        )
+        term_r = weights["w_R"] * r_n
+        term_e = weights["w_E"] * e_n
+        term_d = weights["w_D"] * d_n
+
+        cost = term_r + term_e + term_d
 
         q_guard = _get_quality_stat(p, quality_constraint_stat)
 
@@ -596,6 +596,21 @@ def select_best_rde(
                     "distortion": d_n,
                     "energy": e_n,
                 },
+                "cost_decomposition": {
+                    "w_R": weights["w_R"],
+                    "w_E": weights["w_E"],
+                    "w_D": weights["w_D"],
+
+                    "norm_rate": r_n,
+                    "norm_energy": e_n,
+                    "norm_distortion": d_n,
+
+                    "term_R": term_r,
+                    "term_E": term_e,
+                    "term_D": term_d,
+
+                    "sum": cost,
+                },
                 "cost": cost,
                 "decision_mode": decision_mode,
                 "raw": p.raw,
@@ -604,8 +619,38 @@ def select_best_rde(
 
     scored.sort(key=lambda x: x["cost"])
 
+    selected_reason = (
+        "lowest_J_RDE_in_safe_pool"
+        if decision_mode == "safe"
+        else "lowest_J_RDE_in_degraded_fallback_pool"
+    )
+
+    active_pool_name = (
+        "safe_pool"
+        if decision_mode == "safe"
+        else "near_pool"
+    )
+
     return {
         "selected": scored[0],
+        "decision_trace": {
+            "enabled": True,
+            "selected_reason": selected_reason,
+            "active_pool": active_pool_name,
+            "decision_mode": decision_mode,
+            "quality_guard_applied": True,
+            "quality_constraint_stat": quality_constraint_stat,
+            "quality_floor": min_quality,
+            "near_quality_floor": near_quality_floor,
+            "allow_degraded_fallback": allow_degraded_fallback,
+            "normalization": (
+                "precomputed_profile"
+                if normalization_profile is not None
+                else "runtime_minmax"
+            ),
+            "ranking_key": "minimize_J_RDE",
+            "cost_formula": "J_RDE = w_R*R_norm + w_E*E_norm + w_D*D_norm",
+        },
         "top_k": scored[:top_k],
         "num_points_total": len(points),
         "num_points_admissible": len(active_pool),

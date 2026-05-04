@@ -765,6 +765,18 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
     print(f"Energy:                     {selected['energy']}")
     print(f"Time ms:                    {selected['time_ms']}")
     print(f"J_RDE:                      {selected['cost']:.6f}")
+    cost_decomp = selected.get("cost_decomposition", {})
+    if cost_decomp:
+        print(
+            "Cost decomposition:         "
+            f"R={cost_decomp.get('term_R'):.6f}, "
+            f"E={cost_decomp.get('term_E'):.6f}, "
+            f"D={cost_decomp.get('term_D'):.6f}"
+        )
+
+    decision_trace = report.get("decision", {}).get("decision_trace", {})
+    if decision_trace.get("enabled", False):
+        print(f"Selected reason:            {decision_trace.get('selected_reason')}")
 
     selected_calibration = report.get("selected_calibration", {})
 
