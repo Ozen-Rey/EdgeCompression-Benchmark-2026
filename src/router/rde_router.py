@@ -25,6 +25,7 @@ try:
     from .rde_database import (
         RDEPoint,
         aggregate_points_by_config,
+        filter_points_by_raw_column,
         load_rde_points,
         select_best_rde,
     )
@@ -59,6 +60,7 @@ except ImportError:
     from rde_database import (
         RDEPoint,
         aggregate_points_by_config,
+        filter_points_by_raw_column,
         load_rde_points,
         select_best_rde,
     )
@@ -483,6 +485,14 @@ def _make_report(
                 "suggestion": None,
             },
         ),
+        "content_filter": getattr(
+            args,
+            "_content_filter_report",
+            {
+                "enabled": False,
+                "applied": False,
+            },
+        ),
         "system_policy_simulation": getattr(
             args,
             "_system_policy_simulation",
@@ -850,6 +860,19 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
         warnings = content_policy.get("warnings") or []
         if warnings:
             print("Content policy warnings: " + "; ".join(warnings))
+
+    content_filter = report.get("content_filter", {})
+
+    if content_filter.get("enabled", False):
+        print(
+            "Content filter: "
+            f"{content_filter.get('column')}={content_filter.get('value')} "
+            f"({content_filter.get('before_count')} -> {content_filter.get('after_count')})"
+        )
+
+        warnings = content_filter.get("warnings") or []
+        if warnings:
+            print("Content filter warnings: " + "; ".join(warnings))
 
     codec_registry = report.get("codec_registry", {})
     print(f"Codec registry: {codec_registry.get('enabled', False)}")
@@ -1436,6 +1459,24 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
 
     parser.add_argument(
+        "--content-source-filter",
+        action="store_true",
+        help="Filter the benchmark candidate pool using the provided content source/context.",
+    )
+
+    parser.add_argument(
+        "--content-filter-column",
+        default=None,
+        help="CSV/raw column used for source-conditioned filtering. Defaults to --content-policy-key.",
+    )
+
+    parser.add_argument(
+        "--content-filter-value",
+        default=None,
+        help="Value used for source-conditioned filtering. Defaults to --content-source.",
+    )
+
+    parser.add_argument(
         "--capability-aware",
         action="store_true",
         help="Filtra i codec usando il registry dei requisiti hardware/software.",
@@ -1637,6 +1678,54 @@ def main(argv: Optional[List[str]] = None) -> None:
         energy_col=args.energy_col,
         time_col=args.time_col,
     )
+
+    content_filter_report = {
+        "enabled": bool(getattr(args, "content_source_filter", False)),
+        "applied": False,
+        "column": None,
+        "value": None,
+        "before_count": len(points),
+        "after_count": len(points),
+        "warnings": [],
+    }
+
+    if getattr(args, "content_source_filter", False):
+        filter_column = (
+            getattr(args, "content_filter_column", None)
+            or getattr(args, "content_policy_key", "dataset")
+        )
+
+        filter_value = (
+            getattr(args, "content_filter_value", None)
+            or getattr(args, "content_source", None)
+        )
+
+        content_filter_report["column"] = filter_column
+        content_filter_report["value"] = filter_value
+
+        if filter_value is None or str(filter_value).strip() == "":
+            content_filter_report["warnings"].append(
+                "content_source_filter_enabled_but_no_filter_value"
+            )
+        else:
+            filtered_points = filter_points_by_raw_column(
+                points,
+                column=filter_column,
+                value=filter_value,
+            )
+
+            content_filter_report["after_count"] = len(filtered_points)
+            content_filter_report["applied"] = True
+
+            if len(filtered_points) == 0:
+                raise ValueError(
+                    "Content/source filter removed all candidate rows: "
+                    f"{filter_column}={filter_value}"
+                )
+
+            points = filtered_points
+
+    args._content_filter_report = content_filter_report
 
     num_rows_loaded = len(points)
 

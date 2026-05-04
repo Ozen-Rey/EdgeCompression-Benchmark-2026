@@ -80,3 +80,62 @@ def test_router_reports_content_policy_suggestion():
     assert report["content_policy"]["policy_value"] == "tecnick"
     assert report["content_policy"]["suggestion"]["codec"] == "JPEG"
     assert report["content_policy"]["suggestion"]["config"] == "q=85"
+
+
+def test_router_content_source_filter_restricts_candidate_pool():
+    csv_path = _tmp_path("source_filter_rde.csv")
+    report_path = _tmp_path("source_filter_report.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "dataset,codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
+                "A,JPEG,q=85,1.2,85.0,1.0,20.0",
+                "A,HEVC,crf=15,1.0,95.0,10.0,100.0",
+                "B,JPEG,q=85,1.2,60.0,1.0,20.0",
+                "B,HEVC,crf=15,1.0,95.0,10.0,100.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--csv",
+            str(csv_path),
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--time-col",
+            "time_ms",
+            "--domain",
+            "image",
+            "--quality-target",
+            "high",
+            "--quality-floor",
+            "80",
+            "--content-source",
+            "A",
+            "--content-source-filter",
+            "--content-filter-column",
+            "dataset",
+            "--out",
+            str(report_path),
+        ]
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["content_filter"]["enabled"] is True
+    assert report["content_filter"]["applied"] is True
+    assert report["content_filter"]["column"] == "dataset"
+    assert report["content_filter"]["value"] == "A"
+    assert report["content_filter"]["before_count"] == 4
+    assert report["content_filter"]["after_count"] == 2

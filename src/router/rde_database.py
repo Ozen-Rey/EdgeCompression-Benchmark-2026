@@ -720,3 +720,42 @@ def select_best_rde(
         },
         "normalization_reference": normalization_reference,
     }
+
+
+def filter_points_by_raw_column(
+    points,
+    *,
+    column: str,
+    value: str,
+    case_sensitive: bool = False,
+):
+    if column is None or str(column).strip() == "":
+        raise ValueError("content/source filter column must be non-empty.")
+
+    if value is None or str(value).strip() == "":
+        raise ValueError("content/source filter value must be non-empty.")
+
+    col = str(column).strip()
+    expected = str(value).strip()
+
+    if not case_sensitive:
+        expected_cmp = expected.casefold()
+    else:
+        expected_cmp = expected
+
+    filtered = []
+
+    for point in points:
+        raw = getattr(point, "raw", None) or {}
+        actual = raw.get(col)
+
+        if actual is None:
+            continue
+
+        actual_str = str(actual).strip()
+        actual_cmp = actual_str if case_sensitive else actual_str.casefold()
+
+        if actual_cmp == expected_cmp:
+            filtered.append(point)
+
+    return filtered
