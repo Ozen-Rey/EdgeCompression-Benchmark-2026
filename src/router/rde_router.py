@@ -16,7 +16,10 @@ try:
         is_neural_codec,
         load_external_codec_registry,
     )
-    from .content_policy import build_content_policy_report
+    from .content_policy import (
+        build_content_policy_report,
+        get_content_policy_preferred_candidate,
+    )
     from .context_policy import compute_context_policy
     from .execution_validation import validate_execution_output
     from .normalization_profile import load_normalization_profile
@@ -51,7 +54,10 @@ except ImportError:
         is_neural_codec,
         load_external_codec_registry,
     )
-    from content_policy import build_content_policy_report
+    from content_policy import (
+        build_content_policy_report,
+        get_content_policy_preferred_candidate,
+    )
     from context_policy import compute_context_policy
     from execution_validation import validate_execution_output
     from normalization_profile import load_normalization_profile
@@ -1080,6 +1086,14 @@ def _run_profile(
 
     args._content_policy_report = content_policy_report
 
+    content_preferred = get_content_policy_preferred_candidate(content_policy_report)
+
+    preferred_codec = None
+    preferred_config = None
+
+    if content_preferred is not None:
+        preferred_codec, preferred_config = content_preferred
+
     system_penalty_weights_report = load_system_penalty_weights(
         args.system_penalty_weights_file
     )
@@ -1142,7 +1156,35 @@ def _run_profile(
             system_penalty_context.get("enabled", False)
             and system_penalty_context.get("applied", False)
         ),
+        preferred_codec=preferred_codec,
+        preferred_config=preferred_config,
+        preferred_reason="content_policy_preferred_candidate",
     )
+
+    if content_policy_report.get("enabled") and content_policy_report.get("mode") == "apply":
+        selected = decision.get("selected", {})
+        suggestion = content_policy_report.get("suggestion")
+
+        if suggestion:
+            suggested_codec = str(suggestion.get("codec"))
+            suggested_config = str(suggestion.get("config"))
+
+            selected_codec = str(selected.get("codec"))
+            selected_config = str(selected.get("config"))
+
+            if selected_codec == suggested_codec and selected_config == suggested_config:
+                content_policy_report["applied"] = True
+                content_policy_report["reasons"].append(
+                    "content_policy_suggestion_selected"
+                )
+            else:
+                content_policy_report["applied"] = False
+                content_policy_report["warnings"].append(
+                    "content_policy_suggestion_not_admissible_fallback_to_router"
+                )
+                content_policy_report["reasons"].append(
+                    "fallback_to_router_selection"
+                )
 
     return _make_report(
         args=args,

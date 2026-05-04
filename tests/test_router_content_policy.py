@@ -139,3 +139,157 @@ def test_router_content_source_filter_restricts_candidate_pool():
     assert report["content_filter"]["value"] == "A"
     assert report["content_filter"]["before_count"] == 4
     assert report["content_filter"]["after_count"] == 2
+
+
+def test_router_content_policy_apply_selects_feasible_preferred_candidate():
+    csv_path = _tmp_path("apply_feasible_rde.csv")
+    rules_path = _tmp_path("apply_feasible_rules.csv")
+    report_path = _tmp_path("apply_feasible_report.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "dataset,codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
+                "A,JPEG,q=85,1.2,85.0,1.0,20.0",
+                "A,HEVC,crf=15,1.0,95.0,10.0,100.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    rules_path.write_text(
+        "\n".join(
+            [
+                "policy_key,policy_value,selected_codec,selected_config",
+                "dataset,A,JPEG,q=85",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--csv",
+            str(csv_path),
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--time-col",
+            "time_ms",
+            "--domain",
+            "image",
+            "--quality-target",
+            "high",
+            "--quality-floor",
+            "80",
+            "--content-policy",
+            "--content-policy-mode",
+            "apply",
+            "--content-policy-rules-file",
+            str(rules_path),
+            "--content-policy-key",
+            "dataset",
+            "--content-source",
+            "A",
+            "--content-source-filter",
+            "--content-filter-column",
+            "dataset",
+            "--out",
+            str(report_path),
+        ]
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    selected = report["decision"]["selected"]
+
+    assert selected["codec"] == "JPEG"
+    assert selected["config"] == "q=85"
+    assert report["content_policy"]["applied"] is True
+    assert (
+        report["decision"]["decision_trace"]["selected_reason"]
+        == "content_policy_preferred_candidate"
+    )
+
+
+def test_router_content_policy_apply_falls_back_when_preferred_not_safe():
+    csv_path = _tmp_path("apply_fallback_rde.csv")
+    rules_path = _tmp_path("apply_fallback_rules.csv")
+    report_path = _tmp_path("apply_fallback_report.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "dataset,codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
+                "A,JPEG,q=85,1.2,60.0,1.0,20.0",
+                "A,HEVC,crf=15,1.0,95.0,10.0,100.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    rules_path.write_text(
+        "\n".join(
+            [
+                "policy_key,policy_value,selected_codec,selected_config",
+                "dataset,A,JPEG,q=85",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--csv",
+            str(csv_path),
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--time-col",
+            "time_ms",
+            "--domain",
+            "image",
+            "--quality-target",
+            "high",
+            "--quality-floor",
+            "80",
+            "--content-policy",
+            "--content-policy-mode",
+            "apply",
+            "--content-policy-rules-file",
+            str(rules_path),
+            "--content-policy-key",
+            "dataset",
+            "--content-source",
+            "A",
+            "--content-source-filter",
+            "--content-filter-column",
+            "dataset",
+            "--out",
+            str(report_path),
+        ]
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    selected = report["decision"]["selected"]
+
+    assert selected["codec"] == "HEVC"
+    assert selected["config"] == "crf=15"
+    assert report["content_policy"]["applied"] is False
+    assert (
+        "content_policy_suggestion_not_admissible_fallback_to_router"
+        in report["content_policy"]["warnings"]
+    )

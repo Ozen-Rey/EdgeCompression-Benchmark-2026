@@ -476,6 +476,9 @@ def select_best_rde(
     normalization_profile=None,
     system_penalty_fn=None,
     system_penalty_apply: bool = False,
+    preferred_codec: str | None = None,
+    preferred_config: str | None = None,
+    preferred_reason: str = "content_policy_preferred_candidate",
 ) -> Dict[str, Any]:
     safe_pool: List[RDEPoint] = []
     near_pool: List[RDEPoint] = []
@@ -657,6 +660,8 @@ def select_best_rde(
         system_penalty_apply and system_penalty_fn is not None
     )
 
+    preferred_selected = False
+
     if ranking_by_system_penalty:
         selected_reason = (
             "lowest_J_total_in_safe_pool"
@@ -670,6 +675,22 @@ def select_best_rde(
             else "lowest_J_RDE_in_degraded_fallback_pool"
         )
 
+    selected = scored[0]
+
+    if preferred_codec is not None and preferred_config is not None:
+        preferred_candidates = [
+            candidate for candidate in scored
+            if (
+                candidate.get("codec") == preferred_codec
+                and candidate.get("config") == preferred_config
+            )
+        ]
+
+        if preferred_candidates:
+            selected = preferred_candidates[0]
+            selected_reason = preferred_reason
+            preferred_selected = True
+
     active_pool_name = (
         "safe_pool"
         if decision_mode == "safe"
@@ -677,7 +698,7 @@ def select_best_rde(
     )
 
     return {
-        "selected": scored[0],
+        "selected": selected,
         "decision_trace": {
             "enabled": True,
             "selected_reason": selected_reason,
@@ -699,6 +720,16 @@ def select_best_rde(
                 else "minimize_J_RDE"
             ),
             "system_penalty_applied": ranking_by_system_penalty,
+            "preferred_candidate": (
+                {
+                    "codec": preferred_codec,
+                    "config": preferred_config,
+                    "reason": preferred_reason,
+                    "selected": preferred_selected,
+                }
+                if preferred_codec is not None and preferred_config is not None
+                else None
+            ),
             "cost_formula": "J_RDE = w_R*R_norm + w_E*E_norm + w_D*D_norm",
         },
         "top_k": scored[:top_k],
