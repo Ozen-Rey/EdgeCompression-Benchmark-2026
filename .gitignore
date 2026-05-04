@@ -151,6 +151,8 @@ TODO_personali/
 # Pytest / temporary test artifacts
 .pytest_cache/
 .pytest_tmp/
+.pytest_tmp_*/
+.tmp_manual_probe/
 pytest_tmp/
 pytest-cache-files-*/
 
