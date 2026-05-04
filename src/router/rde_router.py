@@ -1205,13 +1205,41 @@ def _run_profile(
     content_classifier_report = _build_content_classifier_router_report(args)
     args._content_classifier_report = content_classifier_report
 
-    content_preferred = get_content_policy_preferred_candidate(content_policy_report)
-
     preferred_codec = None
     preferred_config = None
+    preferred_reason = None
+    preferred_source = None
+
+    content_preferred = get_content_policy_preferred_candidate(content_policy_report)
 
     if content_preferred is not None:
         preferred_codec, preferred_config = content_preferred
+        preferred_reason = "content_policy_preferred_candidate"
+        preferred_source = "content_policy"
+
+    classifier_prediction = (
+        content_classifier_report.get("prediction")
+        if content_classifier_report
+        else None
+    )
+
+    if (
+        preferred_codec is None
+        and content_classifier_report.get("enabled")
+        and content_classifier_report.get("mode") == "apply"
+        and classifier_prediction
+    ):
+        preferred_codec = str(classifier_prediction.get("codec"))
+        preferred_config = str(classifier_prediction.get("config"))
+        preferred_reason = str(
+            content_classifier_report.get(
+                "selection_reason",
+                "content_classifier_preferred_candidate",
+            )
+        )
+        preferred_source = "content_classifier"
+
+    args._preferred_candidate_source = preferred_source
 
     system_penalty_weights_report = load_system_penalty_weights(
         args.system_penalty_weights_file
@@ -1277,7 +1305,7 @@ def _run_profile(
         ),
         preferred_codec=preferred_codec,
         preferred_config=preferred_config,
-        preferred_reason="content_policy_preferred_candidate",
+        preferred_reason=preferred_reason or "preferred_candidate",
     )
 
     if content_policy_report.get("enabled") and content_policy_report.get("mode") == "apply":
@@ -1302,6 +1330,34 @@ def _run_profile(
                     "content_policy_suggestion_not_admissible_fallback_to_router"
                 )
                 content_policy_report["reasons"].append(
+                    "fallback_to_router_selection"
+                )
+
+    if (
+        content_classifier_report.get("enabled")
+        and content_classifier_report.get("mode") == "apply"
+    ):
+        selected = decision.get("selected", {})
+        prediction = content_classifier_report.get("prediction")
+
+        if prediction:
+            predicted_codec = str(prediction.get("codec"))
+            predicted_config = str(prediction.get("config"))
+
+            selected_codec = str(selected.get("codec"))
+            selected_config = str(selected.get("config"))
+
+            if selected_codec == predicted_codec and selected_config == predicted_config:
+                content_classifier_report["applied"] = True
+                content_classifier_report["reasons"].append(
+                    "content_classifier_prediction_selected"
+                )
+            else:
+                content_classifier_report["applied"] = False
+                content_classifier_report["warnings"].append(
+                    "content_classifier_prediction_not_admissible_fallback_to_router"
+                )
+                content_classifier_report["reasons"].append(
                     "fallback_to_router_selection"
                 )
 
