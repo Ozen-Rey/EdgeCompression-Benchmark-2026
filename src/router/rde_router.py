@@ -29,6 +29,7 @@ try:
     )
     from .router_config import expand_argv_with_config
     from .run_manifest import build_run_manifest
+    from .system_features import build_system_features, estimate_probe_efficiency
     from .system_probe import probe_system
 except ImportError:
     from calibration_apply import apply_local_calibration
@@ -51,6 +52,7 @@ except ImportError:
     )
     from router_config import expand_argv_with_config
     from run_manifest import build_run_manifest
+    from system_features import build_system_features, estimate_probe_efficiency
     from system_probe import probe_system
 
 
@@ -341,6 +343,28 @@ def _make_report(
         decision=decision,
     )
 
+    system_features_report = getattr(
+        args,
+        "_system_features_report",
+        {
+            "enabled": False,
+        },
+    )
+
+    if system_features_report.get("enabled", False):
+        selected_time_ms = decision.get("selected", {}).get("time_ms")
+        system_probe_efficiency = estimate_probe_efficiency(
+            probe_overhead_ms=system_features_report
+            .get("probe_overhead", {})
+            .get("total_probe_ms", 0.0),
+            reference_time_ms=selected_time_ms,
+        )
+    else:
+        system_probe_efficiency = {
+            "enabled": False,
+            "reason": "system_features_disabled",
+        }
+
     return {
         "router_version": "0.7-level0-static-csv-quality-guard",
         "domain": args.domain,
@@ -419,6 +443,8 @@ def _make_report(
         "decision": decision,
         "execution_plan": execution_plan,
         "system_state": system_state,
+        "system_features": system_features_report,
+        "system_probe_efficiency": system_probe_efficiency,
     }
 
 
@@ -674,6 +700,37 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
             f"git={git_info.get('commit_short')}, "
             f"dirty={git_info.get('dirty_worktree')}"
         )
+    system_features = report.get("system_features", {})
+    print(f"System features: {system_features.get('enabled', False)}")
+
+    if system_features.get("enabled", False):
+        overhead = system_features.get("probe_overhead", {})
+        system_constraints = system_features.get("derived_constraints", {})
+        classes = system_constraints.get("classes", {})
+
+        print(
+            "System feature probe: "
+            f"level={system_features.get('probe_level')}, "
+            f"overhead_ms={overhead.get('total_probe_ms'):.3f}"
+        )
+
+        print(
+            "System constraints: "
+            f"cpu={classes.get('cpu')}, "
+            f"memory={classes.get('memory')}, "
+            f"battery={classes.get('battery')}, "
+            f"gpu={classes.get('gpu')}, "
+            f"thermal={classes.get('thermal')}, "
+            f"disk={classes.get('disk')}"
+        )
+
+        efficiency = report.get("system_probe_efficiency", {})
+        if efficiency.get("enabled", False):
+            print(
+                "System probe efficiency: "
+                f"{efficiency.get('classification')} "
+                f"(ratio={efficiency.get('overhead_ratio'):.4f})"
+            )
     codec_registry = report.get("codec_registry", {})
     print(f"Codec registry: {codec_registry.get('enabled', False)}")
     if codec_registry.get("enabled", False):
@@ -1072,6 +1129,33 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
 
     parser.add_argument(
+        "--system-features",
+        action="store_true",
+        help="Extract cheap system-aware features and include them in the report.",
+    )
+
+    parser.add_argument(
+        "--system-probe-level",
+        default="basic",
+        choices=["basic", "gpu", "full"],
+        help="System feature probe level: basic, gpu, or full.",
+    )
+
+    parser.add_argument(
+        "--system-feature-cache-ttl-s",
+        type=float,
+        default=5.0,
+        help="Cache TTL in seconds for system feature probes.",
+    )
+
+    parser.add_argument(
+        "--system-feature-cpu-interval-s",
+        type=float,
+        default=0.0,
+        help="psutil CPU sampling interval for system feature extraction.",
+    )
+
+    parser.add_argument(
         "--capability-aware",
         action="store_true",
         help="Filtra i codec usando il registry dei requisiti hardware/software.",
@@ -1185,6 +1269,17 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     args = parser.parse_args(argv)
     args._router_config_report = router_config_report
+    if args.system_features:
+        args._system_features_report = build_system_features(
+            probe_level=args.system_probe_level,
+            cache_ttl_s=args.system_feature_cache_ttl_s,
+            cpu_interval_s=args.system_feature_cpu_interval_s,
+        )
+    else:
+        args._system_features_report = {
+            "enabled": False,
+        }
+
     args._run_manifest = build_run_manifest(
         original_argv=original_argv,
         expanded_argv=expanded_argv,

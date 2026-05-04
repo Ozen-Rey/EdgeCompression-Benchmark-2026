@@ -95,6 +95,13 @@ def config_to_cli_args(config: Dict[str, Any]) -> List[str]:
     _add_value(args, "--capability-aware", system.get("capability_aware"))
     _add_value(args, "--strict-executables", system.get("strict_executables"))
 
+    # System feature extraction
+    system_features = config.get("system_features", {})
+    _add_value(args, "--system-features", system_features.get("enabled"))
+    _add_value(args, "--system-probe-level", system_features.get("probe_level"))
+    _add_value(args, "--system-feature-cache-ttl-s", system_features.get("cache_ttl_s"))
+    _add_value(args, "--system-feature-cpu-interval-s", system_features.get("cpu_interval_s"))
+
     # Context policy
     context = config.get("context", {})
     _add_value(args, "--power-mode", context.get("power_mode"))
