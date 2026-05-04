@@ -474,12 +474,15 @@ def select_best_rde(
     top_k: int = 5,
     normalization_points: Optional[List[RDEPoint]] = None,
     normalization_profile=None,
+    system_penalty_fn=None,
+    system_penalty_apply: bool = False,
 ) -> Dict[str, Any]:
     safe_pool: List[RDEPoint] = []
     near_pool: List[RDEPoint] = []
 
     excluded_by_base_constraints = 0
     excluded_by_quality_guard = 0
+    excluded_by_system_penalty = 0
 
     for p in points:
         if not _passes_base_constraints(p, max_rate, max_energy, max_time_ms):
@@ -572,6 +575,29 @@ def select_best_rde(
 
         cost = term_r + term_e + term_d
 
+        system_penalty = {
+            "enabled": False,
+            "penalty_norm": 0.0,
+            "weighted_penalty": 0.0,
+            "hard_excluded": False,
+            "rules_applied": [],
+            "warnings": [],
+        }
+
+        if system_penalty_fn is not None:
+            system_penalty = system_penalty_fn(p)
+
+        j_total = cost + float(system_penalty.get("weighted_penalty", 0.0))
+
+        if (
+            system_penalty_apply
+            and system_penalty.get("hard_excluded", False)
+        ):
+            excluded_by_system_penalty += 1
+            continue
+
+        ranking_cost = j_total if system_penalty_apply else cost
+
         q_guard = _get_quality_stat(p, quality_constraint_stat)
 
         scored.append(
@@ -612,18 +638,37 @@ def select_best_rde(
                     "sum": cost,
                 },
                 "cost": cost,
+                "system_penalty": system_penalty,
+                "J_total": j_total,
+                "ranking_cost": ranking_cost,
                 "decision_mode": decision_mode,
                 "raw": p.raw,
             }
         )
 
-    scored.sort(key=lambda x: x["cost"])
+    if not scored:
+        raise ValueError(
+            "Nessuna configurazione rimasta dopo system penalty/hard exclusion."
+        )
 
-    selected_reason = (
-        "lowest_J_RDE_in_safe_pool"
-        if decision_mode == "safe"
-        else "lowest_J_RDE_in_degraded_fallback_pool"
+    scored.sort(key=lambda x: x["ranking_cost"])
+
+    ranking_by_system_penalty = (
+        system_penalty_apply and system_penalty_fn is not None
     )
+
+    if ranking_by_system_penalty:
+        selected_reason = (
+            "lowest_J_total_in_safe_pool"
+            if decision_mode == "safe"
+            else "lowest_J_total_in_degraded_fallback_pool"
+        )
+    else:
+        selected_reason = (
+            "lowest_J_RDE_in_safe_pool"
+            if decision_mode == "safe"
+            else "lowest_J_RDE_in_degraded_fallback_pool"
+        )
 
     active_pool_name = (
         "safe_pool"
@@ -648,7 +693,12 @@ def select_best_rde(
                 if normalization_profile is not None
                 else "runtime_minmax"
             ),
-            "ranking_key": "minimize_J_RDE",
+            "ranking_key": (
+                "minimize_J_total"
+                if ranking_by_system_penalty
+                else "minimize_J_RDE"
+            ),
+            "system_penalty_applied": ranking_by_system_penalty,
             "cost_formula": "J_RDE = w_R*R_norm + w_E*E_norm + w_D*D_norm",
         },
         "top_k": scored[:top_k],
@@ -658,6 +708,7 @@ def select_best_rde(
         "num_points_near": len(near_pool),
         "excluded_by_base_constraints": excluded_by_base_constraints,
         "excluded_by_quality_guard": excluded_by_quality_guard,
+        "excluded_by_system_penalty": excluded_by_system_penalty,
         "decision_mode": decision_mode,
         "quality_guard": {
             "hard_constraint": True,

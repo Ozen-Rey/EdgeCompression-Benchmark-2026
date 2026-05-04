@@ -202,3 +202,85 @@ def test_system_policy_apply_can_change_selected_candidate():
         applied["system_policy"]["effective_weights"]["w_E"]
         > applied["system_policy"]["base_weights"]["w_E"]
     )
+
+
+def test_system_penalty_apply_can_change_selected_candidate():
+    csv_path = _tmp_path("penalty_change.csv")
+    report_only_path = _tmp_path("penalty_report_only.json")
+    apply_path = _tmp_path("penalty_apply.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
+                "HEVC,crf=15,1.0,95.0,100.0,200.0",
+                "JPEG,q=85,1.2,85.0,1.0,20.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    common_args = [
+        "--csv",
+        str(csv_path),
+        "--codec-col",
+        "codec",
+        "--config-col",
+        "param",
+        "--rate-col",
+        "bpp",
+        "--quality-col",
+        "ssimulacra2",
+        "--energy-col",
+        "energy_per_image_j",
+        "--time-col",
+        "time_ms",
+        "--domain",
+        "image",
+        "--auto-weights",
+        "--quality-target",
+        "high",
+        "--quality-floor",
+        "80",
+        "--system-policy-simulate",
+        "battery=critical,cpu=busy,memory=constrained",
+        "--system-penalty",
+        "--system-penalty-lambda",
+        "1.0",
+    ]
+
+    main(
+        [
+            *common_args,
+            "--system-penalty-mode",
+            "report-only",
+            "--out",
+            str(report_only_path),
+        ]
+    )
+
+    main(
+        [
+            *common_args,
+            "--system-penalty-mode",
+            "apply",
+            "--out",
+            str(apply_path),
+        ]
+    )
+
+    report_only = json.loads(report_only_path.read_text(encoding="utf-8"))
+    applied = json.loads(apply_path.read_text(encoding="utf-8"))
+
+    assert report_only["decision"]["selected"]["codec"] == "HEVC"
+    assert applied["decision"]["selected"]["codec"] == "JPEG"
+
+    selected = applied["decision"]["selected"]
+
+    assert selected["system_penalty"]["enabled"] is True
+    assert selected["J_total"] >= selected["cost"]
+    assert applied["decision"]["decision_trace"]["ranking_key"] == "minimize_J_total"
+    assert (
+        applied["decision"]["decision_trace"]["selected_reason"]
+        == "lowest_J_total_in_safe_pool"
+    )

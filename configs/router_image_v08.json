@@ -49,6 +49,12 @@
     "mode": "report-only"
   },
 
+  "system_penalty": {
+    "enabled": true,
+    "mode": "report-only",
+    "lambda_sys": 0.25
+  },
+
   "context": {
     "power_mode": "ac",
     "thermal_state": "nominal",

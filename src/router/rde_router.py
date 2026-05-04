@@ -30,6 +30,10 @@ try:
     from .router_config import expand_argv_with_config
     from .run_manifest import build_run_manifest
     from .system_features import build_system_features, estimate_probe_efficiency
+    from .system_penalty import (
+        build_system_penalty_context,
+        make_system_penalty_fn,
+    )
     from .system_policy import (
         apply_system_policy_simulation,
         build_system_policy,
@@ -58,6 +62,10 @@ except ImportError:
     from router_config import expand_argv_with_config
     from run_manifest import build_run_manifest
     from system_features import build_system_features, estimate_probe_efficiency
+    from system_penalty import (
+        build_system_penalty_context,
+        make_system_penalty_fn,
+    )
     from system_policy import (
         apply_system_policy_simulation,
         build_system_policy,
@@ -468,6 +476,13 @@ def _make_report(
             {
                 "enabled": False,
                 "classes": {},
+            },
+        ),
+        "system_penalty": getattr(
+            args,
+            "_system_penalty_report",
+            {
+                "enabled": False,
             },
         ),
     }
@@ -887,6 +902,20 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
     print(f"Energy:                     {selected['energy']}")
     print(f"Time ms:                    {selected['time_ms']}")
     print(f"J_RDE:                      {selected['cost']:.6f}")
+    system_penalty = selected.get("system_penalty", {})
+    if system_penalty.get("enabled", False):
+        print(
+            "System penalty:            "
+            f"P={system_penalty.get('penalty_norm'):.6f}, "
+            f"lambda={system_penalty.get('lambda_sys')}, "
+            f"weighted={system_penalty.get('weighted_penalty'):.6f}"
+        )
+        print(f"J_total:                   {selected.get('J_total'):.6f}")
+
+        penalty_rules = system_penalty.get("rules_applied") or []
+        if penalty_rules:
+            print(f"System penalty rules:      {', '.join(penalty_rules)}")
+
     cost_decomp = selected.get("cost_decomposition", {})
     if cost_decomp:
         print(
@@ -969,6 +998,29 @@ def _run_profile(
         weights = system_policy_report["effective_weights"]
         weight_source = f"{weight_source}+system_policy"
 
+    system_penalty_context = build_system_penalty_context(
+        enabled=args.system_penalty,
+        mode=args.system_penalty_mode,
+        lambda_sys=args.system_penalty_lambda,
+        system_features_report=getattr(
+            args,
+            "_system_features_report",
+            {
+                "enabled": False,
+            },
+        ),
+        latency_constrained=args.max_time_ms is not None,
+        execution_requested=bool(args.execute),
+    )
+
+    args._system_penalty_report = system_penalty_context
+
+    system_penalty_fn = (
+        make_system_penalty_fn(system_penalty_context)
+        if system_penalty_context.get("enabled", False)
+        else None
+    )
+
     near_quality_floor = args.near_quality_floor
 
     if args.allow_degraded_fallback and near_quality_floor is None:
@@ -995,6 +1047,11 @@ def _run_profile(
         top_k=args.top_k,
         normalization_points=normalization_points,
         normalization_profile=getattr(args, "_normalization_profile", None),
+        system_penalty_fn=system_penalty_fn,
+        system_penalty_apply=(
+            system_penalty_context.get("enabled", False)
+            and system_penalty_context.get("applied", False)
+        ),
     )
 
     return _make_report(
@@ -1252,6 +1309,26 @@ def main(argv: Optional[List[str]] = None) -> None:
             "'battery=critical,cpu=busy,memory=constrained'. "
             "Overrides measured classes for system-policy evaluation."
         ),
+    )
+
+    parser.add_argument(
+        "--system-penalty",
+        action="store_true",
+        help="Compute a codec/backend system penalty from resource profiles.",
+    )
+
+    parser.add_argument(
+        "--system-penalty-mode",
+        default="report-only",
+        choices=["report-only", "apply"],
+        help="report-only records J_total; apply ranks by J_total and applies hard exclusions.",
+    )
+
+    parser.add_argument(
+        "--system-penalty-lambda",
+        type=float,
+        default=0.25,
+        help="Weight of the system penalty term in J_total.",
     )
 
     parser.add_argument(

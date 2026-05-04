@@ -108,6 +108,12 @@ def config_to_cli_args(config: Dict[str, Any]) -> List[str]:
     _add_value(args, "--system-policy-mode", system_policy.get("mode"))
     _add_value(args, "--system-policy-simulate", system_policy.get("simulate"))
 
+    # System penalty / operational risk
+    system_penalty = config.get("system_penalty", {})
+    _add_value(args, "--system-penalty", system_penalty.get("enabled"))
+    _add_value(args, "--system-penalty-mode", system_penalty.get("mode"))
+    _add_value(args, "--system-penalty-lambda", system_penalty.get("lambda_sys"))
+
     # Context policy
     context = config.get("context", {})
     _add_value(args, "--power-mode", context.get("power_mode"))

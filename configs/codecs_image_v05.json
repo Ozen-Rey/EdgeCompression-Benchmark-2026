@@ -16,6 +16,15 @@
       "execution_backend": "external_command",
       "benchmark_only": false,
       "output_extension": ".jxl",
+      "resource_profile": {
+        "cpu_load": "medium",
+        "memory": "low",
+        "gpu": "none",
+        "latency": "medium",
+        "energy": "medium",
+        "batch_friendly": true,
+        "interactive_ok": true
+      },
       "command_template": [
         "{cjxl}",
         "{input}",
