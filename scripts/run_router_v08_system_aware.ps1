@@ -98,6 +98,44 @@ if ($applySelected -ne "EnergyLight") {
 }
 
 Write-Host ""
+Write-Host "[extra] Running synthetic policy + system penalty apply case..."
+$PenaltyApply = "results/routing_context/v08_policy_penalty_apply.json"
+
+python -m src.router.rde_router `
+  --csv $SyntheticCsv `
+  --codec-col codec `
+  --config-col param `
+  --rate-col bpp `
+  --quality-col ssimulacra2 `
+  --energy-col energy_per_image_j `
+  --time-col time_ms `
+  --domain image `
+  --auto-weights `
+  --quality-target high `
+  --quality-floor 80 `
+  --system-policy `
+  --system-policy-mode apply `
+  --system-policy-simulate "battery=critical,cpu=busy,memory=constrained" `
+  --system-penalty `
+  --system-penalty-mode apply `
+  --system-penalty-lambda 1.0 `
+  --out $PenaltyApply
+
+$penaltyJson = Get-Content $PenaltyApply | ConvertFrom-Json
+
+if ($penaltyJson.decision.decision_trace.ranking_key -ne "minimize_J_total") {
+  throw "Expected ranking by J_total."
+}
+
+if ($null -eq $penaltyJson.decision.selected.system_penalty) {
+  throw "Missing system_penalty in selected candidate."
+}
+
+Write-Host "Penalty selected:" $penaltyJson.decision.selected.codec
+Write-Host "J_RDE:" $penaltyJson.decision.selected.cost
+Write-Host "J_total:" $penaltyJson.decision.selected.J_total
+
+Write-Host ""
 Write-Host "[5/5] Running pytest..."
 python -m pytest tests -q
 
