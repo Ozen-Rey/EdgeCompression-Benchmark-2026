@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import re
 import sys
 import unicodedata
@@ -106,8 +107,63 @@ CODEC_CAPABILITIES: Dict[str, Dict[str, Any]] = {
 }
 
 
+EXTERNAL_CODEC_CAPABILITIES: Dict[str, Dict[str, Any]] = {}
+
+
+def load_external_codec_registry(path: str) -> Dict[str, Any]:
+    p = Path(path)
+
+    if not p.exists():
+        raise FileNotFoundError(f"Codec registry not found: {p}")
+
+    with p.open("r", encoding="utf-8") as f:
+        registry = json.load(f)
+
+    if not isinstance(registry, dict):
+        raise ValueError("Codec registry root must be a JSON object.")
+
+    codecs = registry.get("codecs", {})
+    if not isinstance(codecs, dict):
+        raise ValueError("Codec registry must contain a 'codecs' object.")
+
+    EXTERNAL_CODEC_CAPABILITIES.clear()
+
+    for codec_name, capability in codecs.items():
+        if not isinstance(capability, dict):
+            raise ValueError(f"Invalid codec capability for {codec_name}.")
+
+        canonical = capability.get("canonical", codec_name)
+
+        names = [codec_name, canonical]
+        names.extend(capability.get("aliases", []))
+
+        for name in names:
+            key = normalize_codec_name(str(name))
+            cap_copy = dict(capability)
+            cap_copy["canonical"] = canonical
+            cap_copy["_external_registry"] = True
+            cap_copy["_registry_source"] = str(p)
+            EXTERNAL_CODEC_CAPABILITIES[key] = cap_copy
+
+    return {
+        "enabled": True,
+        "source": str(p),
+        "version": registry.get("version"),
+        "domain": registry.get("domain"),
+        "num_codecs": len(codecs),
+        "codecs": sorted(codecs.keys()),
+    }
+
+
 def get_codec_capability(codec_name: str) -> Dict[str, Any]:
     normalized = normalize_codec_name(codec_name)
+
+    if normalized in EXTERNAL_CODEC_CAPABILITIES:
+        return EXTERNAL_CODEC_CAPABILITIES[normalized]
+
+    for key, capability in EXTERNAL_CODEC_CAPABILITIES.items():
+        if key in normalized:
+            return capability
 
     if normalized in CODEC_CAPABILITIES:
         return CODEC_CAPABILITIES[normalized]
@@ -323,6 +379,71 @@ def _coerce_output_extension(
     return corrected
 
 
+def _config_params_from_external_registry(cap: Dict[str, Any], config: str) -> Dict[str, str]:
+    config_map = cap.get("config_map", {})
+
+    if config in config_map:
+        return {
+            str(k): str(v)
+            for k, v in config_map[config].items()
+        }
+
+    params: Dict[str, str] = {}
+    for part in str(config).split(","):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        params[key.strip()] = value.strip()
+
+    return params
+
+
+def _build_external_command(
+    cap: Dict[str, Any],
+    config: str,
+    input_path: str,
+    output_path: str,
+    system_state: Dict[str, Any],
+    plan: Dict[str, Any],
+) -> Optional[List[str]]:
+    template = cap.get("command_template")
+
+    if not isinstance(template, list) or not template:
+        plan["reasons"].append("external_command_missing_template")
+        return None
+
+    params = _config_params_from_external_registry(cap, config)
+
+    placeholders: Dict[str, str] = {
+        "input": input_path,
+        "output": output_path,
+    }
+
+    for exe in cap.get("requires_executables", []):
+        exe_path = _get_executable_path(system_state, exe)
+        if exe_path is None:
+            plan["reasons"].append(f"missing_executable:{exe}")
+            return None
+        placeholders[str(exe)] = exe_path
+
+    placeholders.update(params)
+
+    command: List[str] = []
+
+    for item in template:
+        text = str(item)
+
+        try:
+            resolved = text.format(**placeholders)
+        except KeyError as exc:
+            plan["reasons"].append(f"missing_command_placeholder:{exc.args[0]}")
+            return None
+
+        command.append(resolved)
+
+    return command
+
+
 def build_execution_plan(
     codec_name: str,
     config: str,
@@ -363,6 +484,49 @@ def build_execution_plan(
         plan["warnings"].append("input_path_does_not_exist_yet")
 
     canonical = cap.get("canonical", codec_name)
+
+    if cap.get("execution_backend") == "external_command":
+        output_extension = cap.get("output_extension")
+
+        if output_extension:
+            path = (
+                Path(output_path)
+                if output_path
+                else Path(_default_output_path(input_path, canonical))
+            )
+            if path.suffix.lower() != str(output_extension).lower():
+                corrected = str(path.with_suffix(str(output_extension)))
+                plan["warnings"].append(
+                    f"output_extension_corrected:{path.suffix}->{Path(corrected).suffix}"
+                )
+                output_path = corrected
+            else:
+                output_path = str(path)
+        else:
+            output_path = _coerce_output_extension(
+                output_path=output_path,
+                input_path=input_path,
+                canonical=canonical,
+                warnings=plan["warnings"],
+            )
+
+        plan["output"] = output_path
+
+        command = _build_external_command(
+            cap=cap,
+            config=config,
+            input_path=input_path,
+            output_path=output_path,
+            system_state=system_state,
+            plan=plan,
+        )
+
+        if command is None:
+            return plan
+
+        plan["command"] = command
+        plan["can_execute"] = True
+        return plan
 
     output_path = _coerce_output_extension(
         output_path=output_path,

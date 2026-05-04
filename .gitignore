@@ -147,3 +147,19 @@ Thumbs.db
 notes_personali.md
 todo.txt
 TODO_personali/
+
+# Pytest / temporary test artifacts
+.pytest_cache/
+.pytest_tmp/
+pytest_tmp/
+pytest-cache-files-*/
+
+# Generated benchmark/router outputs
+results/
+calibration_images/
+test_images/
+plots/
+
+# Python cache
+__pycache__/
+*.pyc

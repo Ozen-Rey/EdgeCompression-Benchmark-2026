@@ -1,0 +1,42 @@
+{
+  "version": "0.5",
+  "domain": "image",
+  "description": "External codec/backend registry for image R-D-E router v0.5.",
+  "codecs": {
+    "JXL": {
+      "canonical": "JXL",
+      "aliases": ["jxl", "jpegxl", "jpeg_xl"],
+      "family": "classical",
+      "requires_cuda": false,
+      "prefers_cuda": false,
+      "cpu_ok": true,
+      "requires_torch": false,
+      "requires_executables": ["cjxl"],
+      "execution_supported": true,
+      "execution_backend": "external_command",
+      "benchmark_only": false,
+      "output_extension": ".jxl",
+      "command_template": [
+        "{cjxl}",
+        "{input}",
+        "{output}",
+        "-d",
+        "{distance}"
+      ],
+      "config_map": {
+        "d=1.0": {
+          "distance": "1.0"
+        },
+        "d=3.0": {
+          "distance": "3.0"
+        },
+        "d=7.0": {
+          "distance": "7.0"
+        },
+        "d=12.0": {
+          "distance": "12.0"
+        }
+      }
+    }
+  }
+}

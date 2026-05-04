@@ -2,6 +2,7 @@ import argparse
 import csv
 import json
 import subprocess
+import sys
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,6 +13,7 @@ try:
         build_execution_plan,
         filter_points_by_capabilities,
         is_neural_codec,
+        load_external_codec_registry,
     )
     from .context_policy import compute_context_policy
     from .normalization_profile import load_normalization_profile
@@ -23,6 +25,7 @@ try:
         load_rde_points,
         select_best_rde,
     )
+    from .router_config import expand_argv_with_config
     from .system_probe import probe_system
 except ImportError:
     from calibration_apply import apply_local_calibration
@@ -30,6 +33,7 @@ except ImportError:
         build_execution_plan,
         filter_points_by_capabilities,
         is_neural_codec,
+        load_external_codec_registry,
     )
     from context_policy import compute_context_policy
     from normalization_profile import load_normalization_profile
@@ -41,6 +45,7 @@ except ImportError:
         load_rde_points,
         select_best_rde,
     )
+    from router_config import expand_argv_with_config
     from system_probe import probe_system
 
 
@@ -338,6 +343,24 @@ def _make_report(
         "weight_source": weight_source,
         "context_policy": context_policy,
         "calibration": calibration_report,
+        "codec_registry": getattr(
+            args,
+            "_codec_registry_report",
+            {
+                "enabled": False,
+            },
+        ),
+        "router_config": getattr(
+            args,
+            "_router_config_report",
+            {
+                "enabled": False,
+            },
+        ),
+        "resolved_args": {
+            k: v for k, v in vars(args).items()
+            if not k.startswith("_")
+        },
         "selected_calibration": selected_calibration,
         "aggregate_by_config": args.aggregate_by_config,
         "num_rows_loaded_before_aggregation": num_rows_loaded,
@@ -622,6 +645,15 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
 
     print("\n=== R-D-E Router Decision ===")
     print(f"Profile: {report['profile']}")
+    router_config = report.get("router_config", {})
+    if router_config.get("enabled", False):
+        print(f"Router config: {router_config.get('source')}")
+        print(f"Experiment: {router_config.get('experiment_name')}")
+    codec_registry = report.get("codec_registry", {})
+    print(f"Codec registry: {codec_registry.get('enabled', False)}")
+    if codec_registry.get("enabled", False):
+        print(f"Codec registry file: {codec_registry.get('source')}")
+        print(f"External codecs: {', '.join(codec_registry.get('codecs', []))}")
     print(f"Weight source: {report['weight_source']}")
     print(f"Decision mode: {report['decision']['decision_mode']}")
     print(f"Aggregate by config: {report['aggregate_by_config']}")
@@ -813,9 +845,20 @@ def _run_profile(
     )
 
 
-def main() -> None:
+def main(argv: Optional[List[str]] = None) -> None:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    argv, router_config_report = expand_argv_with_config(argv)
+
     parser = argparse.ArgumentParser(
         description="Prototype R-D-E router for adaptive codec selection."
+    )
+
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Router configuration JSON file. Expanded before normal argument parsing.",
     )
 
     parser.add_argument("--csv", required=True, help="Path del CSV con i punti R-D-E.")
@@ -932,6 +975,12 @@ def main() -> None:
         "--quality-thresholds-file",
         default="configs/quality_thresholds.json",
         help="File JSON con soglie qualità domain-specific.",
+    )
+
+    parser.add_argument(
+        "--codec-registry-file",
+        default=None,
+        help="External codec/backend registry JSON file.",
     )
 
     parser.add_argument(
@@ -1093,7 +1142,17 @@ def main() -> None:
         help="Path del summary CSV. Se assente, usa results/routing/router_summary.csv.",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    args._router_config_report = router_config_report
+
+    if args.codec_registry_file:
+        registry_report = load_external_codec_registry(args.codec_registry_file)
+    else:
+        registry_report = {
+            "enabled": False,
+        }
+
+    args._codec_registry_report = registry_report
 
     if args.execute:
         args.generate_command = True

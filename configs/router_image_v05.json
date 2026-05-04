@@ -1,0 +1,69 @@
+{
+  "experiment_name": "image_v05_global_safe_jpeg_jxl_hevc",
+  "domain": "image",
+
+  "data": {
+    "csv": "results/images/image_4dataset_RDE_paper_ready.csv",
+    "input": "test_images/input.png",
+    "output": "test_images/v05_router_output.mp4",
+    "out_report": "results/routing_context/v05_router_config_report.json"
+  },
+
+  "columns": {
+    "codec": "codec",
+    "config": "param",
+    "rate": "bpp",
+    "quality": "ssimulacra2",
+    "energy": "energy_per_image_j",
+    "time": "time_ms"
+  },
+
+  "selection": {
+    "available_codecs": ["JPEG", "JXL", "HEVC"],
+    "aggregate_by_config": true,
+    "auto_weights": true,
+    "safe_mode": true,
+    "quality_constraint_stat": "min",
+    "quality_target": "high",
+    "quality_floor": 70,
+    "near_quality_floor": 60,
+    "allow_degraded_fallback": true
+  },
+
+  "system": {
+    "system_aware": true,
+    "simulate_no_cuda": false,
+    "capability_aware": true,
+    "strict_executables": true
+  },
+
+  "context": {
+    "power_mode": "ac",
+    "thermal_state": "nominal",
+    "network_profile": "normal",
+    "system_load": "normal"
+  },
+
+  "normalization": {
+    "mode": "global",
+    "file": "results/routing_context/normalization_image.json"
+  },
+
+  "quality_thresholds": {
+    "file": "configs/quality_thresholds.json"
+  },
+
+  "codec_registry": {
+    "file": "configs/codecs_image_v05.json"
+  },
+
+  "execution": {
+    "generate_command": true,
+    "execute": false
+  },
+
+  "topk": {
+    "export": false,
+    "k": 10
+  }
+}
