@@ -174,3 +174,95 @@ def test_build_artifacts_writes_csv_and_tex_without_plots():
     assert Path(paths["main_tex"]).exists()
     assert Path(paths["overhead_csv"]).exists()
     assert Path(paths["best_k_tex"]).exists()
+
+
+def test_build_artifacts_writes_real_plot_files():
+    root = _reset()
+
+    benchmark = root / "benchmark_plots.csv"
+    overhead = root / "overhead_plots.csv"
+    sensitivity = root / "sensitivity_plots.csv"
+    oracle = root / "oracle_plots.csv"
+    out = root / "out_plots"
+
+    benchmark.write_text(
+        "\n".join(
+            [
+                "method_id,evaluation_protocol,deployment_setting,feature_set,k,selected_policy,mean_regret,relative_regret_reduction,accuracy,fallback_rate",
+                "robust_global_baseline,global_coverage_oracle_analysis,source_agnostic,none,,HEVC|crf=15,0.09047,0.0,0.03125,0.0",
+                "source_aware_dataset_majority_policy,leave-one-out,batch_known_source,dataset,,dataset_majority,0.01177,0.86995,0.77083,0.1875",
+                "best_source_agnostic_knn_leave_one_image_out,leave_one_image_out,source_agnostic,metadata_no_source,11,knn,0.01167,0.87105,0.76042,0.20833",
+                "best_source_agnostic_knn_leave_one_dataset_out,leave_one_dataset_out,source_agnostic,metadata_no_source,7,knn,0.02197,0.75716,0.57292,0.28125",
+                "per_image_oracle,oracle,not_deployable,oracle,,oracle,0.0,1.0,1.0,0.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    overhead.write_text(
+        "\n".join(
+            [
+                "component,case_id,scope,dataset,codec,config,num_samples,mean_ms,p90_ms,ratio_vs_jpeg_global,ratio_vs_hevc_global",
+                "content_feature_extraction,pixel_features_long_side_256,all_images,,,96,30.52,52.36,4.84,0.09",
+                "content_feature_extraction,metadata_no_source,image_header_or_known_metadata,,,96,,,,",
+                "encoding_time,jpeg_q85_tecnick,source_filtered_tecnick,tecnick,JPEG,q=85,24,4.52,5.17,0.72,0.01",
+                "encoding_time,jpeg_q85_global,global_all_datasets,,JPEG,q=85,96,6.31,10.84,1.00,0.02",
+                "encoding_time,jxl_d1_global,global_all_datasets,,JXL,d=1.0,96,134.01,223.10,21.25,0.39",
+                "encoding_time,hevc_crf15_global,global_all_datasets,,HEVC,crf=15,96,342.22,548.32,54.26,1.00",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    sensitivity.write_text(
+        "\n".join(
+            [
+                "evaluation_mode,feature_set,k,accuracy,mean_regret,relative_regret_reduction,fallback_rate,best_for_evaluation_mode",
+                "leave_one_image_out,metadata_no_source,1,0.625,0.02099,0.76795,0.19792,False",
+                "leave_one_image_out,metadata_no_source,5,0.76042,0.01213,0.86588,0.20833,False",
+                "leave_one_image_out,metadata_no_source,11,0.76042,0.01167,0.87105,0.20833,True",
+                "leave_one_dataset_out,metadata_no_source,1,0.59375,0.02245,0.75181,0.22917,False",
+                "leave_one_dataset_out,metadata_no_source,7,0.57292,0.02197,0.75716,0.28125,True",
+                "leave_one_dataset_out,metadata_no_source,11,0.57292,0.02197,0.75716,0.28125,False",
+                "leave_one_dataset_out,pixel_no_source,1,0.46875,0.02904,0.67904,0.25,False",
+                "leave_one_dataset_out,pixel_no_source,3,0.47917,0.02792,0.69142,0.23958,False",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    oracle.write_text(
+        "\n".join(
+            [
+                "section,label,count",
+                "oracle_count,JPEG q=85,63",
+                "oracle_count,JXL d=1.0,30",
+                "oracle_count,HEVC crf=15,3",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    paths = build_artifacts(
+        benchmark_table_csv=str(benchmark),
+        overhead_table_csv=str(overhead),
+        sensitivity_table_csv=str(sensitivity),
+        oracle_summary_csv=str(oracle),
+        out_dir=str(out),
+        make_plots=True,
+    )
+
+    fig_dir = Path(paths["figures_dir"])
+    expected_figures = [
+        "v09_mean_regret_methods.png",
+        "v09_relative_regret_reduction_methods.png",
+        "v09_k_sensitivity_leave_one_image_out.png",
+        "v09_k_sensitivity_leave_one_dataset_out.png",
+        "v09_overhead_vs_encoding.png",
+        "v09_oracle_distribution.png",
+    ]
+
+    for name in expected_figures:
+        path = fig_dir / name
+        assert path.exists(), name
+        assert path.stat().st_size > 0, name
