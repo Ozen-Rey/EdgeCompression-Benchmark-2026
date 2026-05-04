@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "model_type": "knn_oracle_classifier",
+  "feature_set": "metadata_no_source",
+  "k": 7,
+  "training_rows": "results/routing_context/v09_content_metadata_oracle.csv",
+  "pixel_features": null,
+  "quality_floor": 80.0,
+  "fallback": "router",
+  "selection_reason": "content_classifier_preferred_candidate",
+  "notes": "Selected from classifier sweep using the stricter leave-one-dataset-out protocol."
+}
