@@ -1,0 +1,58 @@
+{
+  "version": "0.7",
+  "domain": "image",
+  "description": "Image R-D-E router experiment suite.",
+  "base_config": "configs/router_image_v05.json",
+  "report_dir": "results/routing_context/v07_experiments",
+  "summary_csv": "results/routing_context/v07_experiment_summary.csv",
+  "stop_on_failure": true,
+  "experiments": [
+    {
+      "name": "safe_all_codecs",
+      "description": "Base safe routing with JPEG, JXL and HEVC.",
+      "args": []
+    },
+    {
+      "name": "jxl_only_external_command",
+      "description": "Force JXL to validate external registry based command generation.",
+      "args": [
+        "--available-codecs",
+        "JXL"
+      ]
+    },
+    {
+      "name": "jpeg_only",
+      "description": "Force JPEG candidates only.",
+      "args": [
+        "--available-codecs",
+        "JPEG"
+      ]
+    },
+    {
+      "name": "hevc_only",
+      "description": "Force HEVC candidates only.",
+      "args": [
+        "--available-codecs",
+        "HEVC"
+      ]
+    },
+    {
+      "name": "low_latency_maxtime100",
+      "description": "Apply a strict time constraint of 100 ms.",
+      "args": [
+        "--max-time-ms",
+        "100",
+        "--allow-degraded-fallback"
+      ]
+    },
+    {
+      "name": "jxl_execute_validation",
+      "description": "Execute selected JXL backend and validate generated output.",
+      "args": [
+        "--available-codecs",
+        "JXL",
+        "--execute"
+      ]
+    }
+  ]
+}
