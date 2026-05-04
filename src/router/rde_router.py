@@ -3,6 +3,7 @@ import csv
 import json
 import subprocess
 import sys
+import time
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,7 @@ try:
         load_external_codec_registry,
     )
     from .context_policy import compute_context_policy
+    from .execution_validation import validate_execution_output
     from .normalization_profile import load_normalization_profile
     from .profiles import available_profiles, get_profile
     from .quality_thresholds import resolve_quality_floor
@@ -37,6 +39,7 @@ except ImportError:
         load_external_codec_registry,
     )
     from context_policy import compute_context_policy
+    from execution_validation import validate_execution_output
     from normalization_profile import load_normalization_profile
     from profiles import available_profiles, get_profile
     from quality_thresholds import resolve_quality_floor
@@ -458,12 +461,16 @@ def _execute_plan(execution_plan: Dict[str, Any]) -> Dict[str, Any]:
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
+    t0 = time.perf_counter()
+
     result = subprocess.run(
         command,
         capture_output=True,
         text=True,
         check=False,
     )
+
+    t1 = time.perf_counter()
 
     return {
         "requested": True,
@@ -474,6 +481,7 @@ def _execute_plan(execution_plan: Dict[str, Any]) -> Dict[str, Any]:
         "stdout": result.stdout,
         "stderr": result.stderr,
         "output": output_path,
+        "execution_time_ms": (t1 - t0) * 1000.0,
     }
 
 
@@ -1480,10 +1488,18 @@ def main(argv: Optional[List[str]] = None) -> None:
         if args.execute:
             execution_result = _execute_plan(report.get("execution_plan", {}))
             report["execution_result"] = execution_result
+            report["execution_validation"] = validate_execution_output(
+                execution_plan=report.get("execution_plan", {}),
+                execution_result=execution_result,
+            )
         else:
             report["execution_result"] = {
                 "requested": False,
                 "executed": False,
+            }
+            report["execution_validation"] = {
+                "enabled": False,
+                "reason": "execution_not_requested",
             }
 
         out_path = Path(args.out)
@@ -1512,6 +1528,20 @@ def main(argv: Optional[List[str]] = None) -> None:
             if result.get("stderr") and not result.get("success"):
                 print("  stderr:")
                 print(result.get("stderr"))
+
+            validation = report.get("execution_validation", {})
+            if validation.get("enabled", False):
+                print()
+                print("Execution validation:")
+                print(f"  output exists: {validation.get('output_exists')}")
+                print(f"  output size:   {validation.get('output_size_bytes')}")
+                print(f"  nonempty:      {validation.get('output_nonempty')}")
+                print(f"  ext valid:     {validation.get('extension_valid')}")
+                print(f"  time ms:       {validation.get('execution_time_ms')}")
+
+                warnings = validation.get("warnings") or []
+                if warnings:
+                    print(f"  warnings:      {', '.join(warnings)}")
 
         if args.export_topk:
             print(f"Top-k written to: {topk_path}")
