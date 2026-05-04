@@ -1326,9 +1326,29 @@ def _run_profile(
                 )
             else:
                 content_policy_report["applied"] = False
-                content_policy_report["warnings"].append(
-                    "content_policy_suggestion_not_admissible_fallback_to_router"
+
+                preferred_audit = (
+                    decision.get("decision_trace", {})
+                    .get("preferred_candidate")
                 )
+
+                content_policy_report["decision_audit"] = preferred_audit
+
+                if preferred_audit and preferred_audit.get("admissible") is True:
+                    content_policy_report["warnings"].append(
+                        "content_policy_suggestion_not_j_total_competitive_fallback_to_router"
+                    )
+                    content_policy_report["reasons"].append(
+                        "suggestion_admissible_but_not_competitive"
+                    )
+                else:
+                    content_policy_report["warnings"].append(
+                        "content_policy_suggestion_not_admissible_fallback_to_router"
+                    )
+                    content_policy_report["reasons"].append(
+                        "suggestion_not_admissible"
+                    )
+
                 content_policy_report["reasons"].append(
                     "fallback_to_router_selection"
                 )
@@ -1354,9 +1374,29 @@ def _run_profile(
                 )
             else:
                 content_classifier_report["applied"] = False
-                content_classifier_report["warnings"].append(
-                    "content_classifier_prediction_not_admissible_fallback_to_router"
+
+                preferred_audit = (
+                    decision.get("decision_trace", {})
+                    .get("preferred_candidate")
                 )
+
+                content_classifier_report["decision_audit"] = preferred_audit
+
+                if preferred_audit and preferred_audit.get("admissible") is True:
+                    content_classifier_report["warnings"].append(
+                        "content_classifier_prediction_not_j_total_competitive_fallback_to_router"
+                    )
+                    content_classifier_report["reasons"].append(
+                        "prediction_admissible_but_not_competitive"
+                    )
+                else:
+                    content_classifier_report["warnings"].append(
+                        "content_classifier_prediction_not_admissible_fallback_to_router"
+                    )
+                    content_classifier_report["reasons"].append(
+                        "prediction_not_admissible"
+                    )
+
                 content_classifier_report["reasons"].append(
                     "fallback_to_router_selection"
                 )
@@ -1802,14 +1842,15 @@ def main(argv: Optional[List[str]] = None) -> None:
         ),
     )
 
-    parser.add_argument("--wE", type=float, default=None, help="Peso energia custom.")
-    parser.add_argument("--wR", type=float, default=None, help="Peso rate custom.")
-    parser.add_argument("--wD", type=float, default=None, help="Peso distorsione custom.")
+    parser.add_argument("--wE", "--w-e", dest="wE", type=float, default=None, help="Peso energia custom.")
+    parser.add_argument("--wR", "--w-r", dest="wR", type=float, default=None, help="Peso rate custom.")
+    parser.add_argument("--wD", "--w-d", dest="wD", type=float, default=None, help="Peso distorsione custom.")
 
     parser.add_argument("--codec-col", default=None)
     parser.add_argument("--config-col", default=None)
     parser.add_argument("--rate-col", default=None)
     parser.add_argument("--quality-col", default=None)
+    parser.add_argument("--quality-metric", default=None)
     parser.add_argument("--energy-col", default=None)
     parser.add_argument("--time-col", default=None)
 
@@ -1916,7 +1957,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     quality_threshold_report = resolve_quality_floor(
         domain=args.domain,
-        quality_metric=args.quality_col,
+        quality_metric=args.quality_metric or args.quality_col,
         quality_target=args.quality_target,
         user_quality_floor=args.quality_floor,
         thresholds_file=args.quality_thresholds_file,

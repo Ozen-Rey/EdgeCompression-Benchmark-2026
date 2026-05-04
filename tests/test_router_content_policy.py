@@ -150,8 +150,8 @@ def test_router_content_policy_apply_selects_feasible_preferred_candidate():
         "\n".join(
             [
                 "dataset,codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
-                "A,JPEG,q=85,1.2,85.0,1.0,20.0",
-                "A,HEVC,crf=15,1.0,95.0,10.0,100.0",
+                "A,JPEG,q=85,1.0,95.0,1.0,20.0",
+                "A,HEVC,crf=15,1.2,85.0,10.0,100.0",
             ]
         ),
         encoding="utf-8",
@@ -397,8 +397,8 @@ def test_router_content_classifier_apply_selects_feasible_prediction():
         "\n".join(
             [
                 "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
-                "JPEG,q=85,1.2,85.0,1.0,20.0",
-                "HEVC,crf=15,1.0,95.0,10.0,100.0",
+                "JPEG,q=85,1.0,95.0,1.0,20.0",
+                "HEVC,crf=15,1.2,85.0,10.0,100.0",
             ]
         ),
         encoding="utf-8",
@@ -567,5 +567,102 @@ def test_router_content_classifier_apply_falls_back_when_prediction_not_safe():
     assert report["decision"]["selected"]["config"] == "crf=15"
     assert (
         "content_classifier_prediction_not_admissible_fallback_to_router"
+        in report["content_classifier"]["warnings"]
+    )
+
+
+def test_router_content_classifier_apply_rejects_admissible_but_noncompetitive_prediction():
+    csv_path = _tmp_path("classifier_apply_noncompetitive_rde.csv")
+    training_path = _tmp_path("classifier_apply_noncompetitive_training.csv")
+    config_path = _tmp_path("classifier_apply_noncompetitive.json")
+    report_path = _tmp_path("classifier_apply_noncompetitive_report.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "codec,config,rate,quality,energy,time_ms,quality_mean,quality_min,quality_p10,quality_p25",
+                "JPEG,q=85,10.0,90.0,10.0,10.0,90.0,90.0,90.0,90.0",
+                "HEVC,crf=15,1.0,95.0,1.0,10.0,95.0,95.0,95.0,95.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    training_path.write_text(
+        "\n".join(
+            [
+                "dataset,image,image_id,width,height,megapixels,aspect_ratio,resolution_class,orientation_class,oracle_label",
+                "A,img1,A::img1,1000,1000,1.0,1.0,medium,squareish,JPEG|q=85",
+                "A,img2,A::img2,1000,1000,1.0,1.0,medium,squareish,JPEG|q=85",
+                "A,img3,A::img3,1000,1000,1.0,1.0,medium,squareish,JPEG|q=85",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config_path.write_text(
+        json.dumps(
+            {
+                "training_csv": str(training_path),
+                "feature_set": "metadata_no_source",
+                "k": 3,
+                "quality_floor": 80.0,
+                "fallback": "router",
+                "selection_reason": "content_classifier_preferred_candidate",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--csv",
+            str(csv_path),
+            "--domain",
+            "image",
+            "--quality-metric",
+            "ssimulacra2",
+            "--w-r",
+            "0.2",
+            "--w-e",
+            "0.2",
+            "--w-d",
+            "0.6",
+            "--quality-floor",
+            "80",
+            "--quality-constraint-stat",
+            "min",
+            "--content-classifier",
+            "--content-classifier-mode",
+            "apply",
+            "--content-classifier-config",
+            str(config_path),
+            "--content-classifier-width",
+            "1000",
+            "--content-classifier-height",
+            "1000",
+            "--out",
+            str(report_path),
+        ]
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["content_classifier"]["prediction"]["codec"] == "JPEG"
+    assert report["content_classifier"]["prediction"]["config"] == "q=85"
+
+    assert report["content_classifier"]["applied"] is False
+    assert report["decision"]["selected"]["codec"] == "HEVC"
+    assert report["decision"]["selected"]["config"] == "crf=15"
+
+    audit = report["decision"]["decision_trace"]["preferred_candidate"]
+
+    assert audit["admissible"] is True
+    assert audit["competitive"] is False
+    assert audit["selected"] is False
+    assert audit["preferred_ranking_cost"] > audit["best_ranking_cost"]
+
+    assert (
+        "content_classifier_prediction_not_j_total_competitive_fallback_to_router"
         in report["content_classifier"]["warnings"]
     )

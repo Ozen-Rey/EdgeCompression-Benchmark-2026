@@ -479,6 +479,7 @@ def select_best_rde(
     preferred_codec: str | None = None,
     preferred_config: str | None = None,
     preferred_reason: str = "content_policy_preferred_candidate",
+    preferred_competitive_tau: float = 0.0,
 ) -> Dict[str, Any]:
     safe_pool: List[RDEPoint] = []
     near_pool: List[RDEPoint] = []
@@ -676,20 +677,78 @@ def select_best_rde(
         )
 
     selected = scored[0]
+    best_candidate = scored[0]
+    best_ranking_cost = float(best_candidate["ranking_cost"])
+
+    preferred_audit = None
 
     if preferred_codec is not None and preferred_config is not None:
         preferred_candidates = [
-            candidate for candidate in scored
+            candidate
+            for candidate in scored
             if (
                 candidate.get("codec") == preferred_codec
                 and candidate.get("config") == preferred_config
             )
         ]
 
-        if preferred_candidates:
-            selected = preferred_candidates[0]
+        preferred_candidate = preferred_candidates[0] if preferred_candidates else None
+        preferred_admissible = preferred_candidate is not None
+
+        preferred_ranking_cost = (
+            float(preferred_candidate["ranking_cost"])
+            if preferred_candidate is not None
+            else None
+        )
+
+        preferred_j_rde = (
+            float(preferred_candidate["cost"])
+            if preferred_candidate is not None
+            else None
+        )
+
+        preferred_j_total = (
+            float(preferred_candidate["J_total"])
+            if preferred_candidate is not None
+            else None
+        )
+
+        preferred_system_penalty = (
+            preferred_candidate.get("system_penalty")
+            if preferred_candidate is not None
+            else None
+        )
+
+        preferred_competitive = (
+            preferred_admissible
+            and preferred_ranking_cost is not None
+            and preferred_ranking_cost <= best_ranking_cost + preferred_competitive_tau
+        )
+
+        preferred_audit = {
+            "codec": preferred_codec,
+            "config": preferred_config,
+            "reason": preferred_reason,
+            "found_in_scored_pool": preferred_admissible,
+            "admissible": preferred_admissible,
+            "selected": False,
+            "competitive": bool(preferred_competitive),
+            "competitive_tau": float(preferred_competitive_tau),
+            "ranking_key": "J_total" if ranking_by_system_penalty else "J_RDE",
+            "preferred_ranking_cost": preferred_ranking_cost,
+            "best_ranking_cost": best_ranking_cost,
+            "preferred_J_RDE": preferred_j_rde,
+            "preferred_J_total": preferred_j_total,
+            "best_J_RDE": float(best_candidate["cost"]),
+            "best_J_total": float(best_candidate["J_total"]),
+            "preferred_system_penalty": preferred_system_penalty,
+        }
+
+        if preferred_competitive and preferred_candidate is not None:
+            selected = preferred_candidate
             selected_reason = preferred_reason
             preferred_selected = True
+            preferred_audit["selected"] = True
 
     active_pool_name = (
         "safe_pool"
@@ -720,16 +779,7 @@ def select_best_rde(
                 else "minimize_J_RDE"
             ),
             "system_penalty_applied": ranking_by_system_penalty,
-            "preferred_candidate": (
-                {
-                    "codec": preferred_codec,
-                    "config": preferred_config,
-                    "reason": preferred_reason,
-                    "selected": preferred_selected,
-                }
-                if preferred_codec is not None and preferred_config is not None
-                else None
-            ),
+            "preferred_candidate": preferred_audit,
             "cost_formula": "J_RDE = w_R*R_norm + w_E*E_norm + w_D*D_norm",
         },
         "top_k": scored[:top_k],
