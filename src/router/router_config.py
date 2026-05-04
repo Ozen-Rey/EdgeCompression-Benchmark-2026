@@ -113,6 +113,7 @@ def config_to_cli_args(config: Dict[str, Any]) -> List[str]:
     _add_value(args, "--system-penalty", system_penalty.get("enabled"))
     _add_value(args, "--system-penalty-mode", system_penalty.get("mode"))
     _add_value(args, "--system-penalty-lambda", system_penalty.get("lambda_sys"))
+    _add_value(args, "--system-penalty-weights-file", system_penalty.get("weights_file"))
 
     # Context policy
     context = config.get("context", {})

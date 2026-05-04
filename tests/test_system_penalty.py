@@ -1,7 +1,16 @@
+from pathlib import Path
+
 from src.router.system_penalty import (
     build_system_penalty_context,
     compute_candidate_system_penalty,
+    load_system_penalty_weights,
 )
+
+
+def _tmp_path(name: str) -> Path:
+    tmp_dir = Path(__file__).with_name("_tmp") / "system_penalty"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    return tmp_dir / name
 
 
 def _features_with_classes(**classes):
@@ -130,3 +139,74 @@ def test_system_penalty_battery_critical_coefficient_regression_for_jpeg():
     assert penalty["penalty_norm"] == 0.10
     assert penalty["weighted_penalty"] == 0.05
     assert "battery_critical_energy_score=1" in penalty["rules_applied"]
+
+
+def test_load_system_penalty_weights_uses_defaults_without_file():
+    report = load_system_penalty_weights(None)
+
+    assert report["source"] is None
+    assert report["source_exists"] is False
+    assert report["weights"]["battery"]["critical_energy"] == 0.10
+    assert report["weights"]["cpu"]["busy_cpu"] == 0.08
+
+
+def test_load_system_penalty_weights_merges_custom_file():
+    path = _tmp_path("weights.json")
+
+    path.write_text(
+        """
+        {
+          "battery": {
+            "critical_energy": 0.20
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    report = load_system_penalty_weights(str(path))
+
+    assert report["source"] == str(path)
+    assert report["source_exists"] is True
+    assert report["weights"]["battery"]["critical_energy"] == 0.20
+
+    # Unspecified values must still come from defaults.
+    assert report["weights"]["cpu"]["busy_cpu"] == 0.08
+
+
+def test_custom_system_penalty_weights_change_penalty_value():
+    path = _tmp_path("custom_weights.json")
+
+    path.write_text(
+        """
+        {
+          "battery": {
+            "critical_energy": 0.20
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    weights_report = load_system_penalty_weights(str(path))
+
+    context = build_system_penalty_context(
+        enabled=True,
+        mode="apply",
+        lambda_sys=0.5,
+        system_features_report=_features_with_classes(
+            battery="critical",
+        ),
+        penalty_weights=weights_report["weights"],
+        penalty_weights_source=weights_report["source"],
+    )
+
+    penalty = compute_candidate_system_penalty(
+        codec_name="JPEG",
+        config="q=85",
+        context=context,
+    )
+
+    # JPEG energy_score = 1, custom coefficient = 0.20.
+    assert penalty["penalty_norm"] == 0.20
+    assert penalty["weighted_penalty"] == 0.10

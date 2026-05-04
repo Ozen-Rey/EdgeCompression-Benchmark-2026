@@ -1,0 +1,30 @@
+{
+  "version": "0.8",
+  "description": "Heuristic coefficients for system-aware operational penalty.",
+  "battery": {
+    "critical_energy": 0.10,
+    "low_energy": 0.06,
+    "battery_energy": 0.03
+  },
+  "cpu": {
+    "busy_cpu": 0.08
+  },
+  "memory": {
+    "critical_memory": 0.15,
+    "constrained_memory": 0.10
+  },
+  "gpu": {
+    "busy_gpu": 0.12,
+    "memory_constrained_gpu": 0.15
+  },
+  "thermal": {
+    "critical_resource": 0.10,
+    "hot_resource": 0.06
+  },
+  "latency": {
+    "constrained_latency": 0.08
+  },
+  "interactive": {
+    "risk": 0.12
+  }
+}

@@ -102,3 +102,24 @@ def test_expand_argv_with_config_places_cli_overrides_after_config():
 
     assert expanded[-2] == "--out"
     assert expanded[-1] == "override.json"
+
+
+def test_config_to_cli_args_maps_system_penalty_weights_file():
+    config = {
+        "system_penalty": {
+            "enabled": True,
+            "mode": "apply",
+            "lambda_sys": 0.5,
+            "weights_file": "configs/system_penalty_weights_v08.json",
+        }
+    }
+
+    args = config_to_cli_args(config)
+
+    assert "--system-penalty" in args
+    assert "--system-penalty-mode" in args
+    assert "apply" in args
+    assert "--system-penalty-lambda" in args
+    assert "0.5" in args
+    assert "--system-penalty-weights-file" in args
+    assert "configs/system_penalty_weights_v08.json" in args

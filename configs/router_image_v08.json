@@ -52,7 +52,8 @@
   "system_penalty": {
     "enabled": true,
     "mode": "report-only",
-    "lambda_sys": 0.25
+    "lambda_sys": 0.25,
+    "weights_file": "configs/system_penalty_weights_v08.json"
   },
 
   "context": {

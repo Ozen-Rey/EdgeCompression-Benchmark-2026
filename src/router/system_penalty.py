@@ -1,3 +1,6 @@
+import copy
+import json
+from pathlib import Path
 from typing import Any, Dict
 
 try:
@@ -27,6 +30,91 @@ DEFAULT_RESOURCE_PROFILE = {
 }
 
 
+DEFAULT_SYSTEM_PENALTY_WEIGHTS = {
+    "battery": {
+        "critical_energy": 0.10,
+        "low_energy": 0.06,
+        "battery_energy": 0.03,
+    },
+    "cpu": {
+        "busy_cpu": 0.08,
+    },
+    "memory": {
+        "critical_memory": 0.15,
+        "constrained_memory": 0.10,
+    },
+    "gpu": {
+        "busy_gpu": 0.12,
+        "memory_constrained_gpu": 0.15,
+    },
+    "thermal": {
+        "critical_resource": 0.10,
+        "hot_resource": 0.06,
+    },
+    "latency": {
+        "constrained_latency": 0.08,
+    },
+    "interactive": {
+        "risk": 0.12,
+    },
+}
+
+
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    out = copy.deepcopy(base)
+
+    for key, value in override.items():
+        if (
+            isinstance(value, dict)
+            and isinstance(out.get(key), dict)
+        ):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+
+    return out
+
+
+def load_system_penalty_weights(path: str | None = None) -> Dict[str, Any]:
+    if path is None or str(path).strip() == "":
+        return {
+            "source": None,
+            "source_exists": False,
+            "weights": copy.deepcopy(DEFAULT_SYSTEM_PENALTY_WEIGHTS),
+        }
+
+    p = Path(path)
+
+    if not p.exists():
+        raise FileNotFoundError(f"System penalty weights file not found: {p}")
+
+    with p.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, dict):
+        raise ValueError("System penalty weights file root must be a JSON object.")
+
+    merged = _deep_merge(DEFAULT_SYSTEM_PENALTY_WEIGHTS, data)
+
+    # Remove metadata keys from the active coefficient tree.
+    merged.pop("version", None)
+    merged.pop("description", None)
+
+    return {
+        "source": str(p),
+        "source_exists": True,
+        "weights": merged,
+    }
+
+
+def _coef(weights: Dict[str, Any], section: str, key: str) -> float:
+    return float(
+        weights
+        .get(section, {})
+        .get(key, DEFAULT_SYSTEM_PENALTY_WEIGHTS[section][key])
+    )
+
+
 def _score(value: Any) -> int:
     return LEVEL_SCORE.get(str(value or "medium").strip().lower(), 2)
 
@@ -47,8 +135,16 @@ def build_system_penalty_context(
     system_features_report: Dict[str, Any],
     latency_constrained: bool = False,
     execution_requested: bool = False,
+    penalty_weights: Dict[str, Any] | None = None,
+    penalty_weights_source: str | None = None,
 ) -> Dict[str, Any]:
     mode = str(mode).strip().lower()
+
+    active_weights = (
+        copy.deepcopy(penalty_weights)
+        if penalty_weights is not None
+        else copy.deepcopy(DEFAULT_SYSTEM_PENALTY_WEIGHTS)
+    )
 
     if mode not in {"report-only", "apply"}:
         raise ValueError("system penalty mode must be 'report-only' or 'apply'.")
@@ -63,6 +159,8 @@ def build_system_penalty_context(
             "applied": False,
             "lambda_sys": lambda_sys,
             "reason": "system_penalty_disabled",
+            "penalty_weights_source": penalty_weights_source,
+            "penalty_weights": active_weights,
         }
 
     if not system_features_report.get("enabled", False):
@@ -72,6 +170,8 @@ def build_system_penalty_context(
             "applied": False,
             "lambda_sys": lambda_sys,
             "reason": "system_features_not_available",
+            "penalty_weights_source": penalty_weights_source,
+            "penalty_weights": active_weights,
             "warnings": [
                 "system_penalty_requested_but_system_features_disabled"
             ],
@@ -85,6 +185,8 @@ def build_system_penalty_context(
         "latency_constrained": bool(latency_constrained),
         "execution_requested": bool(execution_requested),
         "constraint_classes": dict(_classes_from_features(system_features_report)),
+        "penalty_weights_source": penalty_weights_source,
+        "penalty_weights": active_weights,
     }
 
 
@@ -110,6 +212,7 @@ def compute_candidate_system_penalty(
 
     classes = context.get("constraint_classes", {})
     lambda_sys = float(context.get("lambda_sys", 0.0))
+    weights = context.get("penalty_weights", DEFAULT_SYSTEM_PENALTY_WEIGHTS)
 
     cpu_score = _score(profile.get("cpu_load"))
     memory_score = _score(profile.get("memory"))
@@ -146,50 +249,86 @@ def compute_candidate_system_penalty(
 
     # Battery/energy pressure.
     if battery_class == "critical":
-        add(0.10 * energy_score, f"battery_critical_energy_score={energy_score}")
+        add(
+            _coef(weights, "battery", "critical_energy") * energy_score,
+            f"battery_critical_energy_score={energy_score}",
+        )
         warnings.append("battery_critical_penalize_energy_heavy_codecs")
     elif battery_class == "low":
-        add(0.06 * energy_score, f"battery_low_energy_score={energy_score}")
+        add(
+            _coef(weights, "battery", "low_energy") * energy_score,
+            f"battery_low_energy_score={energy_score}",
+        )
     elif battery_class == "battery":
-        add(0.03 * energy_score, f"on_battery_energy_score={energy_score}")
+        add(
+            _coef(weights, "battery", "battery_energy") * energy_score,
+            f"on_battery_energy_score={energy_score}",
+        )
 
     # CPU pressure.
     if cpu_class == "busy":
-        add(0.08 * cpu_score, f"cpu_busy_cpu_score={cpu_score}")
+        add(
+            _coef(weights, "cpu", "busy_cpu") * cpu_score,
+            f"cpu_busy_cpu_score={cpu_score}",
+        )
 
     # Memory pressure.
     if memory_class == "critical":
-        add(0.15 * memory_score, f"memory_critical_memory_score={memory_score}")
+        add(
+            _coef(weights, "memory", "critical_memory") * memory_score,
+            f"memory_critical_memory_score={memory_score}",
+        )
         warnings.append("memory_critical_penalize_memory_heavy_codecs")
     elif memory_class == "constrained":
-        add(0.10 * memory_score, f"memory_constrained_memory_score={memory_score}")
+        add(
+            _coef(weights, "memory", "constrained_memory") * memory_score,
+            f"memory_constrained_memory_score={memory_score}",
+        )
 
     # GPU pressure.
     if gpu_class == "busy":
-        add(0.12 * gpu_score, f"gpu_busy_gpu_score={gpu_score}")
+        add(
+            _coef(weights, "gpu", "busy_gpu") * gpu_score,
+            f"gpu_busy_gpu_score={gpu_score}",
+        )
     elif gpu_class == "memory_constrained":
-        add(0.15 * gpu_score, f"gpu_memory_constrained_gpu_score={gpu_score}")
+        add(
+            _coef(weights, "gpu", "memory_constrained_gpu") * gpu_score,
+            f"gpu_memory_constrained_gpu_score={gpu_score}",
+        )
     elif gpu_class == "unknown" and requires_cuda:
         warnings.append("gpu_unknown_cuda_requirement_not_hard_excluded")
 
     # Thermal pressure.
     if thermal_class == "critical":
         thermal_score = max(cpu_score, gpu_score, energy_score)
-        add(0.10 * thermal_score, f"thermal_critical_resource_score={thermal_score}")
+        add(
+            _coef(weights, "thermal", "critical_resource") * thermal_score,
+            f"thermal_critical_resource_score={thermal_score}",
+        )
     elif thermal_class == "hot":
         thermal_score = max(cpu_score, gpu_score, energy_score)
-        add(0.06 * thermal_score, f"thermal_hot_resource_score={thermal_score}")
+        add(
+            _coef(weights, "thermal", "hot_resource") * thermal_score,
+            f"thermal_hot_resource_score={thermal_score}",
+        )
 
     # Latency pressure.
     if context.get("latency_constrained", False):
-        add(0.08 * latency_score, f"latency_constrained_latency_score={latency_score}")
+        add(
+            _coef(weights, "latency", "constrained_latency") * latency_score,
+            f"latency_constrained_latency_score={latency_score}",
+        )
 
     # Interactive/operational risk for heavy backends under pressure.
     if (
         not interactive_ok
         and (battery_class in {"critical", "low"} or cpu_class == "busy")
     ):
-        add(0.15, "interactive_risk_interactive_ok=false")
+        add(
+            _coef(weights, "interactive", "risk"),
+            "interactive_risk_interactive_ok=false",
+        )
 
     # Disk pressure: execution risk, not codec ranking by itself.
     if disk_class == "low_space" and context.get("execution_requested", False):

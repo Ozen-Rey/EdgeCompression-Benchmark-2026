@@ -32,6 +32,7 @@ try:
     from .system_features import build_system_features, estimate_probe_efficiency
     from .system_penalty import (
         build_system_penalty_context,
+        load_system_penalty_weights,
         make_system_penalty_fn,
     )
     from .system_policy import (
@@ -64,6 +65,7 @@ except ImportError:
     from system_features import build_system_features, estimate_probe_efficiency
     from system_penalty import (
         build_system_penalty_context,
+        load_system_penalty_weights,
         make_system_penalty_fn,
     )
     from system_policy import (
@@ -483,6 +485,14 @@ def _make_report(
             "_system_penalty_report",
             {
                 "enabled": False,
+            },
+        ),
+        "system_penalty_weights": getattr(
+            args,
+            "_system_penalty_weights_report",
+            {
+                "source": None,
+                "source_exists": False,
             },
         ),
     }
@@ -998,6 +1008,12 @@ def _run_profile(
         weights = system_policy_report["effective_weights"]
         weight_source = f"{weight_source}+system_policy"
 
+    system_penalty_weights_report = load_system_penalty_weights(
+        args.system_penalty_weights_file
+    )
+
+    args._system_penalty_weights_report = system_penalty_weights_report
+
     system_penalty_context = build_system_penalty_context(
         enabled=args.system_penalty,
         mode=args.system_penalty_mode,
@@ -1011,6 +1027,8 @@ def _run_profile(
         ),
         latency_constrained=args.max_time_ms is not None,
         execution_requested=bool(args.execute),
+        penalty_weights=system_penalty_weights_report["weights"],
+        penalty_weights_source=system_penalty_weights_report["source"],
     )
 
     args._system_penalty_report = system_penalty_context
@@ -1329,6 +1347,12 @@ def main(argv: Optional[List[str]] = None) -> None:
         type=float,
         default=0.25,
         help="Weight of the system penalty term in J_total.",
+    )
+
+    parser.add_argument(
+        "--system-penalty-weights-file",
+        default=None,
+        help="Optional JSON file with configurable system penalty coefficients.",
     )
 
     parser.add_argument(
