@@ -26,6 +26,7 @@ try:
         select_best_rde,
     )
     from .router_config import expand_argv_with_config
+    from .run_manifest import build_run_manifest
     from .system_probe import probe_system
 except ImportError:
     from calibration_apply import apply_local_calibration
@@ -46,6 +47,7 @@ except ImportError:
         select_best_rde,
     )
     from router_config import expand_argv_with_config
+    from run_manifest import build_run_manifest
     from system_probe import probe_system
 
 
@@ -357,6 +359,13 @@ def _make_report(
                 "enabled": False,
             },
         ),
+        "run_manifest": getattr(
+            args,
+            "_run_manifest",
+            {
+                "enabled": False,
+            },
+        ),
         "resolved_args": {
             k: v for k, v in vars(args).items()
             if not k.startswith("_")
@@ -649,6 +658,14 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
     if router_config.get("enabled", False):
         print(f"Router config: {router_config.get('source')}")
         print(f"Experiment: {router_config.get('experiment_name')}")
+    run_manifest = report.get("run_manifest", {})
+    if run_manifest.get("enabled", False):
+        git_info = run_manifest.get("git", {})
+        print(
+            "Run manifest: "
+            f"git={git_info.get('commit_short')}, "
+            f"dirty={git_info.get('dirty_worktree')}"
+        )
     codec_registry = report.get("codec_registry", {})
     print(f"Codec registry: {codec_registry.get('enabled', False)}")
     if codec_registry.get("enabled", False):
@@ -849,7 +866,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     if argv is None:
         argv = sys.argv[1:]
 
+    original_argv = list(argv)
+
     argv, router_config_report = expand_argv_with_config(argv)
+
+    expanded_argv = list(argv)
 
     parser = argparse.ArgumentParser(
         description="Prototype R-D-E router for adaptive codec selection."
@@ -1144,6 +1165,12 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     args = parser.parse_args(argv)
     args._router_config_report = router_config_report
+    args._run_manifest = build_run_manifest(
+        original_argv=original_argv,
+        expanded_argv=expanded_argv,
+        args=args,
+        router_config_report=router_config_report,
+    )
 
     if args.codec_registry_file:
         registry_report = load_external_codec_registry(args.codec_registry_file)
