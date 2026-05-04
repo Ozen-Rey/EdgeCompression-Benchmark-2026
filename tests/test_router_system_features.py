@@ -124,3 +124,81 @@ def test_router_report_includes_system_policy_simulation():
     assert policy["applied"] is True
     assert policy["effective_weights"]["w_E"] > policy["base_weights"]["w_E"]
     assert "battery_critical_energy_multiplier=3.0" in policy["rules_applied"]
+
+
+def test_system_policy_apply_can_change_selected_candidate():
+    csv_path = _tmp_path("policy_change.csv")
+    report_only_path = _tmp_path("report_only.json")
+    apply_path = _tmp_path("apply.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
+                "QualityHeavy,mode=quality,1.0,95.0,100.0,200.0",
+                "EnergyLight,mode=energy,1.2,85.0,1.0,20.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    common_args = [
+        "--csv",
+        str(csv_path),
+        "--codec-col",
+        "codec",
+        "--config-col",
+        "param",
+        "--rate-col",
+        "bpp",
+        "--quality-col",
+        "ssimulacra2",
+        "--energy-col",
+        "energy_per_image_j",
+        "--time-col",
+        "time_ms",
+        "--domain",
+        "image",
+        "--auto-weights",
+        "--quality-target",
+        "high",
+        "--quality-floor",
+        "80",
+        "--system-policy",
+        "--system-policy-simulate",
+        "battery=critical,cpu=busy,memory=constrained",
+    ]
+
+    main(
+        [
+            *common_args,
+            "--system-policy-mode",
+            "report-only",
+            "--out",
+            str(report_only_path),
+        ]
+    )
+
+    main(
+        [
+            *common_args,
+            "--system-policy-mode",
+            "apply",
+            "--out",
+            str(apply_path),
+        ]
+    )
+
+    report_only = json.loads(report_only_path.read_text(encoding="utf-8"))
+    applied = json.loads(apply_path.read_text(encoding="utf-8"))
+
+    assert report_only["system_policy"]["applied"] is False
+    assert applied["system_policy"]["applied"] is True
+
+    assert report_only["decision"]["selected"]["codec"] == "QualityHeavy"
+    assert applied["decision"]["selected"]["codec"] == "EnergyLight"
+
+    assert (
+        applied["system_policy"]["effective_weights"]["w_E"]
+        > applied["system_policy"]["base_weights"]["w_E"]
+    )
