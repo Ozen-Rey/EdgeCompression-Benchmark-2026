@@ -246,7 +246,7 @@ def test_system_penalty_apply_can_change_selected_candidate():
         "battery=critical,cpu=busy,memory=constrained",
         "--system-penalty",
         "--system-penalty-lambda",
-        "1.0",
+        "1.1",
     ]
 
     main(
