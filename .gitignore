@@ -9,6 +9,8 @@
 
 # ============== DATASET ==============
 # UVG, Tecnick, MUSDB18, ecc. — pesanti, scaricabili dai siti ufficiali
+# Local image datasets reconstructed by scripts/download_image_datasets.ps1
+datasets/images/
 datasets/
 datasets_audio/
 
