@@ -30,6 +30,7 @@ try:
     from .router_config import expand_argv_with_config
     from .run_manifest import build_run_manifest
     from .system_features import build_system_features, estimate_probe_efficiency
+    from .system_policy import build_system_policy
     from .system_probe import probe_system
 except ImportError:
     from calibration_apply import apply_local_calibration
@@ -53,6 +54,7 @@ except ImportError:
     from router_config import expand_argv_with_config
     from run_manifest import build_run_manifest
     from system_features import build_system_features, estimate_probe_efficiency
+    from system_policy import build_system_policy
     from system_probe import probe_system
 
 
@@ -445,6 +447,13 @@ def _make_report(
         "system_state": system_state,
         "system_features": system_features_report,
         "system_probe_efficiency": system_probe_efficiency,
+        "system_policy": getattr(
+            args,
+            "_system_policy_report",
+            {
+                "enabled": False,
+            },
+        ),
     }
 
 
@@ -731,6 +740,28 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
                 f"{efficiency.get('classification')} "
                 f"(ratio={efficiency.get('overhead_ratio'):.4f})"
             )
+    system_policy = report.get("system_policy", {})
+    print(f"System policy: {system_policy.get('enabled', False)}")
+
+    if system_policy.get("enabled", False):
+        print(
+            "System policy mode: "
+            f"{system_policy.get('mode')} "
+            f"(applied={system_policy.get('applied')})"
+        )
+
+        rules = system_policy.get("rules_applied") or []
+        if rules:
+            print(f"System policy rules: {', '.join(rules)}")
+
+        suggested = system_policy.get("suggested_weights", {})
+        if suggested:
+            print(
+                "System suggested weights: "
+                f"E={suggested.get('w_E'):.3f}, "
+                f"R={suggested.get('w_R'):.3f}, "
+                f"D={suggested.get('w_D'):.3f}"
+            )
     codec_registry = report.get("codec_registry", {})
     print(f"Codec registry: {codec_registry.get('enabled', False)}")
     if codec_registry.get("enabled", False):
@@ -892,6 +923,25 @@ def _run_profile(
         args,
         profile_name,
     )
+
+    system_policy_report = build_system_policy(
+        base_weights=weights,
+        system_features_report=getattr(
+            args,
+            "_system_features_report",
+            {
+                "enabled": False,
+            },
+        ),
+        enabled=args.system_policy,
+        mode=args.system_policy_mode,
+    )
+
+    args._system_policy_report = system_policy_report
+
+    if system_policy_report.get("enabled", False) and system_policy_report.get("applied", False):
+        weights = system_policy_report["effective_weights"]
+        weight_source = f"{weight_source}+system_policy"
 
     near_quality_floor = args.near_quality_floor
 
@@ -1153,6 +1203,19 @@ def main(argv: Optional[List[str]] = None) -> None:
         type=float,
         default=0.0,
         help="psutil CPU sampling interval for system feature extraction.",
+    )
+
+    parser.add_argument(
+        "--system-policy",
+        action="store_true",
+        help="Build a system-aware policy from extracted system features.",
+    )
+
+    parser.add_argument(
+        "--system-policy-mode",
+        default="report-only",
+        choices=["report-only", "apply"],
+        help="report-only records suggested changes; apply uses adjusted weights.",
     )
 
     parser.add_argument(

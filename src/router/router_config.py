@@ -102,6 +102,11 @@ def config_to_cli_args(config: Dict[str, Any]) -> List[str]:
     _add_value(args, "--system-feature-cache-ttl-s", system_features.get("cache_ttl_s"))
     _add_value(args, "--system-feature-cpu-interval-s", system_features.get("cpu_interval_s"))
 
+    # System-aware policy
+    system_policy = config.get("system_policy", {})
+    _add_value(args, "--system-policy", system_policy.get("enabled"))
+    _add_value(args, "--system-policy-mode", system_policy.get("mode"))
+
     # Context policy
     context = config.get("context", {})
     _add_value(args, "--power-mode", context.get("power_mode"))

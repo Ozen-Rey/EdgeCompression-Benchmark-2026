@@ -407,6 +407,7 @@ def derive_system_constraints(features: Dict[str, Any]) -> Dict[str, Any]:
     disk = features.get("dynamic", {}).get("disk", {})
     gpu = features.get("gpu", {})
     primary_gpu = gpu.get("primary_gpu") or {}
+    gpu_skipped = bool(gpu.get("skipped", False))
 
     cpu_percent = _to_float_or_none(cpu.get("cpu_percent"))
     memory_percent = _to_float_or_none(memory.get("percent"))
@@ -439,7 +440,10 @@ def derive_system_constraints(features: Dict[str, Any]) -> Dict[str, Any]:
     is_battery_low = is_on_battery and battery_percent is not None and battery_percent <= 30.0
     is_battery_critical = is_on_battery and battery_percent is not None and battery_percent <= 15.0
 
-    is_gpu_available = bool(gpu.get("cuda_available", False))
+    if gpu_skipped:
+        is_gpu_available = None
+    else:
+        is_gpu_available = bool(gpu.get("cuda_available", False))
     is_gpu_busy = gpu_util is not None and gpu_util >= 80.0
     is_gpu_memory_constrained = gpu_free_ratio is not None and gpu_free_ratio <= 0.15
 
@@ -482,7 +486,9 @@ def derive_system_constraints(features: Dict[str, Any]) -> Dict[str, Any]:
                 else power_mode
             ),
             "gpu": (
-                "unavailable"
+                "unknown"
+                if is_gpu_available is None
+                else "unavailable"
                 if not is_gpu_available
                 else "memory_constrained"
                 if is_gpu_memory_constrained

@@ -88,6 +88,28 @@ def test_estimate_probe_efficiency_classifies_overhead():
     assert too_high["classification"] == "too_high"
 
 
+def test_derive_system_constraints_marks_gpu_unknown_when_probe_skipped():
+    features = {
+        "dynamic": {
+            "cpu": {"cpu_percent": 10.0},
+            "memory": {"percent": 40.0, "available_ratio": 0.6},
+            "swap": {"percent": 0.0},
+            "battery": {"power_mode": "unknown", "percent": None},
+            "disk": {"percent": 50.0, "free_gb": 100.0},
+        },
+        "gpu": {
+            "skipped": True,
+            "cuda_available": None,
+            "primary_gpu": None,
+        },
+    }
+
+    constraints = derive_system_constraints(features)
+
+    assert constraints["is_gpu_available"] is None
+    assert constraints["classes"]["gpu"] == "unknown"
+
+
 def test_estimate_probe_efficiency_handles_missing_reference():
     result = estimate_probe_efficiency(
         probe_overhead_ms=10.0,
