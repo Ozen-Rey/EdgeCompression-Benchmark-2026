@@ -1,3 +1,5 @@
+import pytest
+
 from src.router.system_policy import (
     apply_system_policy_simulation,
     build_system_policy,
@@ -148,12 +150,8 @@ def test_parse_system_policy_simulation_parses_classes():
 
 
 def test_parse_system_policy_simulation_rejects_invalid_key():
-    try:
+    with pytest.raises(ValueError, match="Invalid simulated system class key"):
         parse_system_policy_simulation("network=bad")
-    except ValueError as exc:
-        assert "Invalid simulated system class key" in str(exc)
-    else:
-        raise AssertionError("Expected ValueError")
 
 
 def test_apply_system_policy_simulation_overrides_classes():

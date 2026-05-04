@@ -107,3 +107,26 @@ def test_memory_critical_hard_excludes_high_memory_codec():
 
     assert penalty["hard_excluded"] is True
     assert "memory_critical_high_memory_codec" in penalty["hard_exclusion_reasons"]
+
+
+def test_system_penalty_battery_critical_coefficient_regression_for_jpeg():
+    context = build_system_penalty_context(
+        enabled=True,
+        mode="apply",
+        lambda_sys=0.5,
+        system_features_report=_features_with_classes(
+            battery="critical",
+        ),
+    )
+
+    penalty = compute_candidate_system_penalty(
+        codec_name="JPEG",
+        config="q=85",
+        context=context,
+    )
+
+    # JPEG has resource_profile.energy = low -> energy_score = 1.
+    # battery critical coefficient is currently 0.10 * energy_score.
+    assert penalty["penalty_norm"] == 0.10
+    assert penalty["weighted_penalty"] == 0.05
+    assert "battery_critical_energy_score=1" in penalty["rules_applied"]
