@@ -1,0 +1,93 @@
+{
+  "experiment_name": "image_v08_system_aware_example",
+  "domain": "image",
+  "data": {
+    "csv": "results/images/image_4dataset_RDE_paper_ready.csv",
+    "input": "test_images/input.png",
+    "output": "test_images/v08_router_output.mp4",
+    "out_report": "results/routing_context/v08_router_example_report.json",
+    "out_dir": "results/routing_context"
+  },
+  "columns": {
+    "codec": "codec",
+    "config": "param",
+    "rate": "bpp",
+    "quality": "ssimulacra2",
+    "energy": "energy_per_image_j",
+    "time": "time_ms"
+  },
+  "selection": {
+    "available_codecs": [
+      "JPEG",
+      "JXL",
+      "HEVC"
+    ],
+    "exclude_codecs": null,
+    "exclude_neural": false,
+    "aggregate_by_config": true,
+    "auto_weights": true,
+    "all_profiles": false,
+    "safe_mode": true,
+    "quality_constraint_stat": "min",
+    "quality_target": "high",
+    "quality_floor": 70,
+    "near_quality_floor": 60,
+    "allow_degraded_fallback": true,
+    "max_rate": null,
+    "max_energy": null,
+    "max_time_ms": null,
+    "strict_time": false
+  },
+  "system": {
+    "system_aware": true,
+    "simulate_no_cuda": false,
+    "capability_aware": true,
+    "strict_executables": true
+  },
+  "system_features": {
+    "enabled": true,
+    "probe_level": "basic",
+    "cache_ttl_s": 5.0,
+    "cpu_interval_s": 0.0
+  },
+  "system_policy": {
+    "enabled": true,
+    "mode": "report-only",
+    "simulate": null
+  },
+  "system_penalty": {
+    "enabled": true,
+    "mode": "report-only",
+    "lambda_sys": 0.25,
+    "weights_file": "configs/system_penalty_weights_v08.json"
+  },
+  "context": {
+    "power_mode": "ac",
+    "battery_percent": null,
+    "thermal_state": "nominal",
+    "network_profile": "normal",
+    "system_load": "normal"
+  },
+  "normalization": {
+    "mode": "global",
+    "file": "results/routing_context/normalization_image.json"
+  },
+  "calibration": {
+    "file": null
+  },
+  "quality_thresholds": {
+    "file": "configs/quality_thresholds.json"
+  },
+  "codec_registry": {
+    "enabled": true,
+    "file": "configs/codecs_image_v05.json"
+  },
+  "execution": {
+    "generate_command": true,
+    "execute": false
+  },
+  "topk": {
+    "export": false,
+    "k": 5
+  }
+}
