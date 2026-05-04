@@ -1,9 +1,11 @@
+import json
 import shutil
 from pathlib import Path
 
 from src.router.content_aware_overhead_analysis import (
     build_knn_sensitivity_table,
     build_overhead_table,
+    load_overhead_cases,
 )
 
 
@@ -14,6 +16,39 @@ def _reset():
     shutil.rmtree(TEST_DIR, ignore_errors=True)
     TEST_DIR.mkdir(parents=True, exist_ok=True)
     return TEST_DIR
+
+
+def test_load_overhead_cases_uses_default_cases():
+    cases = load_overhead_cases(None)
+
+    assert cases
+    assert any(case["case_id"] == "hevc_crf15_global" for case in cases)
+
+
+def test_load_overhead_cases_reads_custom_json():
+    root = _reset()
+    path = root / "cases.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "case_id": "custom_case",
+                    "scope": "global_all_datasets",
+                    "dataset": "",
+                    "codec": "JPEG",
+                    "config": "q=85",
+                    "notes": "Custom test case.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    cases = load_overhead_cases(str(path))
+
+    assert len(cases) == 1
+    assert cases[0]["case_id"] == "custom_case"
+    assert cases[0]["codec"] == "JPEG"
 
 
 def test_build_overhead_table_computes_pixel_over_encoding_ratio():

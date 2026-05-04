@@ -1,9 +1,81 @@
 import argparse
 import csv
+import json
 import math
 from pathlib import Path
 from statistics import mean, median
 from typing import Any, Dict, List, Optional
+
+
+DEFAULT_OVERHEAD_CASES = [
+    {
+        "case_id": "jpeg_q85_tecnick",
+        "scope": "dataset",
+        "dataset": "tecnick",
+        "codec": "JPEG",
+        "config": "q=85",
+        "notes": "Fast JPEG reference on Tecnick subset.",
+    },
+    {
+        "case_id": "hevc_crf15_global",
+        "scope": "global_all_datasets",
+        "dataset": "",
+        "codec": "HEVC",
+        "config": "crf=15",
+        "notes": "Robust global full-coverage baseline.",
+    },
+    {
+        "case_id": "jpeg_q85_global",
+        "scope": "global_all_datasets",
+        "dataset": "",
+        "codec": "JPEG",
+        "config": "q=85",
+        "notes": "Global JPEG q=85 timing reference; may not satisfy the global quality guard.",
+    },
+    {
+        "case_id": "jxl_d1_global",
+        "scope": "global_all_datasets",
+        "dataset": "",
+        "codec": "JXL",
+        "config": "d=1.0",
+        "notes": "High-quality JPEG XL reference.",
+    },
+]
+
+
+def load_overhead_cases(cases_file: str | None) -> list[dict[str, str]]:
+    """Load overhead comparison cases from JSON, or use the default paper cases.
+
+    The default cases reproduce the v0.9 paper/thesis overhead analysis.
+    A JSON file can be passed to evaluate a different set of codec/configuration
+    timing references without modifying the source code.
+    """
+    if cases_file is None:
+        return DEFAULT_OVERHEAD_CASES
+
+    path = Path(cases_file)
+    if not path.exists():
+        raise FileNotFoundError(f"Overhead cases file not found: {cases_file}")
+
+    with path.open("r", encoding="utf-8") as f:
+        cases = json.load(f)
+
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("Overhead cases file must contain a non-empty JSON list.")
+
+    required = {"case_id", "scope", "dataset", "codec", "config", "notes"}
+
+    for index, case in enumerate(cases):
+        if not isinstance(case, dict):
+            raise ValueError(f"Overhead case #{index} is not an object.")
+
+        missing = required - set(case)
+        if missing:
+            raise ValueError(
+                f"Overhead case #{index} is missing required keys: {sorted(missing)}"
+            )
+
+    return cases
 
 
 def _to_float(value: Any, default: Optional[float] = None) -> Optional[float]:
@@ -124,6 +196,7 @@ def build_overhead_table(
     *,
     pixel_features_csv: str,
     benchmark_csv: str,
+    cases: Optional[List[Dict[str, str]]] = None,
     dataset_col: str = "dataset",
     codec_col: str = "codec",
     config_col: str = "param",
@@ -207,40 +280,8 @@ def build_overhead_table(
         ),
     )
 
-    cases = [
-        {
-            "case_id": "jpeg_q85_tecnick",
-            "scope": "source_filtered_tecnick",
-            "dataset": "tecnick",
-            "codec": "JPEG",
-            "config": "q=85",
-            "notes": "Fast source-filtered JPEG case selected by content-aware routing on Tecnick.",
-        },
-        {
-            "case_id": "hevc_crf15_global",
-            "scope": "global_all_datasets",
-            "dataset": "",
-            "codec": "HEVC",
-            "config": "crf=15",
-            "notes": "Robust global full-coverage baseline.",
-        },
-        {
-            "case_id": "jpeg_q85_global",
-            "scope": "global_all_datasets",
-            "dataset": "",
-            "codec": "JPEG",
-            "config": "q=85",
-            "notes": "Global JPEG q=85 timing reference; may not satisfy the global quality guard.",
-        },
-        {
-            "case_id": "jxl_d1_global",
-            "scope": "global_all_datasets",
-            "dataset": "",
-            "codec": "JXL",
-            "config": "d=1.0",
-            "notes": "Global JXL d=1.0 timing reference.",
-        },
-    ]
+    if cases is None:
+        cases = load_overhead_cases(None)
 
     for case in cases:
         values = _case_encode_times(
@@ -376,6 +417,15 @@ def main() -> None:
     parser.add_argument("--time-col", default="time_ms")
 
     parser.add_argument(
+        "--cases-file",
+        default=None,
+        help=(
+            "Optional JSON file defining overhead comparison cases. "
+            "If omitted, the default v0.9 paper cases are used."
+        ),
+    )
+
+    parser.add_argument(
         "--overhead-out",
         default="results/routing_context/v09_content_aware_overhead_table.csv",
     )
@@ -386,9 +436,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    cases = load_overhead_cases(args.cases_file)
+
     overhead = build_overhead_table(
         pixel_features_csv=args.pixel_features_csv,
         benchmark_csv=args.benchmark_csv,
+        cases=cases,
         dataset_col=args.dataset_col,
         codec_col=args.codec_col,
         config_col=args.config_col,
