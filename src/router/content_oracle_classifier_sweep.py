@@ -1,12 +1,18 @@
 import argparse
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     from .content_metadata_policy import build_candidate_lookup, resolve_global_baseline
     from .content_oracle_classifier import (
         FEATURE_SETS,
         _candidate_is_feasible,
+        _encode_row,
+        _feature_spec,
+        _fit_categorical_values,
+        _fit_numeric_stats,
+        _label_from_sorted_distances,
         _predict_knn_label,
+        _squared_distance,
         _split_label,
         _to_float,
         load_classifier_rows,
@@ -18,7 +24,13 @@ except ImportError:
     from content_oracle_classifier import (
         FEATURE_SETS,
         _candidate_is_feasible,
+        _encode_row,
+        _feature_spec,
+        _fit_categorical_values,
+        _fit_numeric_stats,
+        _label_from_sorted_distances,
         _predict_knn_label,
+        _squared_distance,
         _split_label,
         _to_float,
         load_classifier_rows,
@@ -28,6 +40,109 @@ except ImportError:
 
 
 Pair = Tuple[str, str]
+NeighborCache = Dict[str, List[Tuple[float, str]]]
+FoldNeighborCache = Dict[Tuple[str, str], List[Tuple[float, str]]]
+
+
+def _build_loio_neighbor_cache(
+    *,
+    rows: List[Dict[str, Any]],
+    feature_set: str,
+) -> NeighborCache:
+    numeric_features, categorical_features = _feature_spec(feature_set)
+    cache: NeighborCache = {}
+
+    for index, test_row in enumerate(rows):
+        train_rows = [row for i, row in enumerate(rows) if i != index]
+
+        numeric_stats = _fit_numeric_stats(train_rows, numeric_features)
+        categorical_values = _fit_categorical_values(train_rows, categorical_features)
+
+        test_vec = _encode_row(
+            test_row,
+            numeric_features=numeric_features,
+            categorical_features=categorical_features,
+            numeric_stats=numeric_stats,
+            categorical_values=categorical_values,
+        )
+
+        distances: List[Tuple[float, str]] = []
+
+        for train_row in train_rows:
+            train_vec = _encode_row(
+                train_row,
+                numeric_features=numeric_features,
+                categorical_features=categorical_features,
+                numeric_stats=numeric_stats,
+                categorical_values=categorical_values,
+            )
+
+            distances.append(
+                (
+                    _squared_distance(test_vec, train_vec),
+                    str(train_row["oracle_label"]),
+                )
+            )
+
+        distances.sort(key=lambda item: item[0])
+        cache[str(test_row["image_id"])] = distances
+
+    return cache
+
+
+def _build_lodo_neighbor_cache(
+    *,
+    rows: List[Dict[str, Any]],
+    feature_set: str,
+) -> FoldNeighborCache:
+    numeric_features, categorical_features = _feature_spec(feature_set)
+    datasets = sorted({str(row.get("dataset")) for row in rows})
+    cache: FoldNeighborCache = {}
+
+    for dataset in datasets:
+        train_rows = [row for row in rows if str(row.get("dataset")) != dataset]
+        test_rows = [row for row in rows if str(row.get("dataset")) == dataset]
+
+        if not train_rows:
+            continue
+
+        numeric_stats = _fit_numeric_stats(train_rows, numeric_features)
+        categorical_values = _fit_categorical_values(train_rows, categorical_features)
+
+        encoded_train_rows = []
+
+        for train_row in train_rows:
+            encoded_train_rows.append(
+                (
+                    _encode_row(
+                        train_row,
+                        numeric_features=numeric_features,
+                        categorical_features=categorical_features,
+                        numeric_stats=numeric_stats,
+                        categorical_values=categorical_values,
+                    ),
+                    str(train_row["oracle_label"]),
+                )
+            )
+
+        for test_row in test_rows:
+            test_vec = _encode_row(
+                test_row,
+                numeric_features=numeric_features,
+                categorical_features=categorical_features,
+                numeric_stats=numeric_stats,
+                categorical_values=categorical_values,
+            )
+
+            distances = [
+                (_squared_distance(test_vec, train_vec), label)
+                for train_vec, label in encoded_train_rows
+            ]
+
+            distances.sort(key=lambda item: item[0])
+            cache[(dataset, str(test_row["image_id"]))] = distances
+
+    return cache
 
 
 def _make_decision_row(
@@ -123,18 +238,25 @@ def evaluate_leave_one_image_out(
     k: int,
     quality_floor: float,
     global_baseline: Pair,
+    neighbor_cache: Optional[NeighborCache] = None,
 ) -> List[Dict[str, Any]]:
     decisions = []
 
     for index, test_row in enumerate(rows):
-        train_rows = [row for i, row in enumerate(rows) if i != index]
+        if neighbor_cache is None:
+            train_rows = [row for i, row in enumerate(rows) if i != index]
 
-        predicted_label = _predict_knn_label(
-            train_rows=train_rows,
-            test_row=test_row,
-            feature_set=feature_set,
-            k=k,
-        )
+            predicted_label = _predict_knn_label(
+                train_rows=train_rows,
+                test_row=test_row,
+                feature_set=feature_set,
+                k=k,
+            )
+        else:
+            predicted_label = _label_from_sorted_distances(
+                neighbor_cache[str(test_row["image_id"])],
+                k,
+            )
 
         predicted_pair = _split_label(predicted_label)
 
@@ -163,6 +285,7 @@ def evaluate_leave_one_dataset_out(
     k: int,
     quality_floor: float,
     global_baseline: Pair,
+    neighbor_cache: Optional[FoldNeighborCache] = None,
 ) -> List[Dict[str, Any]]:
     decisions = []
 
@@ -177,12 +300,18 @@ def evaluate_leave_one_dataset_out(
             continue
 
         for test_row in test_rows:
-            predicted_label = _predict_knn_label(
-                train_rows=train_rows,
-                test_row=test_row,
-                feature_set=feature_set,
-                k=k,
-            )
+            if neighbor_cache is None:
+                predicted_label = _predict_knn_label(
+                    train_rows=train_rows,
+                    test_row=test_row,
+                    feature_set=feature_set,
+                    k=k,
+                )
+            else:
+                predicted_label = _label_from_sorted_distances(
+                    neighbor_cache[(dataset, str(test_row["image_id"]))],
+                    k,
+                )
 
             predicted_pair = _split_label(predicted_label)
 
@@ -269,6 +398,24 @@ def run_sweep(
 ) -> Dict[str, List[Dict[str, Any]]]:
     flat_summary_rows = []
     all_decisions = []
+    neighbor_caches: Dict[Tuple[str, str], Any] = {}
+
+    for feature_set in feature_sets:
+        if "leave_one_image_out" in evaluation_modes:
+            neighbor_caches[("leave_one_image_out", feature_set)] = (
+                _build_loio_neighbor_cache(
+                    rows=rows,
+                    feature_set=feature_set,
+                )
+            )
+
+        if "leave_one_dataset_out" in evaluation_modes:
+            neighbor_caches[("leave_one_dataset_out", feature_set)] = (
+                _build_lodo_neighbor_cache(
+                    rows=rows,
+                    feature_set=feature_set,
+                )
+            )
 
     for evaluation_mode in evaluation_modes:
         for feature_set in feature_sets:
@@ -281,6 +428,9 @@ def run_sweep(
                         k=k,
                         quality_floor=quality_floor,
                         global_baseline=global_baseline,
+                        neighbor_cache=neighbor_caches.get(
+                            ("leave_one_image_out", feature_set)
+                        ),
                     )
                 elif evaluation_mode == "leave_one_dataset_out":
                     decisions = evaluate_leave_one_dataset_out(
@@ -290,6 +440,9 @@ def run_sweep(
                         k=k,
                         quality_floor=quality_floor,
                         global_baseline=global_baseline,
+                        neighbor_cache=neighbor_caches.get(
+                            ("leave_one_dataset_out", feature_set)
+                        ),
                     )
                 else:
                     raise ValueError(f"Unknown evaluation mode: {evaluation_mode}")

@@ -1,7 +1,7 @@
 import argparse
 import csv
 import math
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
@@ -268,6 +268,22 @@ def _squared_distance(a: List[float], b: List[float]) -> float:
     return sum((x - y) ** 2 for x, y in zip(a, b))
 
 
+def _label_from_sorted_distances(
+    sorted_distances: List[Tuple[float, str]],
+    k: int,
+) -> str:
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
+    if not sorted_distances:
+        raise ValueError("Cannot predict kNN label with an empty training set.")
+
+    nearest = sorted_distances[: min(k, len(sorted_distances))]
+    votes = Counter(label for _, label in nearest)
+
+    return sorted(votes.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+
 def _predict_knn_label(
     *,
     train_rows: List[Dict[str, Any]],
@@ -308,21 +324,7 @@ def _predict_knn_label(
 
     distances.sort(key=lambda item: item[0])
 
-    k = max(1, min(int(k), len(distances)))
-    nearest = distances[:k]
-
-    counts = Counter(label for _, label in nearest)
-    distance_sums: Dict[str, float] = defaultdict(float)
-
-    for distance, label in nearest:
-        distance_sums[label] += distance
-
-    ranked = sorted(
-        counts.keys(),
-        key=lambda label: (-counts[label], distance_sums[label], label),
-    )
-
-    return ranked[0]
+    return _label_from_sorted_distances(distances, k)
 
 
 def _candidate_is_feasible(
