@@ -2,7 +2,7 @@ import argparse
 from typing import Any, Dict, List, Tuple
 
 try:
-    from .content_metadata_policy import build_candidate_lookup, infer_global_baseline
+    from .content_metadata_policy import build_candidate_lookup, resolve_global_baseline
     from .content_oracle_classifier import (
         FEATURE_SETS,
         _candidate_is_feasible,
@@ -14,7 +14,7 @@ try:
         write_csv,
     )
 except ImportError:
-    from content_metadata_policy import build_candidate_lookup, infer_global_baseline
+    from content_metadata_policy import build_candidate_lookup, resolve_global_baseline
     from content_oracle_classifier import (
         FEATURE_SETS,
         _candidate_is_feasible,
@@ -363,6 +363,17 @@ def main() -> None:
     parser.add_argument("--wD", type=float, default=0.6)
 
     parser.add_argument(
+        "--global-baseline-codec",
+        default=None,
+        help="Optional explicit robust global baseline codec. Must be used with --global-baseline-config.",
+    )
+    parser.add_argument(
+        "--global-baseline-config",
+        default=None,
+        help="Optional explicit robust global baseline config. Must be used with --global-baseline-codec.",
+    )
+
+    parser.add_argument(
         "--summary-out",
         default="results/routing_context/v09_oracle_classifier_sweep_summary.csv",
     )
@@ -407,7 +418,11 @@ def main() -> None:
         w_d=args.wD,
     )
 
-    global_baseline = infer_global_baseline(rows)
+    global_baseline = resolve_global_baseline(
+        rows,
+        global_baseline_codec=args.global_baseline_codec,
+        global_baseline_config=args.global_baseline_config,
+    )
 
     sweep = run_sweep(
         rows=rows,

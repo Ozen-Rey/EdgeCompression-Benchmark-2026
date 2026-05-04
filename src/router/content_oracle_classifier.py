@@ -9,14 +9,14 @@ from typing import Any, Dict, List, Optional, Tuple
 try:
     from .content_metadata_policy import (
         build_candidate_lookup,
-        infer_global_baseline,
         load_metadata_oracle_rows,
+        resolve_global_baseline,
     )
 except ImportError:
     from content_metadata_policy import (
         build_candidate_lookup,
-        infer_global_baseline,
         load_metadata_oracle_rows,
+        resolve_global_baseline,
     )
 
 
@@ -623,6 +623,17 @@ def main() -> None:
     parser.add_argument("--wD", type=float, default=0.6)
 
     parser.add_argument(
+        "--global-baseline-codec",
+        default=None,
+        help="Optional explicit robust global baseline codec. Must be used with --global-baseline-config.",
+    )
+    parser.add_argument(
+        "--global-baseline-config",
+        default=None,
+        help="Optional explicit robust global baseline config. Must be used with --global-baseline-codec.",
+    )
+
+    parser.add_argument(
         "--decisions-out",
         default="results/routing_context/v09_oracle_classifier_decisions.csv",
     )
@@ -655,7 +666,11 @@ def main() -> None:
         w_d=args.wD,
     )
 
-    global_baseline = infer_global_baseline(rows)
+    global_baseline = resolve_global_baseline(
+        rows,
+        global_baseline_codec=args.global_baseline_codec,
+        global_baseline_config=args.global_baseline_config,
+    )
 
     evaluation = evaluate_oracle_classifier(
         rows=rows,

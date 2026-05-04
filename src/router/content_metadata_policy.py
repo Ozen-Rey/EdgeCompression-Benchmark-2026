@@ -79,7 +79,25 @@ def load_metadata_oracle_rows(path: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def infer_global_baseline(rows: List[Dict[str, Any]]) -> Pair:
+def infer_global_baseline(
+    rows: List[Dict[str, Any]],
+    *,
+    require_unique: bool = True,
+) -> Pair:
+    """Infer the robust global baseline from metadata/oracle rows.
+
+    The expected input is the by-image output produced by
+    content_oracle_analysis, where every row should carry the same
+    global_codec/global_config pair. That pair is the single globally feasible
+    baseline selected by the full-coverage oracle analysis.
+
+    By default, this function requires that the pair is unique across all rows.
+    This avoids silently returning the most common pair when preprocessing or
+    data merging accidentally makes the global baseline non-homogeneous.
+
+    Set require_unique=False only for backward-compatible exploratory analysis,
+    where choosing the modal pair is intentional.
+    """
     counter = Counter(
         _pair(row.get("global_codec"), row.get("global_config"))
         for row in rows
@@ -89,7 +107,47 @@ def infer_global_baseline(rows: List[Dict[str, Any]]) -> Pair:
     if not counter:
         raise ValueError("Cannot infer global baseline from metadata/oracle rows.")
 
+    if require_unique and len(counter) != 1:
+        details = ", ".join(
+            f"{codec} {config}: {count}"
+            for (codec, config), count in _sort_counter(counter)
+        )
+        raise ValueError(
+            "Ambiguous global baseline in metadata/oracle rows. "
+            "Expected one unique global_codec/global_config pair, but found: "
+            f"{details}. "
+            "Pass an explicit global_baseline to the evaluator, or regenerate "
+            "the oracle rows from a single global coverage analysis."
+        )
+
     return _sort_counter(counter)[0][0]
+
+
+def resolve_global_baseline(
+    rows: List[Dict[str, Any]],
+    *,
+    global_baseline_codec: Optional[str] = None,
+    global_baseline_config: Optional[str] = None,
+) -> Pair:
+    """Resolve the global baseline either explicitly or from homogeneous rows."""
+    has_codec = (
+        global_baseline_codec is not None
+        and str(global_baseline_codec).strip() != ""
+    )
+    has_config = (
+        global_baseline_config is not None
+        and str(global_baseline_config).strip() != ""
+    )
+
+    if has_codec != has_config:
+        raise ValueError(
+            "global_baseline_codec and global_baseline_config must be provided together."
+        )
+
+    if has_codec and has_config:
+        return _pair(global_baseline_codec, global_baseline_config)
+
+    return infer_global_baseline(rows, require_unique=True)
 
 
 def build_candidate_lookup(
@@ -525,6 +583,17 @@ def main() -> None:
     parser.add_argument("--wD", type=float, default=0.6)
 
     parser.add_argument(
+        "--global-baseline-codec",
+        default=None,
+        help="Optional explicit robust global baseline codec. Must be used with --global-baseline-config.",
+    )
+    parser.add_argument(
+        "--global-baseline-config",
+        default=None,
+        help="Optional explicit robust global baseline config. Must be used with --global-baseline-codec.",
+    )
+
+    parser.add_argument(
         "--decisions-out",
         default="results/routing_context/v09_metadata_policy_decisions.csv",
     )
@@ -558,7 +627,11 @@ def main() -> None:
         w_d=args.wD,
     )
 
-    global_baseline = infer_global_baseline(metadata_rows)
+    global_baseline = resolve_global_baseline(
+        metadata_rows,
+        global_baseline_codec=args.global_baseline_codec,
+        global_baseline_config=args.global_baseline_config,
+    )
 
     evaluation = evaluate_metadata_policy(
         metadata_oracle_rows=metadata_rows,

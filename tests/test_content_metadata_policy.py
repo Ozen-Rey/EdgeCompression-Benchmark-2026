@@ -1,10 +1,13 @@
 from pathlib import Path
 
+import pytest
+
 from src.router.content_metadata_policy import (
     build_candidate_lookup,
     build_majority_rules,
     evaluate_metadata_policy,
     infer_global_baseline,
+    resolve_global_baseline,
 )
 
 
@@ -48,7 +51,16 @@ def test_build_majority_rules_selects_group_majority():
     assert rules["B"] == ("HEVC", "crf=15")
 
 
-def test_infer_global_baseline_uses_most_common_global_pair():
+def test_infer_global_baseline_accepts_unique_pair():
+    rows = [
+        {"global_codec": "HEVC", "global_config": "crf=15"},
+        {"global_codec": "HEVC", "global_config": "crf=15"},
+    ]
+
+    assert infer_global_baseline(rows) == ("HEVC", "crf=15")
+
+
+def test_infer_global_baseline_rejects_ambiguous_pairs_by_default():
     rows = [
         {
             "global_codec": "HEVC",
@@ -64,7 +76,44 @@ def test_infer_global_baseline_uses_most_common_global_pair():
         },
     ]
 
-    assert infer_global_baseline(rows) == ("HEVC", "crf=15")
+    with pytest.raises(ValueError, match="Ambiguous global baseline"):
+        infer_global_baseline(rows)
+
+
+def test_infer_global_baseline_can_return_modal_pair_when_requested():
+    rows = [
+        {"global_codec": "HEVC", "global_config": "crf=15"},
+        {"global_codec": "JPEG", "global_config": "q=85"},
+        {"global_codec": "HEVC", "global_config": "crf=15"},
+    ]
+
+    assert infer_global_baseline(rows, require_unique=False) == ("HEVC", "crf=15")
+
+
+def test_resolve_global_baseline_uses_explicit_pair_even_if_rows_are_ambiguous():
+    rows = [
+        {"global_codec": "HEVC", "global_config": "crf=15"},
+        {"global_codec": "JPEG", "global_config": "q=85"},
+    ]
+
+    assert resolve_global_baseline(
+        rows,
+        global_baseline_codec="JXL",
+        global_baseline_config="d=1.0",
+    ) == ("JXL", "d=1.0")
+
+
+def test_resolve_global_baseline_requires_complete_explicit_pair():
+    rows = [
+        {"global_codec": "HEVC", "global_config": "crf=15"},
+    ]
+
+    with pytest.raises(ValueError, match="must be provided together"):
+        resolve_global_baseline(
+            rows,
+            global_baseline_codec="HEVC",
+            global_baseline_config=None,
+        )
 
 
 def test_evaluate_metadata_policy_falls_back_when_group_choice_infeasible():
