@@ -722,7 +722,8 @@ def select_best_rde(
         preferred_competitive = (
             preferred_admissible
             and preferred_ranking_cost is not None
-            and preferred_ranking_cost <= best_ranking_cost + preferred_competitive_tau
+            and preferred_ranking_cost
+            <= best_ranking_cost + max(1e-12, float(preferred_competitive_tau))
         )
 
         preferred_audit = {
@@ -734,6 +735,10 @@ def select_best_rde(
             "selected": False,
             "competitive": bool(preferred_competitive),
             "competitive_tau": float(preferred_competitive_tau),
+            "competitive_tolerance": max(
+                1e-12,
+                float(preferred_competitive_tau),
+            ),
             "ranking_key": "J_total" if ranking_by_system_penalty else "J_RDE",
             "preferred_ranking_cost": preferred_ranking_cost,
             "best_ranking_cost": best_ranking_cost,

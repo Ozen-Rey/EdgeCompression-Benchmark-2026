@@ -666,3 +666,102 @@ def test_router_content_classifier_apply_rejects_admissible_but_noncompetitive_p
         "content_classifier_prediction_not_j_total_competitive_fallback_to_router"
         in report["content_classifier"]["warnings"]
     )
+
+
+def test_router_content_classifier_apply_does_not_override_better_j_total():
+    csv_path = _tmp_path("classifier_system_fusion_rde.csv")
+    training_path = _tmp_path("classifier_system_fusion_training.csv")
+    config_path = _tmp_path("classifier_system_fusion.json")
+    report_path = _tmp_path("classifier_system_fusion_report.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "dataset,codec,config,rate,quality,energy,time_ms,quality_mean,quality_min,quality_p10,quality_p25,quality_std",
+                "tecnick,JPEG,q=85,1.2,85.0,0.07,5.0,85.0,82.0,83.0,84.0,1.0",
+                "tecnick,HEVC,crf=15,1.0,92.0,15.0,350.0,92.0,88.0,89.0,90.0,1.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    training_path.write_text(
+        "\n".join(
+            [
+                "dataset,image,image_id,oracle_label,width,height,megapixels,aspect_ratio,resolution_class,orientation_class",
+                "tecnick,img.png,tecnick::img.png,JPEG|q=85,1200,1200,1.44,1.0,medium,squareish",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config_path.write_text(
+        json.dumps(
+            {
+                "feature_set": "metadata_no_source",
+                "k": 1,
+                "training_csv": str(training_path),
+                "quality_floor": 80.0,
+                "fallback": "router",
+                "selection_reason": "content_classifier_preferred_candidate",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--csv",
+            str(csv_path),
+            "--auto-weights",
+            "--quality-floor",
+            "80",
+            "--quality-constraint-stat",
+            "min",
+            "--content-classifier",
+            "--content-classifier-mode",
+            "apply",
+            "--content-classifier-config",
+            str(config_path),
+            "--content-classifier-width",
+            "1200",
+            "--content-classifier-height",
+            "1200",
+            "--system-features",
+            "--system-policy-simulate",
+            "battery=critical,cpu=busy,memory=constrained",
+            "--system-penalty",
+            "--system-penalty-mode",
+            "apply",
+            "--system-penalty-lambda",
+            "0.25",
+            "--out",
+            str(report_path),
+        ]
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    selected = report["decision"]["selected"]
+    trace = report["decision"]["decision_trace"]
+
+    assert report["content_classifier"]["enabled"] is True
+    assert report["content_classifier"]["mode"] == "apply"
+    assert report["content_classifier"]["prediction"]["codec"] == "JPEG"
+    assert report["content_classifier"]["prediction"]["config"] == "q=85"
+
+    assert trace["ranking_key"] == "minimize_J_total"
+    assert trace["system_penalty_applied"] is True
+
+    assert selected["ranking_cost"] <= selected["J_total"] + 1e-12
+    assert selected["codec"] == "HEVC"
+    assert selected["config"] == "crf=15"
+    assert trace["preferred_candidate"]["codec"] == "JPEG"
+    assert trace["preferred_candidate"]["config"] == "q=85"
+    assert trace["preferred_candidate"]["selected"] is False
+    assert trace["preferred_candidate"]["competitive"] is False
+    assert report["content_classifier"]["applied"] is False
+    assert (
+        "content_classifier_prediction_not_j_total_competitive_fallback_to_router"
+        in report["content_classifier"]["warnings"]
+    )
