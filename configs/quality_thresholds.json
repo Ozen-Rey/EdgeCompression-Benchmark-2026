@@ -1,0 +1,32 @@
+{
+  "image": {
+    "default_metric": "ssimulacra2",
+    "higher_is_better": true,
+    "targets": {
+      "preview": 50.0,
+      "normal": 50.0,
+      "high": 80.0,
+      "very-high": 90.0
+    }
+  },
+  "video": {
+    "default_metric": "vmaf",
+    "higher_is_better": true,
+    "targets": {
+      "preview": 70.0,
+      "normal": 80.0,
+      "high": 90.0,
+      "very-high": 95.0
+    }
+  },
+  "audio": {
+    "default_metric": "visqol",
+    "higher_is_better": true,
+    "targets": {
+      "preview": 3.0,
+      "normal": 3.5,
+      "high": 4.0,
+      "very-high": 4.5
+    }
+  }
+}

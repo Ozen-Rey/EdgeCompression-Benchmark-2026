@@ -70,6 +70,16 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+.tmp/
+.tmp_pytest_cache/
+.tmp_pytest_run/
+.pytest_cache_run/
+.pytest_tmp_run/
+.test_tmp/
+pytest-cache-files-*/
+pytest_cache/
+pytest_tmp/
+tests/_tmp/
 .mypy_cache/
 .ruff_cache/
 

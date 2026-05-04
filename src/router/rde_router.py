@@ -1,0 +1,1435 @@
+import argparse
+import csv
+import json
+import subprocess
+import unicodedata
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+try:
+    from .calibration_apply import apply_local_calibration
+    from .codec_capabilities import (
+        build_execution_plan,
+        filter_points_by_capabilities,
+        is_neural_codec,
+    )
+    from .context_policy import compute_context_policy
+    from .normalization_profile import load_normalization_profile
+    from .profiles import available_profiles, get_profile
+    from .quality_thresholds import resolve_quality_floor
+    from .rde_database import (
+        RDEPoint,
+        aggregate_points_by_config,
+        load_rde_points,
+        select_best_rde,
+    )
+    from .system_probe import probe_system
+except ImportError:
+    from calibration_apply import apply_local_calibration
+    from codec_capabilities import (
+        build_execution_plan,
+        filter_points_by_capabilities,
+        is_neural_codec,
+    )
+    from context_policy import compute_context_policy
+    from normalization_profile import load_normalization_profile
+    from profiles import available_profiles, get_profile
+    from quality_thresholds import resolve_quality_floor
+    from rde_database import (
+        RDEPoint,
+        aggregate_points_by_config,
+        load_rde_points,
+        select_best_rde,
+    )
+    from system_probe import probe_system
+
+
+def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
+    total = w_e + w_r + w_d
+
+    if total <= 0:
+        raise ValueError("La somma dei pesi deve essere positiva.")
+
+    return {
+        "w_E": w_e / total,
+        "w_R": w_r / total,
+        "w_D": w_d / total,
+    }
+
+
+def _normalize_token(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def _parse_codec_list(value: Optional[str]) -> Optional[set[str]]:
+    if value is None or value.strip() == "":
+        return None
+
+    return {
+        _normalize_token(item)
+        for item in value.split(",")
+        if item.strip()
+    }
+
+
+def _is_neural_codec(codec_name: str) -> bool:
+    return is_neural_codec(codec_name)
+
+
+def _filter_points_by_codec_availability(
+    points: List[RDEPoint],
+    available_codecs: Optional[set[str]],
+    exclude_codecs: Optional[set[str]],
+    exclude_neural: bool,
+) -> tuple[List[RDEPoint], Dict[str, Any]]:
+    filtered: List[RDEPoint] = []
+
+    excluded_by_available = 0
+    excluded_by_exclude_list = 0
+    excluded_by_neural = 0
+
+    for p in points:
+        codec_norm = _normalize_token(p.codec)
+
+        if available_codecs is not None and codec_norm not in available_codecs:
+            excluded_by_available += 1
+            continue
+
+        if exclude_codecs is not None and codec_norm in exclude_codecs:
+            excluded_by_exclude_list += 1
+            continue
+
+        if exclude_neural and _is_neural_codec(p.codec):
+            excluded_by_neural += 1
+            continue
+
+        filtered.append(p)
+
+    filter_report = {
+        "available_codecs": sorted(available_codecs) if available_codecs is not None else None,
+        "exclude_codecs": sorted(exclude_codecs) if exclude_codecs is not None else None,
+        "exclude_neural": exclude_neural,
+        "num_before_codec_filtering": len(points),
+        "num_after_codec_filtering": len(filtered),
+        "excluded_by_available_codecs": excluded_by_available,
+        "excluded_by_exclude_codecs": excluded_by_exclude_list,
+        "excluded_by_exclude_neural": excluded_by_neural,
+    }
+
+    if not filtered:
+        raise ValueError(
+            "Pool vuoto dopo i filtri codec. "
+            "Controlla --available-codecs, --exclude-codecs o --exclude-neural."
+        )
+
+    return filtered, filter_report
+
+
+def _apply_system_aware_policy(
+    system_state: Dict[str, Any],
+    enabled: bool,
+    simulate_no_cuda: bool,
+    exclude_neural_requested: bool,
+    capability_aware_enabled: bool = False,
+) -> tuple[bool, Dict[str, Any]]:
+    cuda_available = bool(system_state.get("cuda", {}).get("available", False))
+
+    if simulate_no_cuda:
+        cuda_available = False
+
+    effective_exclude_neural = exclude_neural_requested
+    rules_applied: list[str] = []
+
+    if exclude_neural_requested:
+        rules_applied.append("manual_exclude_neural")
+
+    if enabled:
+        if not cuda_available:
+            if capability_aware_enabled:
+                rules_applied.append(
+                    "cuda_unavailable_defer_neural_filtering_to_codec_capabilities"
+                )
+            else:
+                effective_exclude_neural = True
+                rules_applied.append("cuda_unavailable_exclude_neural_candidates")
+        else:
+            rules_applied.append("cuda_available_keep_neural_candidates")
+
+    return effective_exclude_neural, {
+        "enabled": enabled,
+        "simulate_no_cuda": simulate_no_cuda,
+        "cuda_available": cuda_available,
+        "exclude_neural_requested": exclude_neural_requested,
+        "effective_exclude_neural": effective_exclude_neural,
+        "capability_aware_enabled": capability_aware_enabled,
+        "rules_applied": rules_applied,
+    }
+
+
+def _build_time_guard_report(
+    points,
+    max_time_ms,
+    strict_time: bool = False,
+) -> Dict[str, Any]:
+    if max_time_ms is None:
+        return {
+            "enabled": False,
+            "max_time_ms": None,
+        }
+
+    total = len(points)
+
+    with_time = []
+    missing_time = []
+    over_limit = []
+    within_limit = []
+
+    for p in points:
+        time_ms = getattr(p, "time_ms", None)
+
+        if time_ms is None:
+            missing_time.append(
+                {
+                    "codec": p.codec,
+                    "config": p.config,
+                    "reason": "missing_time_ms",
+                }
+            )
+            continue
+
+        with_time.append(p)
+
+        if float(time_ms) <= float(max_time_ms):
+            within_limit.append(p)
+        else:
+            over_limit.append(
+                {
+                    "codec": p.codec,
+                    "config": p.config,
+                    "time_ms": float(time_ms),
+                    "max_time_ms": float(max_time_ms),
+                }
+            )
+
+    report = {
+        "enabled": True,
+        "max_time_ms": float(max_time_ms),
+        "strict_time": strict_time,
+        "num_candidate_points": total,
+        "num_with_time": len(with_time),
+        "num_missing_time": len(missing_time),
+        "num_within_limit": len(within_limit),
+        "num_over_limit": len(over_limit),
+        "missing_time_preview": missing_time[:20],
+        "over_limit_preview": over_limit[:20],
+        "warnings": [],
+    }
+
+    if total == 0:
+        report["warnings"].append("time_guard_enabled_but_candidate_pool_empty")
+        return report
+
+    if len(with_time) == 0:
+        raise ValueError(
+            "Time constraint requested but no time data is available. "
+            "You used --max-time-ms, but no candidate point has time_ms. "
+            "Provide --time-col with a valid column, remove --max-time-ms, "
+            "or use a CSV containing timing data."
+        )
+
+    if strict_time and missing_time:
+        raise ValueError(
+            "Strict time guard requested but some candidate points have no time_ms. "
+            f"Missing time for {len(missing_time)} / {total} candidate points."
+        )
+
+    if missing_time:
+        report["warnings"].append(
+            f"{len(missing_time)} candidate points have no time_ms and will be "
+            "excluded by the time constraint."
+        )
+
+    if len(within_limit) == 0:
+        report["warnings"].append(
+            "No candidate point with available timing satisfies max_time_ms."
+        )
+
+    return report
+
+
+def _safe_profile_filename(profile_name: str) -> str:
+    return profile_name.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _build_weights_for_profile(
+    args: argparse.Namespace,
+    profile_name: str,
+) -> tuple[Dict[str, float], float | None, str, Dict[str, Any] | None]:
+    if args.auto_weights:
+        policy = compute_context_policy(
+            power_mode=args.power_mode,
+            battery_percent=args.battery_percent,
+            thermal_state=args.thermal_state,
+            network_profile=args.network_profile,
+            quality_target=args.quality_target,
+            system_load=args.system_load,
+        )
+
+        weights = policy["weights"]
+
+        min_quality = args.quality_floor
+        if args.min_quality is not None:
+            min_quality = max(args.min_quality, min_quality)
+
+        return weights, min_quality, "context_policy", policy
+
+    profile = get_profile(profile_name)
+
+    w_e = args.wE if args.wE is not None else profile.w_e
+    w_r = args.wR if args.wR is not None else profile.w_r
+    w_d = args.wD if args.wD is not None else profile.w_d
+
+    weights = _normalize_weights(w_e, w_r, w_d)
+
+    min_quality = args.quality_floor
+    if args.min_quality is not None:
+        min_quality = max(args.min_quality, min_quality)
+
+    return weights, min_quality, "manual_profile", None
+
+
+def _make_report(
+    args: argparse.Namespace,
+    profile_name: str,
+    weights: Dict[str, float],
+    min_quality: float | None,
+    near_quality_floor: float | None,
+    decision: Dict[str, Any],
+    csv_path: str,
+    num_rows_loaded: int,
+    system_state: Dict[str, Any],
+    filter_report: Dict[str, Any],
+    normalization_scope: str,
+    normalization_reference_count: int,
+    weight_source: str,
+    context_policy: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    execution_plan = build_execution_plan(
+        codec_name=decision["selected"]["codec"],
+        config=decision["selected"]["config"],
+        input_path=args.input,
+        output_path=args.output,
+        system_state=system_state,
+        requested=args.generate_command or args.input is not None or args.execute,
+    )
+
+    calibration_report = getattr(args, "_calibration_report", {"enabled": False})
+    selected_calibration = _find_selected_calibration(
+        calibration_report=calibration_report,
+        decision=decision,
+    )
+
+    return {
+        "router_version": "0.7-level0-static-csv-quality-guard",
+        "domain": args.domain,
+        "profile": profile_name,
+        "weight_source": weight_source,
+        "context_policy": context_policy,
+        "calibration": calibration_report,
+        "selected_calibration": selected_calibration,
+        "aggregate_by_config": args.aggregate_by_config,
+        "num_rows_loaded_before_aggregation": num_rows_loaded,
+        "codec_filtering": filter_report,
+        "normalization": {
+            "scope": normalization_scope,
+            "num_reference_points": normalization_reference_count,
+        },
+        "normalization_profile": getattr(
+            args,
+            "_normalization_report",
+            {
+                "enabled": False,
+                "mode": "runtime",
+            },
+        ),
+        "quality_thresholds": getattr(
+            args,
+            "_quality_threshold_report",
+            {
+                "enabled": False,
+            },
+        ),
+        "time_guard": getattr(
+            args,
+            "_time_guard_report",
+            {
+                "enabled": False,
+                "max_time_ms": None,
+            },
+        ),
+        "weights": weights,
+        "constraints": {
+            "min_quality": min_quality,
+            "quality_floor": args.quality_floor,
+            "quality_constraint_stat": args.quality_constraint_stat,
+            "near_quality_floor": near_quality_floor,
+            "allow_degraded_fallback": args.allow_degraded_fallback,
+            "max_rate": args.max_rate,
+            "max_energy": args.max_energy,
+            "max_time_ms": args.max_time_ms,
+        },
+        "csv": str(Path(csv_path)),
+        "decision": decision,
+        "execution_plan": execution_plan,
+        "system_state": system_state,
+    }
+
+
+def _write_json_report(report: Dict[str, Any], out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with out_path.open("w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2, ensure_ascii=False)
+
+
+def _execute_plan(execution_plan: Dict[str, Any]) -> Dict[str, Any]:
+    command = execution_plan.get("command")
+
+    if not execution_plan.get("requested", False):
+        return {
+            "requested": False,
+            "executed": False,
+            "success": False,
+            "reason": "execution_not_requested",
+        }
+
+    if not execution_plan.get("can_execute", False):
+        return {
+            "requested": True,
+            "executed": False,
+            "success": False,
+            "reason": "execution_plan_not_executable",
+            "plan_reasons": execution_plan.get("reasons", []),
+        }
+
+    if not command:
+        return {
+            "requested": True,
+            "executed": False,
+            "success": False,
+            "reason": "missing_command",
+        }
+
+    output_path = execution_plan.get("output")
+    if output_path:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    return {
+        "requested": True,
+        "executed": True,
+        "success": result.returncode == 0,
+        "returncode": result.returncode,
+        "command": command,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "output": output_path,
+    }
+
+
+def _find_selected_calibration(calibration_report: Dict[str, Any], decision: Dict[str, Any]) -> Dict[str, Any]:
+    selected = decision.get("selected", {})
+    selected_codec = str(selected.get("codec"))
+    selected_config = str(selected.get("config"))
+
+    if not calibration_report.get("enabled", False):
+        return {
+            "enabled": False,
+        }
+
+    for item in calibration_report.get("applied", []):
+        if (
+            str(item.get("codec")) == selected_codec
+            and str(item.get("config")) == selected_config
+        ):
+            out = dict(item)
+            out["enabled"] = True
+            return out
+
+    return {
+        "enabled": False,
+        "reason": "selected_point_not_calibrated",
+        "codec": selected_codec,
+        "config": selected_config,
+    }
+
+
+def _summary_row_from_report(report: Dict[str, Any]) -> Dict[str, Any]:
+    selected = report["decision"]["selected"]
+    weights = report["weights"]
+    constraints = report["constraints"]
+    filtering = report["codec_filtering"]
+    normalization = report["normalization"]
+    context_policy = report["context_policy"]
+
+    return {
+        "profile": report["profile"],
+        "weight_source": report["weight_source"],
+        "decision_mode": report["decision"]["decision_mode"],
+        "selected_codec": selected["codec"],
+        "selected_config": selected["config"],
+        "rate": selected["rate"],
+        "quality_mean": selected["quality"],
+        "quality_constraint_stat": selected["quality_constraint_stat"],
+        "quality_constraint_value": selected["quality_constraint_value"],
+        "quality_min": selected["quality_stats"]["min"],
+        "quality_p10": selected["quality_stats"]["p10"],
+        "quality_p25": selected["quality_stats"]["p25"],
+        "energy": selected["energy"],
+        "time_ms": selected["time_ms"],
+        "J_RDE": selected["cost"],
+        "num_rows_loaded": report["num_rows_loaded_before_aggregation"],
+        "num_points_before_codec_filtering": filtering["num_before_codec_filtering"],
+        "num_points_after_codec_filtering": filtering["num_after_codec_filtering"],
+        "num_candidate_points": report["decision"]["num_points_total"],
+        "num_admissible_points": report["decision"]["num_points_admissible"],
+        "num_points_safe": report["decision"]["num_points_safe"],
+        "num_points_near": report["decision"]["num_points_near"],
+        "normalization_scope": normalization["scope"],
+        "num_normalization_reference_points": normalization["num_reference_points"],
+        "min_quality": constraints["min_quality"],
+        "quality_floor": constraints["quality_floor"],
+        "near_quality_floor": constraints["near_quality_floor"],
+        "allow_degraded_fallback": constraints["allow_degraded_fallback"],
+        "max_rate": constraints["max_rate"],
+        "max_energy": constraints["max_energy"],
+        "max_time_ms": constraints["max_time_ms"],
+        "w_E": weights["w_E"],
+        "w_R": weights["w_R"],
+        "w_D": weights["w_D"],
+        "aggregate_by_config": report["aggregate_by_config"],
+        "exclude_neural": filtering["exclude_neural"],
+        "context_power_mode": (
+            context_policy["context"]["power_mode"] if context_policy is not None else None
+        ),
+        "context_battery_percent": (
+            context_policy["context"]["battery_percent"] if context_policy is not None else None
+        ),
+        "context_network_profile": (
+            context_policy["context"]["network_profile"] if context_policy is not None else None
+        ),
+        "context_thermal_state": (
+            context_policy["context"]["thermal_state"] if context_policy is not None else None
+        ),
+        "context_quality_target": (
+            context_policy["context"]["quality_target"] if context_policy is not None else None
+        ),
+    }
+
+
+def _write_summary_csv(rows: List[Dict[str, Any]], out_path: Path) -> None:
+    if not rows:
+        return
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = list(rows[0].keys())
+
+    with out_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _topk_rows_from_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    weights = report["weights"]
+    constraints = report["constraints"]
+    filtering = report["codec_filtering"]
+    normalization = report["normalization"]
+
+    for rank, item in enumerate(report["decision"]["top_k"], start=1):
+        norm = item["normalized"]
+
+        rows.append(
+            {
+                "profile": report["profile"],
+                "rank": rank,
+                "decision_mode": item["decision_mode"],
+                "codec": item["codec"],
+                "config": item["config"],
+                "rate": item["rate"],
+                "quality_mean": item["quality"],
+                "quality_constraint_stat": item["quality_constraint_stat"],
+                "quality_constraint_value": item["quality_constraint_value"],
+                "quality_min": item["quality_stats"]["min"],
+                "quality_p10": item["quality_stats"]["p10"],
+                "quality_p25": item["quality_stats"]["p25"],
+                "energy": item["energy"],
+                "time_ms": item["time_ms"],
+                "J_RDE": item["cost"],
+                "norm_rate": norm["rate"],
+                "norm_distortion": norm["distortion"],
+                "norm_energy": norm["energy"],
+                "normalization_scope": normalization["scope"],
+                "num_normalization_reference_points": normalization["num_reference_points"],
+                "min_quality": constraints["min_quality"],
+                "quality_floor": constraints["quality_floor"],
+                "near_quality_floor": constraints["near_quality_floor"],
+                "allow_degraded_fallback": constraints["allow_degraded_fallback"],
+                "max_rate": constraints["max_rate"],
+                "max_energy": constraints["max_energy"],
+                "max_time_ms": constraints["max_time_ms"],
+                "w_E": weights["w_E"],
+                "w_R": weights["w_R"],
+                "w_D": weights["w_D"],
+                "aggregate_by_config": report["aggregate_by_config"],
+                "exclude_neural": filtering["exclude_neural"],
+            }
+        )
+
+    return rows
+
+
+def _write_topk_csv(rows: List[Dict[str, Any]], out_path: Path) -> None:
+    if not rows:
+        return
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = list(rows[0].keys())
+
+    with out_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
+    selected = report["decision"]["selected"]
+    weights = report["weights"]
+    filtering = report["codec_filtering"]
+    normalization = report["normalization"]
+    constraints = report["constraints"]
+
+    print("\n=== R-D-E Router Decision ===")
+    print(f"Profile: {report['profile']}")
+    print(f"Weight source: {report['weight_source']}")
+    print(f"Decision mode: {report['decision']['decision_mode']}")
+    print(f"Aggregate by config: {report['aggregate_by_config']}")
+    print(f"Exclude neural: {filtering['exclude_neural']}")
+    system_aware = filtering.get("system_aware", {})
+    print(f"System-aware: {system_aware.get('enabled', False)}")
+    if system_aware.get("enabled", False):
+        print(f"CUDA available: {system_aware.get('cuda_available')}")
+        print(f"Effective exclude neural: {system_aware.get('effective_exclude_neural')}")
+    capability = filtering.get("capability_aware", {})
+    print(f"Capability-aware: {capability.get('enabled', False)}")
+    if capability.get("enabled", False):
+        print(f"Strict executables: {capability.get('strict_executables')}")
+        print(
+            "Capability filtering: "
+            f"{capability.get('num_after_capability_filtering')} / "
+            f"{capability.get('num_before_capability_filtering')}"
+        )
+    calibration = report.get("calibration", {})
+    print(f"Calibration: {calibration.get('enabled', False)}")
+    if calibration.get("enabled", False):
+        print(f"Calibration file: {calibration.get('source')}")
+        print(f"Calibration level: {calibration.get('level')}")
+        print(f"Calibration applied points: {calibration.get('num_applied')}")
+    normalization_profile = report.get("normalization_profile", {})
+    if normalization_profile.get("enabled", False):
+        print(
+            "Normalization: "
+            f"{normalization_profile.get('mode')} "
+            f"({normalization_profile.get('source')})"
+        )
+    else:
+        print(f"Normalization: {normalization_profile.get('mode', 'runtime')}")
+    if normalization_profile.get("warning"):
+        print(f"Normalization warning: {normalization_profile.get('warning')}")
+    print(
+        f"Quality guard: {constraints['quality_constraint_stat']} >= "
+        f"{constraints['min_quality']} "
+        f"(near={constraints['near_quality_floor']}, degraded={constraints['allow_degraded_fallback']})"
+    )
+    quality_thresholds = report.get("quality_thresholds", {})
+
+    if quality_thresholds.get("enabled", False):
+        print(
+            "Quality thresholds: "
+            f"domain={quality_thresholds.get('domain')}, "
+            f"metric={quality_thresholds.get('quality_metric')}, "
+            f"target={quality_thresholds.get('quality_target')}, "
+            f"target_floor={quality_thresholds.get('target_floor')}, "
+            f"user_floor={quality_thresholds.get('user_quality_floor')}, "
+            f"effective_floor={quality_thresholds.get('effective_quality_floor')}"
+        )
+
+    time_guard = report.get("time_guard", {})
+
+    if time_guard.get("enabled", False):
+        print(
+            "Time guard: "
+            f"max_time_ms <= {time_guard.get('max_time_ms')} "
+            f"(with_time={time_guard.get('num_with_time')}/"
+            f"{time_guard.get('num_candidate_points')})"
+        )
+
+        for warning in time_guard.get("warnings", []):
+            print(f"Time guard warning: {warning}")
+
+    print(
+        f"Weights: "
+        f"E={weights['w_E']:.3f}, "
+        f"R={weights['w_R']:.3f}, "
+        f"D={weights['w_D']:.3f}"
+    )
+    print(f"Loaded rows: {report['num_rows_loaded_before_aggregation']}")
+    print(f"Candidate points after codec filtering: {filtering['num_after_codec_filtering']}")
+    print(f"Candidate points: {report['decision']['num_points_total']}")
+    print(
+        f"Safe points: {report['decision']['num_points_safe']} | "
+        f"Near points: {report['decision']['num_points_near']}"
+    )
+    print(
+        f"Admissible points: "
+        f"{report['decision']['num_points_admissible']} / "
+        f"{report['decision']['num_points_total']}"
+    )
+    print()
+    print(f"Selected codec:             {selected['codec']}")
+    print(f"Selected config:            {selected['config']}")
+    print(f"Rate:                       {selected['rate']}")
+    print(f"Quality mean:               {selected['quality']}")
+    print(f"Quality guard value:        {selected['quality_constraint_value']}")
+    print(f"Quality min / p10 / p25:    {selected['quality_stats']['min']} / {selected['quality_stats']['p10']} / {selected['quality_stats']['p25']}")
+    print(f"Energy:                     {selected['energy']}")
+    print(f"Time ms:                    {selected['time_ms']}")
+    print(f"J_RDE:                      {selected['cost']:.6f}")
+
+    selected_calibration = report.get("selected_calibration", {})
+
+    if selected_calibration.get("enabled", False):
+        print()
+        print("Selected calibration:")
+        print(f"  rate:    {selected_calibration.get('rate_before')} -> {selected_calibration.get('rate_after')}")
+        print(f"  energy:  {selected_calibration.get('energy_before')} -> {selected_calibration.get('energy_after')}")
+        print(f"  time ms: {selected_calibration.get('time_ms_before')} -> {selected_calibration.get('time_ms_after')}")
+        print(f"  method:  {selected_calibration.get('energy_scaling_method')}")
+
+    execution_plan = report.get("execution_plan", {})
+    if execution_plan.get("requested", False):
+        print()
+        print("Execution plan:")
+        print(f"  backend:      {execution_plan.get('execution_backend')}")
+        print(f"  can_execute:  {execution_plan.get('can_execute')}")
+        print(f"  output:       {execution_plan.get('output')}")
+
+        command = execution_plan.get("command")
+        if command:
+            print(f"  command:      {' '.join(command)}")
+
+        reasons = execution_plan.get("reasons") or []
+        if reasons:
+            print(f"  reasons:      {', '.join(reasons)}")
+
+        warnings = execution_plan.get("warnings") or []
+        if warnings:
+            print(f"  warnings:     {', '.join(warnings)}")
+
+    print()
+    print(f"Report written to: {json_path}")
+
+
+def _run_profile(
+    args: argparse.Namespace,
+    profile_name: str,
+    points: List[RDEPoint],
+    normalization_points: List[RDEPoint],
+    normalization_scope: str,
+    csv_path: str,
+    num_rows_loaded: int,
+    system_state: Dict[str, Any],
+    filter_report: Dict[str, Any],
+) -> Dict[str, Any]:
+    weights, min_quality, weight_source, context_policy = _build_weights_for_profile(
+        args,
+        profile_name,
+    )
+
+    near_quality_floor = args.near_quality_floor
+
+    if args.allow_degraded_fallback and near_quality_floor is None:
+        near_quality_floor = max(0.0, min_quality - 10.0)
+
+    time_guard_report = _build_time_guard_report(
+        points=points,
+        max_time_ms=args.max_time_ms,
+        strict_time=args.strict_time,
+    )
+
+    args._time_guard_report = time_guard_report
+
+    decision = select_best_rde(
+        points=points,
+        weights=weights,
+        min_quality=min_quality,
+        max_rate=args.max_rate,
+        max_energy=args.max_energy,
+        max_time_ms=args.max_time_ms,
+        quality_constraint_stat=args.quality_constraint_stat,
+        near_quality_floor=near_quality_floor,
+        allow_degraded_fallback=args.allow_degraded_fallback,
+        top_k=args.top_k,
+        normalization_points=normalization_points,
+        normalization_profile=getattr(args, "_normalization_profile", None),
+    )
+
+    return _make_report(
+        args=args,
+        profile_name=profile_name,
+        weights=weights,
+        min_quality=min_quality,
+        near_quality_floor=near_quality_floor,
+        decision=decision,
+        csv_path=csv_path,
+        num_rows_loaded=num_rows_loaded,
+        system_state=system_state,
+        filter_report=filter_report,
+        normalization_scope=normalization_scope,
+        normalization_reference_count=len(normalization_points),
+        weight_source=weight_source,
+        context_policy=context_policy,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Prototype R-D-E router for adaptive codec selection."
+    )
+
+    parser.add_argument("--csv", required=True, help="Path del CSV con i punti R-D-E.")
+
+    parser.add_argument(
+        "--calibration-file",
+        default=None,
+        help="File JSON di calibrazione locale da applicare ai punti R-D-E.",
+    )
+
+    parser.add_argument(
+        "--normalization-file",
+        default=None,
+        help="File JSON con scale di normalizzazione precomputate.",
+    )
+
+    parser.add_argument(
+        "--normalization-mode",
+        default="auto",
+        choices=["auto", "runtime", "global", "dataset", "local"],
+        help=(
+            "Politica di normalizzazione: auto, runtime, global, dataset, local. "
+            "runtime usa la normalizzazione calcolata al volo; global/dataset/local "
+            "richiedono --normalization-file."
+        ),
+    )
+
+    parser.add_argument(
+        "--input",
+        default=None,
+        help="File di input da usare per generare un piano di esecuzione.",
+    )
+
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="File di output desiderato per il piano di esecuzione.",
+    )
+
+    parser.add_argument(
+        "--generate-command",
+        action="store_true",
+        help="Genera un execution plan per il codec selezionato.",
+    )
+
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Esegue direttamente il comando generato se il piano è eseguibile.",
+    )
+
+    parser.add_argument(
+        "--domain",
+        default="image",
+        choices=["image", "audio", "video"],
+        help="Dominio multimediale.",
+    )
+
+    parser.add_argument(
+        "--profile",
+        default="balanced",
+        choices=available_profiles(),
+        help="Profilo operativo da usare se --all-profiles non è attivo.",
+    )
+
+    parser.add_argument(
+        "--all-profiles",
+        action="store_true",
+        help="Esegue il router su tutti i profili disponibili e genera un summary CSV.",
+    )
+
+    parser.add_argument(
+        "--auto-weights",
+        action="store_true",
+        help="Calcola automaticamente i pesi R-D-E dal contesto operativo.",
+    )
+
+    parser.add_argument(
+        "--power-mode",
+        choices=["ac", "battery", "unknown"],
+        default="ac",
+        help="Modalità alimentazione usata dalla policy contestuale.",
+    )
+
+    parser.add_argument(
+        "--battery-percent",
+        type=float,
+        default=None,
+        help="Percentuale batteria usata dalla policy contestuale.",
+    )
+
+    parser.add_argument(
+        "--thermal-state",
+        choices=["nominal", "warm", "hot", "critical"],
+        default="nominal",
+        help="Stato termico usato dalla policy contestuale.",
+    )
+
+    parser.add_argument(
+        "--network-profile",
+        choices=["normal", "limited", "very-limited"],
+        default="normal",
+        help="Profilo rete usato dalla policy contestuale.",
+    )
+
+    parser.add_argument(
+        "--quality-target",
+        choices=["preview", "normal", "high", "very-high"],
+        default="normal",
+        help="Target qualità usato dalla policy contestuale.",
+    )
+
+    parser.add_argument(
+        "--quality-thresholds-file",
+        default="configs/quality_thresholds.json",
+        help="File JSON con soglie qualità domain-specific.",
+    )
+
+    parser.add_argument(
+        "--system-load",
+        choices=["normal", "high", "very-high"],
+        default="normal",
+        help="Carico sistema usato dalla policy contestuale.",
+    )
+
+    parser.add_argument(
+        "--aggregate-by-config",
+        action="store_true",
+        help="Aggrega le righe per codec+config usando la media di rate, qualità ed energia.",
+    )
+
+    parser.add_argument(
+        "--normalization-scope",
+        choices=["global", "filtered"],
+        default="global",
+        help=(
+            "global = normalizza sui punti prima dei filtri codec; "
+            "filtered = normalizza solo sui punti rimasti dopo i filtri."
+        ),
+    )
+
+    parser.add_argument(
+        "--available-codecs",
+        default=None,
+        help="Lista separata da virgole dei codec disponibili. Esempio: JPEG,JXL,HEVC",
+    )
+
+    parser.add_argument(
+        "--exclude-codecs",
+        default=None,
+        help="Lista separata da virgole dei codec da escludere. Esempio: DCAE,JPEG_AI",
+    )
+
+    parser.add_argument(
+        "--exclude-neural",
+        action="store_true",
+        help="Esclude codec neurali o basati su modelli appresi.",
+    )
+
+    parser.add_argument(
+        "--system-aware",
+        action="store_true",
+        help="Usa il profilo del sistema reale per filtrare automaticamente il pool ammissibile.",
+    )
+
+    parser.add_argument(
+        "--capability-aware",
+        action="store_true",
+        help="Filtra i codec usando il registry dei requisiti hardware/software.",
+    )
+
+    parser.add_argument(
+        "--strict-executables",
+        action="store_true",
+        help="Se attivo, esclude i codec i cui eseguibili richiesti non sono nel PATH.",
+    )
+
+    parser.add_argument(
+        "--simulate-no-cuda",
+        action="store_true",
+        help="Debug: simula assenza di CUDA per testare il filtro system-aware.",
+    )
+
+    parser.add_argument(
+        "--safe-mode",
+        action="store_true",
+        help="Attiva guardia qualità robusta: usa p10 se non specificato e floor minimo 60.",
+    )
+
+    parser.add_argument(
+        "--quality-constraint-stat",
+        choices=["mean", "p25", "p10", "min"],
+        default=None,
+        help="Statistica usata come vincolo duro di qualità.",
+    )
+
+    parser.add_argument(
+        "--quality-floor",
+        type=float,
+        default=None,
+        help="Soglia minima assoluta di qualità accettabile.",
+    )
+
+    parser.add_argument(
+        "--near-quality-floor",
+        type=float,
+        default=None,
+        help="Soglia qualità quasi-usabile per fallback degradato.",
+    )
+
+    parser.add_argument(
+        "--allow-degraded-fallback",
+        action="store_true",
+        help="Permette fallback degradato se nessun punto supera la soglia sicura.",
+    )
+
+    parser.add_argument(
+        "--min-quality",
+        type=float,
+        default=None,
+        help="Qualità minima ammissibile. Se assente, usa quella del profilo/policy.",
+    )
+
+    parser.add_argument("--max-rate", type=float, default=None, help="Rate massimo ammissibile.")
+    parser.add_argument("--max-energy", type=float, default=None, help="Energia massima ammissibile.")
+    parser.add_argument("--max-time-ms", type=float, default=None, help="Tempo massimo ammissibile in millisecondi.")
+    parser.add_argument(
+        "--strict-time",
+        action="store_true",
+        help=(
+            "Se usato con --max-time-ms, richiede che tutti i punti candidati "
+            "abbiano time_ms disponibile."
+        ),
+    )
+
+    parser.add_argument("--wE", type=float, default=None, help="Peso energia custom.")
+    parser.add_argument("--wR", type=float, default=None, help="Peso rate custom.")
+    parser.add_argument("--wD", type=float, default=None, help="Peso distorsione custom.")
+
+    parser.add_argument("--codec-col", default=None)
+    parser.add_argument("--config-col", default=None)
+    parser.add_argument("--rate-col", default=None)
+    parser.add_argument("--quality-col", default=None)
+    parser.add_argument("--energy-col", default=None)
+    parser.add_argument("--time-col", default=None)
+
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=5,
+        help="Numero di configurazioni migliori da salvare nel report JSON.",
+    )
+
+    parser.add_argument(
+        "--export-topk",
+        action="store_true",
+        help="Esporta anche i top-k candidati in CSV.",
+    )
+
+    parser.add_argument(
+        "--out",
+        default="results/routing/router_decision_report.json",
+        help="Path del report JSON quando si usa un solo profilo.",
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        default="results/routing",
+        help="Cartella di output quando si usa --all-profiles.",
+    )
+
+    parser.add_argument(
+        "--summary-out",
+        default=None,
+        help="Path del summary CSV. Se assente, usa results/routing/router_summary.csv.",
+    )
+
+    args = parser.parse_args()
+
+    if args.execute:
+        args.generate_command = True
+
+    if args.execute and args.all_profiles:
+        raise ValueError("--execute è supportato solo in modalità singolo profilo, non con --all-profiles.")
+
+    if args.execute and args.input is None:
+        raise ValueError("--execute richiede --input.")
+
+    if args.auto_weights and args.all_profiles:
+        raise ValueError(
+            "--auto-weights genera un singolo profilo contestuale; "
+            "non usarlo insieme a --all-profiles."
+        )
+
+    if args.safe_mode:
+        if args.quality_constraint_stat is None:
+            args.quality_constraint_stat = "p10"
+        if args.quality_floor is None:
+            args.quality_floor = 60.0
+        else:
+            args.quality_floor = max(args.quality_floor, 60.0)
+    else:
+        if args.quality_constraint_stat is None:
+            args.quality_constraint_stat = "mean"
+
+    quality_threshold_report = resolve_quality_floor(
+        domain=args.domain,
+        quality_metric=args.quality_col,
+        quality_target=args.quality_target,
+        user_quality_floor=args.quality_floor,
+        thresholds_file=args.quality_thresholds_file,
+    )
+
+    args.quality_floor = quality_threshold_report["effective_quality_floor"]
+    args._quality_threshold_report = quality_threshold_report
+
+    points = load_rde_points(
+        csv_path=args.csv,
+        codec_col=args.codec_col,
+        config_col=args.config_col,
+        rate_col=args.rate_col,
+        quality_col=args.quality_col,
+        energy_col=args.energy_col,
+        time_col=args.time_col,
+    )
+
+    num_rows_loaded = len(points)
+
+    if args.aggregate_by_config:
+        points = aggregate_points_by_config(points)
+
+    if args.calibration_file:
+        points, calibration_report = apply_local_calibration(
+            points=points,
+            calibration_file=args.calibration_file,
+        )
+    else:
+        calibration_report = {
+            "enabled": False,
+        }
+
+    args._calibration_report = calibration_report
+
+    normalization_mode = args.normalization_mode
+
+    if normalization_mode == "runtime":
+        if args.normalization_file:
+            raise ValueError(
+                "--normalization-mode runtime non deve essere usato insieme a --normalization-file."
+            )
+
+        normalization_profile = None
+        normalization_scope_label = "runtime_global_before_codec_filtering"
+        normalization_report = {
+            "enabled": False,
+            "mode": "runtime",
+            "source": None,
+            "scope": normalization_scope_label,
+            "comparability": "run_local",
+            "warning": (
+                "Normalization is computed at runtime; J_RDE values may not be "
+                "comparable across runs with different candidate pools."
+            ),
+        }
+
+    elif normalization_mode == "auto":
+        if args.normalization_file:
+            normalization_profile = load_normalization_profile(args.normalization_file)
+            profile_mode = normalization_profile.get("mode", "profile")
+            normalization_scope_label = f"precomputed_{profile_mode}_profile"
+            normalization_report = {
+                "enabled": True,
+                "mode": profile_mode,
+                "source": args.normalization_file,
+                "scope": normalization_scope_label,
+                "comparability": normalization_profile.get("comparability"),
+                "warning": normalization_profile.get("warning"),
+            }
+        else:
+            normalization_profile = None
+            normalization_scope_label = "runtime_global_before_codec_filtering"
+            normalization_report = {
+                "enabled": False,
+                "mode": "runtime",
+                "source": None,
+                "scope": normalization_scope_label,
+                "comparability": "run_local",
+                "warning": (
+                    "Normalization is computed at runtime; J_RDE values may not be "
+                    "comparable across runs with different candidate pools."
+                ),
+            }
+
+    else:
+        if not args.normalization_file:
+            raise ValueError(
+                f"--normalization-mode {normalization_mode} richiede --normalization-file."
+            )
+
+        normalization_profile = load_normalization_profile(args.normalization_file)
+        profile_mode = normalization_profile.get("mode")
+
+        if profile_mode and profile_mode != normalization_mode:
+            raise ValueError(
+                f"Normalization mode mismatch: CLI mode={normalization_mode}, "
+                f"profile mode={profile_mode}."
+            )
+
+        normalization_scope_label = f"precomputed_{normalization_mode}_profile"
+        normalization_report = {
+            "enabled": True,
+            "mode": normalization_mode,
+            "source": args.normalization_file,
+            "scope": normalization_scope_label,
+            "comparability": normalization_profile.get("comparability"),
+            "warning": normalization_profile.get("warning"),
+        }
+
+    args._normalization_profile = normalization_profile
+    args._normalization_report = normalization_report
+
+    global_normalization_points = list(points)
+
+    system_state = probe_system()
+
+    effective_exclude_neural, system_aware_report = _apply_system_aware_policy(
+        system_state=system_state,
+        enabled=args.system_aware,
+        simulate_no_cuda=args.simulate_no_cuda,
+        exclude_neural_requested=args.exclude_neural,
+        capability_aware_enabled=args.capability_aware,
+    )
+
+    available_codecs = _parse_codec_list(args.available_codecs)
+    exclude_codecs = _parse_codec_list(args.exclude_codecs)
+
+    points, filter_report = _filter_points_by_codec_availability(
+        points=points,
+        available_codecs=available_codecs,
+        exclude_codecs=exclude_codecs,
+        exclude_neural=effective_exclude_neural,
+    )
+
+    filter_report["system_aware"] = system_aware_report
+
+    if args.capability_aware:
+        points, capability_report = filter_points_by_capabilities(
+            points=points,
+            system_state=system_state,
+            strict_executables=args.strict_executables,
+            simulate_no_cuda=args.simulate_no_cuda,
+        )
+
+        filter_report["capability_aware"] = capability_report
+    else:
+        filter_report["capability_aware"] = {
+            "enabled": False,
+        }
+
+    if normalization_profile is not None:
+        normalization_points = global_normalization_points
+        normalization_scope_label = normalization_report["scope"]
+    elif args.normalization_scope == "global":
+        normalization_points = global_normalization_points
+        normalization_scope_label = normalization_report["scope"]
+    else:
+        normalization_points = points
+        normalization_scope_label = "filtered_after_codec_filtering"
+        normalization_report["scope"] = normalization_scope_label
+        args._normalization_report = normalization_report
+
+    if args.all_profiles:
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        summary_rows: List[Dict[str, Any]] = []
+        topk_rows: List[Dict[str, Any]] = []
+
+        print("\n=== R-D-E Router: all profiles ===")
+        print(f"Loaded rows: {num_rows_loaded}")
+        print(f"Candidate points after aggregation/filtering: {len(points)}")
+        print(f"Normalization: {normalization_scope_label} ({len(normalization_points)} reference points)")
+        print(f"Aggregate by config: {args.aggregate_by_config}")
+        print(f"Available codecs: {args.available_codecs}")
+        print(f"Exclude codecs: {args.exclude_codecs}")
+        print(f"Exclude neural: {args.exclude_neural}")
+        print(f"System-aware: {args.system_aware}")
+        if args.system_aware:
+            print(f"CUDA available: {filter_report['system_aware']['cuda_available']}")
+            print(f"Effective exclude neural: {filter_report['system_aware']['effective_exclude_neural']}")
+        print(f"Capability-aware: {args.capability_aware}")
+        print(f"Strict executables: {args.strict_executables}")
+        print(f"Safe mode: {args.safe_mode}")
+        print(f"Quality guard: {args.quality_constraint_stat} >= {args.quality_floor}")
+        print(f"Export top-k: {args.export_topk}")
+        print()
+
+        for profile_name in available_profiles():
+            report = _run_profile(
+                args=args,
+                profile_name=profile_name,
+                points=points,
+                normalization_points=normalization_points,
+                normalization_scope=normalization_scope_label,
+                csv_path=args.csv,
+                num_rows_loaded=num_rows_loaded,
+                system_state=system_state,
+                filter_report=filter_report,
+            )
+
+            safe_name = _safe_profile_filename(profile_name)
+            json_path = out_dir / f"router_decision_report_{safe_name}.json"
+            _write_json_report(report, json_path)
+
+            summary_rows.append(_summary_row_from_report(report))
+
+            if args.export_topk:
+                topk_rows.extend(_topk_rows_from_report(report))
+
+            selected = report["decision"]["selected"]
+            print(
+                f"{profile_name:18s} -> "
+                f"{selected['codec']} {selected['config']} "
+                f"| mode={report['decision']['decision_mode']} "
+                f"| R={selected['rate']:.6f}, "
+                f"Qmean={selected['quality']:.2f}, "
+                f"Qguard={selected['quality_constraint_value']:.2f}, "
+                f"E={selected['energy']:.6f}, "
+                f"J={selected['cost']:.6f}"
+            )
+
+        summary_path = (
+            Path(args.summary_out)
+            if args.summary_out is not None
+            else out_dir / "router_summary.csv"
+        )
+
+        _write_summary_csv(summary_rows, summary_path)
+
+        if args.export_topk:
+            topk_path = out_dir / "router_topk.csv"
+            _write_topk_csv(topk_rows, topk_path)
+
+        print()
+        print(f"JSON reports written to: {out_dir}")
+        print(f"Summary written to:      {summary_path}")
+
+        if args.export_topk:
+            print(f"Top-k written to:        {topk_path}")
+
+    else:
+        report = _run_profile(
+            args=args,
+            profile_name="context-auto" if args.auto_weights else args.profile,
+            points=points,
+            normalization_points=normalization_points,
+            normalization_scope=normalization_scope_label,
+            csv_path=args.csv,
+            num_rows_loaded=num_rows_loaded,
+            system_state=system_state,
+            filter_report=filter_report,
+        )
+
+        if args.execute:
+            execution_result = _execute_plan(report.get("execution_plan", {}))
+            report["execution_result"] = execution_result
+        else:
+            report["execution_result"] = {
+                "requested": False,
+                "executed": False,
+            }
+
+        out_path = Path(args.out)
+        _write_json_report(report, out_path)
+
+        if args.export_topk:
+            topk_path = out_path.with_name(out_path.stem + "_topk.csv")
+            _write_topk_csv(_topk_rows_from_report(report), topk_path)
+
+        _print_single_decision(report, out_path)
+
+        if args.execute:
+            result = report["execution_result"]
+            print()
+            print("Execution result:")
+            print(f"  executed:     {result.get('executed')}")
+            print(f"  success:      {result.get('success')}")
+            print(f"  returncode:   {result.get('returncode')}")
+
+            if result.get("output"):
+                print(f"  output:       {result.get('output')}")
+
+            if result.get("reason"):
+                print(f"  reason:       {result.get('reason')}")
+
+            if result.get("stderr") and not result.get("success"):
+                print("  stderr:")
+                print(result.get("stderr"))
+
+        if args.export_topk:
+            print(f"Top-k written to: {topk_path}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except ValueError as exc:
+        print("\n=== R-D-E Router: infeasible request ===")
+        print(str(exc))
+        print()
+        print("No codec/configuration can satisfy the current constraints.")
+        print("Try one of the following:")
+        print("  - relax --max-rate")
+        print("  - lower --quality-floor or --near-quality-floor")
+        print("  - disable --simulate-no-cuda if CUDA codecs are actually available")
+        print("  - enable more codecs in the admissible pool")
+        raise SystemExit(2)
