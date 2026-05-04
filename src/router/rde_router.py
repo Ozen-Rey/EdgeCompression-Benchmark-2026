@@ -16,6 +16,7 @@ try:
         is_neural_codec,
         load_external_codec_registry,
     )
+    from .content_policy import build_content_policy_report
     from .context_policy import compute_context_policy
     from .execution_validation import validate_execution_output
     from .normalization_profile import load_normalization_profile
@@ -49,6 +50,7 @@ except ImportError:
         is_neural_codec,
         load_external_codec_registry,
     )
+    from content_policy import build_content_policy_report
     from context_policy import compute_context_policy
     from execution_validation import validate_execution_output
     from normalization_profile import load_normalization_profile
@@ -472,6 +474,15 @@ def _make_report(
                 "enabled": False,
             },
         ),
+        "content_policy": getattr(
+            args,
+            "_content_policy_report",
+            {
+                "enabled": False,
+                "mode": "report-only",
+                "suggestion": None,
+            },
+        ),
         "system_policy_simulation": getattr(
             args,
             "_system_policy_simulation",
@@ -813,6 +824,33 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
                 f"R={suggested.get('w_R'):.3f}, "
                 f"D={suggested.get('w_D'):.3f}"
             )
+
+    content_policy = report.get("content_policy", {})
+
+    if content_policy.get("enabled", False):
+        print(
+            "Content policy: "
+            f"{content_policy.get('mode')} "
+            f"(suggestion={content_policy.get('suggestion') is not None})"
+        )
+
+        if content_policy.get("policy_value"):
+            print(
+                "Content source: "
+                f"{content_policy.get('policy_key')}={content_policy.get('policy_value')}"
+            )
+
+        suggestion = content_policy.get("suggestion")
+        if suggestion:
+            print(
+                "Content suggestion: "
+                f"{suggestion.get('codec')} {suggestion.get('config')}"
+            )
+
+        warnings = content_policy.get("warnings") or []
+        if warnings:
+            print("Content policy warnings: " + "; ".join(warnings))
+
     codec_registry = report.get("codec_registry", {})
     print(f"Codec registry: {codec_registry.get('enabled', False)}")
     if codec_registry.get("enabled", False):
@@ -1007,6 +1045,17 @@ def _run_profile(
     if system_policy_report.get("enabled", False) and system_policy_report.get("applied", False):
         weights = system_policy_report["effective_weights"]
         weight_source = f"{weight_source}+system_policy"
+
+    content_policy_report = build_content_policy_report(
+        enabled=bool(getattr(args, "content_policy", False)),
+        mode=str(getattr(args, "content_policy_mode", "report-only")),
+        rules_file=getattr(args, "content_policy_rules_file", None),
+        policy_key=str(getattr(args, "content_policy_key", "dataset")),
+        policy_value=getattr(args, "content_source", None),
+        fallback="router",
+    )
+
+    args._content_policy_report = content_policy_report
 
     system_penalty_weights_report = load_system_penalty_weights(
         args.system_penalty_weights_file
@@ -1353,6 +1402,37 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--system-penalty-weights-file",
         default=None,
         help="Optional JSON file with configurable system penalty coefficients.",
+    )
+
+    parser.add_argument(
+        "--content-policy",
+        action="store_true",
+        help="Enable source-aware content policy reporting.",
+    )
+
+    parser.add_argument(
+        "--content-policy-mode",
+        default="report-only",
+        choices=["report-only", "apply"],
+        help="Content policy mode. v0.9.4.2 supports report-only integration.",
+    )
+
+    parser.add_argument(
+        "--content-policy-rules-file",
+        default=None,
+        help="CSV rules file produced by content metadata policy evaluation.",
+    )
+
+    parser.add_argument(
+        "--content-policy-key",
+        default="dataset",
+        help="Metadata key used by the content policy rules, e.g. dataset/source.",
+    )
+
+    parser.add_argument(
+        "--content-source",
+        default=None,
+        help="Optional homogeneous content source/dataset label, e.g. tecnick, kodak, clic2020.",
     )
 
     parser.add_argument(
