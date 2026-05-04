@@ -106,6 +106,7 @@ def config_to_cli_args(config: Dict[str, Any]) -> List[str]:
     system_policy = config.get("system_policy", {})
     _add_value(args, "--system-policy", system_policy.get("enabled"))
     _add_value(args, "--system-policy-mode", system_policy.get("mode"))
+    _add_value(args, "--system-policy-simulate", system_policy.get("simulate"))
 
     # Context policy
     context = config.get("context", {})

@@ -1,3 +1,4 @@
+import copy
 from typing import Any, Dict
 
 
@@ -155,3 +156,103 @@ def build_system_policy(
         "warnings": warnings,
         "constraint_classes": classes,
     }
+
+
+VALID_SYSTEM_CLASSES = {
+    "cpu": {"normal", "busy"},
+    "memory": {"normal", "constrained", "critical"},
+    "battery": {"ac", "battery", "low", "critical", "unknown"},
+    "gpu": {"available", "busy", "memory_constrained", "unavailable", "unknown"},
+    "thermal": {"nominal", "hot", "critical", "unknown"},
+    "disk": {"normal", "low_space"},
+}
+
+
+DEFAULT_SIMULATED_CLASSES = {
+    "cpu": "normal",
+    "memory": "normal",
+    "battery": "ac",
+    "gpu": "unknown",
+    "thermal": "unknown",
+    "disk": "normal",
+}
+
+
+def parse_system_policy_simulation(value: str | None) -> Dict[str, str]:
+    if value is None or str(value).strip() == "":
+        return {}
+
+    parsed: Dict[str, str] = {}
+
+    for part in str(value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+
+        if "=" not in part:
+            raise ValueError(
+                "Invalid system policy simulation entry. "
+                "Expected comma-separated key=value pairs."
+            )
+
+        key, class_value = part.split("=", 1)
+        key = key.strip().lower()
+        class_value = class_value.strip().lower()
+
+        if key not in VALID_SYSTEM_CLASSES:
+            raise ValueError(
+                f"Invalid simulated system class key: {key}. "
+                f"Valid keys: {sorted(VALID_SYSTEM_CLASSES.keys())}"
+            )
+
+        if class_value not in VALID_SYSTEM_CLASSES[key]:
+            raise ValueError(
+                f"Invalid simulated class for {key}: {class_value}. "
+                f"Valid values: {sorted(VALID_SYSTEM_CLASSES[key])}"
+            )
+
+        parsed[key] = class_value
+
+    return parsed
+
+
+def apply_system_policy_simulation(
+    *,
+    system_features_report: Dict[str, Any],
+    simulated_classes: Dict[str, str],
+) -> Dict[str, Any]:
+    if not simulated_classes:
+        return system_features_report
+
+    if system_features_report.get("enabled", False):
+        report = copy.deepcopy(system_features_report)
+    else:
+        report = {
+            "enabled": True,
+            "version": "0.8",
+            "probe_level": "simulated",
+            "probe_overhead": {
+                "static_probe_ms": 0.0,
+                "dynamic_probe_ms": 0.0,
+                "gpu_probe_ms": 0.0,
+                "total_probe_ms": 0.0,
+            },
+            "features": {},
+            "derived_constraints": {
+                "classes": dict(DEFAULT_SIMULATED_CLASSES),
+            },
+        }
+
+    constraints = report.setdefault("derived_constraints", {})
+    classes = constraints.setdefault("classes", dict(DEFAULT_SIMULATED_CLASSES))
+
+    for key, value in simulated_classes.items():
+        classes[key] = value
+
+    report["system_policy_simulation"] = {
+        "enabled": True,
+        "classes": dict(simulated_classes),
+        "note": "These classes override measured system constraint classes for policy evaluation.",
+    }
+
+    return report

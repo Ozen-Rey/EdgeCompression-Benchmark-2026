@@ -30,7 +30,11 @@ try:
     from .router_config import expand_argv_with_config
     from .run_manifest import build_run_manifest
     from .system_features import build_system_features, estimate_probe_efficiency
-    from .system_policy import build_system_policy
+    from .system_policy import (
+        apply_system_policy_simulation,
+        build_system_policy,
+        parse_system_policy_simulation,
+    )
     from .system_probe import probe_system
 except ImportError:
     from calibration_apply import apply_local_calibration
@@ -54,7 +58,11 @@ except ImportError:
     from router_config import expand_argv_with_config
     from run_manifest import build_run_manifest
     from system_features import build_system_features, estimate_probe_efficiency
-    from system_policy import build_system_policy
+    from system_policy import (
+        apply_system_policy_simulation,
+        build_system_policy,
+        parse_system_policy_simulation,
+    )
     from system_probe import probe_system
 
 
@@ -454,6 +462,14 @@ def _make_report(
                 "enabled": False,
             },
         ),
+        "system_policy_simulation": getattr(
+            args,
+            "_system_policy_simulation",
+            {
+                "enabled": False,
+                "classes": {},
+            },
+        ),
     }
 
 
@@ -749,6 +765,16 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
             f"{system_policy.get('mode')} "
             f"(applied={system_policy.get('applied')})"
         )
+
+        simulation = report.get("system_policy_simulation", {})
+        if simulation.get("enabled", False):
+            print(
+                "System policy simulation: "
+                + ", ".join(
+                    f"{k}={v}"
+                    for k, v in simulation.get("classes", {}).items()
+                )
+            )
 
         rules = system_policy.get("rules_applied") or []
         if rules:
@@ -1219,6 +1245,16 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
 
     parser.add_argument(
+        "--system-policy-simulate",
+        default=None,
+        help=(
+            "Comma-separated simulated system classes, e.g. "
+            "'battery=critical,cpu=busy,memory=constrained'. "
+            "Overrides measured classes for system-policy evaluation."
+        ),
+    )
+
+    parser.add_argument(
         "--capability-aware",
         action="store_true",
         help="Filtra i codec usando il registry dei requisiti hardware/software.",
@@ -1342,6 +1378,21 @@ def main(argv: Optional[List[str]] = None) -> None:
         args._system_features_report = {
             "enabled": False,
         }
+
+    simulated_system_classes = parse_system_policy_simulation(
+        args.system_policy_simulate
+    )
+
+    args._system_policy_simulation = {
+        "enabled": bool(simulated_system_classes),
+        "classes": simulated_system_classes,
+    }
+
+    if simulated_system_classes:
+        args._system_features_report = apply_system_policy_simulation(
+            system_features_report=args._system_features_report,
+            simulated_classes=simulated_system_classes,
+        )
 
     args._run_manifest = build_run_manifest(
         original_argv=original_argv,

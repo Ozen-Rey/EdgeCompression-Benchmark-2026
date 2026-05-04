@@ -62,3 +62,65 @@ def test_router_report_includes_system_features():
     assert report["system_probe_efficiency"]["enabled"] is True
     assert report["system_probe_efficiency"]["reference_time_ms"] == 10.0
     assert report["system_probe_efficiency"]["probe_overhead_ms"] >= 0.0
+
+
+def test_router_report_includes_system_policy_simulation():
+    csv_path = _tmp_path("simulation_points.csv")
+    out_path = _tmp_path("simulation_report.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
+                "JPEG,q=85,1.0,80.0,1.0,10.0",
+                "JXL,d=1.0,0.8,75.0,0.5,20.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--csv",
+            str(csv_path),
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--time-col",
+            "time_ms",
+            "--available-codecs",
+            "JPEG,JXL",
+            "--quality-target",
+            "normal",
+            "--system-features",
+            "--system-policy",
+            "--system-policy-mode",
+            "apply",
+            "--system-policy-simulate",
+            "battery=critical,cpu=busy,memory=constrained",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    report = json.loads(out_path.read_text(encoding="utf-8"))
+
+    simulation = report["system_policy_simulation"]
+    policy = report["system_policy"]
+
+    assert simulation["enabled"] is True
+    assert simulation["classes"]["battery"] == "critical"
+    assert simulation["classes"]["cpu"] == "busy"
+    assert simulation["classes"]["memory"] == "constrained"
+
+    assert policy["enabled"] is True
+    assert policy["applied"] is True
+    assert policy["effective_weights"]["w_E"] > policy["base_weights"]["w_E"]
+    assert "battery_critical_energy_multiplier=3.0" in policy["rules_applied"]

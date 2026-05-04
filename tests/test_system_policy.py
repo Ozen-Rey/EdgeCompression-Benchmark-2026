@@ -1,4 +1,8 @@
-from src.router.system_policy import build_system_policy
+from src.router.system_policy import (
+    apply_system_policy_simulation,
+    build_system_policy,
+    parse_system_policy_simulation,
+)
 
 
 def _features_with_classes(**classes):
@@ -129,3 +133,57 @@ def test_system_policy_does_not_exclude_cuda_when_gpu_unknown():
 
     assert "exclude_requires_cuda_codecs" not in policy["suggested_filters"]
     assert "gpu_status_unknown_probe_level_did_not_check_gpu" in policy["warnings"]
+
+
+def test_parse_system_policy_simulation_parses_classes():
+    parsed = parse_system_policy_simulation(
+        "battery=critical,cpu=busy,memory=constrained"
+    )
+
+    assert parsed == {
+        "battery": "critical",
+        "cpu": "busy",
+        "memory": "constrained",
+    }
+
+
+def test_parse_system_policy_simulation_rejects_invalid_key():
+    try:
+        parse_system_policy_simulation("network=bad")
+    except ValueError as exc:
+        assert "Invalid simulated system class key" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")
+
+
+def test_apply_system_policy_simulation_overrides_classes():
+    report = {
+        "enabled": True,
+        "derived_constraints": {
+            "classes": {
+                "cpu": "normal",
+                "memory": "normal",
+                "battery": "ac",
+                "gpu": "available",
+                "thermal": "nominal",
+                "disk": "normal",
+            }
+        },
+    }
+
+    simulated = {
+        "battery": "critical",
+        "cpu": "busy",
+    }
+
+    out = apply_system_policy_simulation(
+        system_features_report=report,
+        simulated_classes=simulated,
+    )
+
+    classes = out["derived_constraints"]["classes"]
+
+    assert classes["battery"] == "critical"
+    assert classes["cpu"] == "busy"
+    assert classes["memory"] == "normal"
+    assert out["system_policy_simulation"]["enabled"] is True
