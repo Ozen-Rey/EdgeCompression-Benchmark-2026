@@ -293,3 +293,95 @@ def test_router_content_policy_apply_falls_back_when_preferred_not_safe():
         "content_policy_suggestion_not_admissible_fallback_to_router"
         in report["content_policy"]["warnings"]
     )
+
+
+def test_router_reports_content_classifier_prediction():
+    csv_path = _tmp_path("classifier_rde.csv")
+    training_path = _tmp_path("classifier_training.csv")
+    config_path = _tmp_path("classifier.json")
+    report_path = _tmp_path("classifier_report.json")
+
+    csv_path.write_text(
+        "\n".join(
+            [
+                "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms",
+                "JPEG,q=85,1.2,85.0,1.0,20.0",
+                "HEVC,crf=15,1.0,95.0,10.0,100.0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    training_path.write_text(
+        "\n".join(
+            [
+                "dataset,image,image_id,oracle_codec,oracle_config,megapixels,aspect_ratio,resolution_class,orientation_class",
+                "A,img1,A::img1,JPEG,q=85,1.0,1.0,medium,squareish",
+                "B,img2,B::img2,HEVC,crf=15,8.0,1.7,huge,landscape",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config_path.write_text(
+        json.dumps(
+            {
+                "enabled": True,
+                "model_type": "knn_oracle_classifier",
+                "feature_set": "metadata_no_source",
+                "k": 1,
+                "training_rows": str(training_path),
+                "pixel_features": None,
+                "quality_floor": 80.0,
+                "fallback": "router",
+                "selection_reason": "content_classifier_preferred_candidate",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    main(
+        [
+            "--csv",
+            str(csv_path),
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--time-col",
+            "time_ms",
+            "--domain",
+            "image",
+            "--quality-target",
+            "high",
+            "--quality-floor",
+            "80",
+            "--content-classifier",
+            "--content-classifier-mode",
+            "report-only",
+            "--content-classifier-config",
+            str(config_path),
+            "--content-classifier-width",
+            "1000",
+            "--content-classifier-height",
+            "1000",
+            "--out",
+            str(report_path),
+        ]
+    )
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["content_classifier"]["enabled"] is True
+    assert report["content_classifier"]["mode"] == "report-only"
+    assert report["content_classifier"]["applied"] is False
+    assert report["content_classifier"]["prediction"]["codec"] == "JPEG"
+    assert report["content_classifier"]["prediction"]["config"] == "q=85"
+    assert report["content_classifier"]["features"]["resolution_class"] == "medium"
+    assert report["content_classifier"]["features"]["orientation_class"] == "squareish"

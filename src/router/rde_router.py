@@ -20,6 +20,13 @@ try:
         build_content_policy_report,
         get_content_policy_preferred_candidate,
     )
+    from .content_classifier_model import (
+        build_metadata_no_source_features,
+        extract_metadata_features_from_image,
+        load_content_classifier_config,
+        load_training_rows_from_config,
+        predict_content_classifier,
+    )
     from .context_policy import compute_context_policy
     from .execution_validation import validate_execution_output
     from .normalization_profile import load_normalization_profile
@@ -57,6 +64,13 @@ except ImportError:
     from content_policy import (
         build_content_policy_report,
         get_content_policy_preferred_candidate,
+    )
+    from content_classifier_model import (
+        build_metadata_no_source_features,
+        extract_metadata_features_from_image,
+        load_content_classifier_config,
+        load_training_rows_from_config,
+        predict_content_classifier,
     )
     from context_policy import compute_context_policy
     from execution_validation import validate_execution_output
@@ -305,6 +319,70 @@ def _safe_profile_filename(profile_name: str) -> str:
     return profile_name.strip().lower().replace("-", "_").replace(" ", "_")
 
 
+def _build_content_classifier_router_report(args: argparse.Namespace) -> Dict[str, Any]:
+    enabled = bool(getattr(args, "content_classifier", False))
+    mode = str(getattr(args, "content_classifier_mode", "report-only"))
+
+    report = {
+        "enabled": enabled,
+        "mode": mode,
+        "applied": False,
+        "config": getattr(args, "content_classifier_config", None),
+        "prediction": None,
+        "features": None,
+        "warnings": [],
+        "reasons": [],
+    }
+
+    if not enabled:
+        report["reasons"].append("content_classifier_disabled")
+        return report
+
+    if mode not in {"report-only", "apply"}:
+        raise ValueError("content classifier mode must be 'report-only' or 'apply'.")
+
+    config_path = getattr(args, "content_classifier_config", None)
+
+    if not config_path:
+        report["warnings"].append("content_classifier_enabled_but_missing_config")
+        report["reasons"].append("missing_classifier_config")
+        return report
+
+    config = load_content_classifier_config(config_path)
+
+    image_path = getattr(args, "content_classifier_image", None)
+    width = getattr(args, "content_classifier_width", None)
+    height = getattr(args, "content_classifier_height", None)
+
+    if image_path:
+        features = extract_metadata_features_from_image(image_path)
+    elif width is not None and height is not None:
+        features = build_metadata_no_source_features(
+            width=int(width),
+            height=int(height),
+        )
+    else:
+        report["warnings"].append(
+            "content_classifier_enabled_but_no_image_or_dimensions"
+        )
+        report["reasons"].append("missing_classifier_features")
+        return report
+
+    training_rows = load_training_rows_from_config(config)
+
+    classifier_report = predict_content_classifier(
+        config=config,
+        content_features=features,
+        training_rows=training_rows,
+    )
+
+    classifier_report["mode"] = mode
+    classifier_report["applied"] = False
+    classifier_report["config"] = config_path
+
+    return classifier_report
+
+
 def _build_weights_for_profile(
     args: argparse.Namespace,
     profile_name: str,
@@ -489,6 +567,15 @@ def _make_report(
                 "enabled": False,
                 "mode": "report-only",
                 "suggestion": None,
+            },
+        ),
+        "content_classifier": getattr(
+            args,
+            "_content_classifier_report",
+            {
+                "enabled": False,
+                "mode": "report-only",
+                "prediction": None,
             },
         ),
         "content_filter": getattr(
@@ -867,6 +954,35 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
         if warnings:
             print("Content policy warnings: " + "; ".join(warnings))
 
+    content_classifier = report.get("content_classifier", {})
+
+    if content_classifier.get("enabled", False):
+        print(
+            "Content classifier: "
+            f"{content_classifier.get('mode')} "
+            f"(prediction={content_classifier.get('prediction') is not None})"
+        )
+
+        prediction = content_classifier.get("prediction")
+        if prediction:
+            print(
+                "Content classifier prediction: "
+                f"{prediction.get('codec')} {prediction.get('config')}"
+            )
+
+        features = content_classifier.get("features") or {}
+        if features:
+            print(
+                "Content classifier features: "
+                f"resolution={features.get('resolution_class')}, "
+                f"orientation={features.get('orientation_class')}, "
+                f"mp={features.get('megapixels')}"
+            )
+
+        warnings = content_classifier.get("warnings") or []
+        if warnings:
+            print("Content classifier warnings: " + "; ".join(warnings))
+
     content_filter = report.get("content_filter", {})
 
     if content_filter.get("enabled", False):
@@ -1085,6 +1201,9 @@ def _run_profile(
     )
 
     args._content_policy_report = content_policy_report
+
+    content_classifier_report = _build_content_classifier_router_report(args)
+    args._content_classifier_report = content_classifier_report
 
     content_preferred = get_content_policy_preferred_candidate(content_policy_report)
 
@@ -1516,6 +1635,45 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--content-filter-value",
         default=None,
         help="Value used for source-conditioned filtering. Defaults to --content-source.",
+    )
+
+    parser.add_argument(
+        "--content-classifier",
+        action="store_true",
+        help="Enable source-agnostic content classifier reporting.",
+    )
+
+    parser.add_argument(
+        "--content-classifier-mode",
+        default="report-only",
+        choices=["report-only", "apply"],
+        help="Content classifier mode. v0.9.7.2 supports report-only integration.",
+    )
+
+    parser.add_argument(
+        "--content-classifier-config",
+        default=None,
+        help="JSON config for the source-agnostic content classifier.",
+    )
+
+    parser.add_argument(
+        "--content-classifier-image",
+        default=None,
+        help="Optional image path used to extract source-agnostic content classifier features.",
+    )
+
+    parser.add_argument(
+        "--content-classifier-width",
+        type=int,
+        default=None,
+        help="Optional image width used when no content-classifier image path is provided.",
+    )
+
+    parser.add_argument(
+        "--content-classifier-height",
+        type=int,
+        default=None,
+        help="Optional image height used when no content-classifier image path is provided.",
     )
 
     parser.add_argument(
