@@ -273,6 +273,8 @@ def test_baseline_matching_router_has_zero_regret():
 
 
 def test_feasible_unscored_candidate_is_not_generic_missing_cost():
+    # With scored_candidate_pool, quality-guard-passing candidates always have costs.
+    # Quality guard violators should still get a specific reason, not generic "missing_cost".
     root = _tmp_dir("feasible_unscored")
     csv_path, config = _base_inputs(root)
 
@@ -280,18 +282,24 @@ def test_feasible_unscored_candidate_is_not_generic_missing_cost():
         csv_path=str(csv_path),
         config_path=str(config),
         out_dir=str(root / "audit"),
-        audit_top_k=1,
+        fixed_codec="HEVC",
+        fixed_config="crf=15",
     )
     scenario = _scenario(report)
-    highest_quality = _policy(scenario, "highest_quality")
 
+    # JXL passes quality guard → now always in scored_candidate_pool → always comparable
+    highest_quality = _policy(scenario, "highest_quality")
     assert highest_quality["selected_codec"] == "JXL"
-    assert highest_quality["comparable"] is False
-    assert highest_quality["reason"] == "feasible_but_unscored"
-    assert highest_quality["reason"] != "missing_cost"
-    assert highest_quality["cost_status"] == "unavailable_feasible_but_unscored"
-    assert highest_quality["candidate_source"] == "raw_candidate_pool"
-    assert "candidate_not_in_scored_pool" in highest_quality["cost_reason_detail"]
+    assert highest_quality["comparable"] is True
+    assert highest_quality["cost_status"] == "available"
+
+    # HEVC fails quality guard → not in scored pool → specific reason, not generic
+    fixed = _policy(scenario, "fixed_codec_config")
+    assert fixed["selected_codec"] == "HEVC"
+    assert fixed["comparable"] is False
+    assert fixed["reason"] != "missing_cost"
+    assert fixed["cost_status"] == "unavailable_filtered"
+    assert fixed["quality_guard_violations"] == 1
 
 
 def test_candidate_source_and_cost_status_are_populated():
@@ -402,6 +410,113 @@ def test_module_is_marked_audit_read_only():
     assert report["read_only"] is True
     assert report["methodology"]["router_logic_changed"] is False
     assert report["methodology"]["baseline_policies_respect_quality_guard"] is True
+
+
+def test_scored_candidate_pool_used_by_effectiveness_audit():
+    root = _tmp_dir("scored_pool")
+    csv_path, config = _base_inputs(root)
+
+    report = run_router_effectiveness_audit(
+        csv_path=str(csv_path),
+        config_path=str(config),
+        out_dir=str(root / "audit"),
+    )
+    router_report_path = root / "audit" / "benchmark_router_report.json"
+    with router_report_path.open("r", encoding="utf-8") as f:
+        router_report = json.load(f)
+
+    decision = router_report.get("decision", {}) or {}
+    assert "scored_candidate_pool" in decision
+    assert "unscored_candidate_pool" in decision
+
+    pool = decision["scored_candidate_pool"]
+    assert len(pool) > 0
+    assert all(item.get("cost_provenance") == "router_scored" for item in pool)
+    assert all(item.get("rank") is not None for item in pool)
+
+    rank1 = next(item for item in pool if item["rank"] == 1)
+    selected = decision.get("selected", {})
+    assert rank1["codec"] == selected["codec"]
+    assert rank1["config"] == selected["config"]
+
+    scenario = _scenario(report)
+    router_row = _policy(scenario, "router")
+    assert router_row["cost_status"] == "available"
+
+
+def test_normalization_audit_present_in_router_report():
+    root = _tmp_dir("norm_audit")
+    csv_path, config = _base_inputs(root)
+
+    run_router_effectiveness_audit(
+        csv_path=str(csv_path),
+        config_path=str(config),
+        out_dir=str(root / "audit"),
+    )
+    router_report_path = root / "audit" / "benchmark_router_report.json"
+    with router_report_path.open("r", encoding="utf-8") as f:
+        router_report = json.load(f)
+
+    audit = router_report.get("normalization_audit")
+    assert audit is not None
+    assert "mode" in audit
+    assert "scales_source" in audit
+    assert "computed_at_runtime" in audit
+    assert "quality_direction" in audit
+    assert audit["quality_direction"] == "higher_is_better"
+    assert "rate_min" in audit
+    assert "rate_max" in audit
+    assert "energy_min" in audit
+    assert "energy_max" in audit
+    assert "quality_min" in audit
+    assert "quality_max" in audit
+
+
+def test_normalization_audit_present_in_decision_receipt():
+    # The receipt is embedded in the router report under "decision_receipt".
+    root = _tmp_dir("norm_audit_receipt")
+    csv_path, config = _base_inputs(root)
+
+    run_router_effectiveness_audit(
+        csv_path=str(csv_path),
+        config_path=str(config),
+        out_dir=str(root / "audit"),
+    )
+    router_report_path = root / "audit" / "benchmark_router_report.json"
+    with router_report_path.open("r", encoding="utf-8") as f:
+        router_report = json.load(f)
+
+    receipt = router_report.get("decision_receipt")
+    assert receipt is not None, "decision_receipt must be embedded in the router report"
+    assert "normalization_audit" in receipt
+    assert receipt.get("receipt_schema_version") == "0.29.0"
+
+
+def test_unscored_pool_quality_violations_are_not_scored():
+    root = _tmp_dir("unscored_pool")
+    csv_path, config = _base_inputs(root)
+
+    run_router_effectiveness_audit(
+        csv_path=str(csv_path),
+        config_path=str(config),
+        fixed_codec="HEVC",
+        fixed_config="crf=15",
+        out_dir=str(root / "audit"),
+    )
+    router_report_path = root / "audit" / "benchmark_router_report.json"
+    with router_report_path.open("r", encoding="utf-8") as f:
+        router_report = json.load(f)
+
+    decision = router_report.get("decision", {}) or {}
+    unscored = decision.get("unscored_candidate_pool", [])
+    scored_keys = {(item["codec"], item["config"]) for item in decision.get("scored_candidate_pool", [])}
+
+    hevc_unscored = [i for i in unscored if i["codec"] == "HEVC"]
+    assert len(hevc_unscored) == 1
+    assert hevc_unscored[0]["reason"] == "quality_guard_violation"
+    assert hevc_unscored[0]["candidate_status"] == "infeasible_quality_guard"
+    assert hevc_unscored[0]["cost_provenance"] == "unavailable_filtered"
+    assert ("HEVC", "crf=15") not in scored_keys
 
 
 def test_cli_writes_requested_outputs():

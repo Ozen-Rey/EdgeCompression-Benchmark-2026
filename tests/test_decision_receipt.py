@@ -114,7 +114,7 @@ def test_build_decision_receipt_records_decision_and_input_hashes():
 
     assert receipt["artifact_type"] == "router_decision_receipt"
     assert receipt["router_version"] == ROUTER_VERSION
-    assert receipt["receipt_schema_version"] == "0.25.0"
+    assert receipt["receipt_schema_version"] == "0.29.0"
     assert receipt["replay"]["argv"] == ["--csv", str(csv_path)]
     assert receipt["decision"]["selected_codec"] == "JPEG"
     assert receipt["decision"]["selected_config"] == "q=85"

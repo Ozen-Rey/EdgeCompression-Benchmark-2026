@@ -257,9 +257,11 @@ def _load_csv_candidates(report: dict[str, Any]) -> list[Candidate]:
 
 
 def _candidate_pool(report: dict[str, Any]) -> list[Candidate]:
+    decision = report.get("decision", {}) or {}
+    scored_items = decision.get("scored_candidate_pool") or decision.get("top_k", [])
     scored_candidates = [
         _candidate_from_scored(item)
-        for item in (report.get("decision", {}) or {}).get("top_k", [])
+        for item in scored_items
     ]
     scored_by_key = {candidate.key: candidate for candidate in scored_candidates}
 
