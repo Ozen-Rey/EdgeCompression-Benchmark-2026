@@ -1,6 +1,6 @@
 """Centralized router version metadata."""
 
-ROUTER_VERSION = "0.12.0"
+ROUTER_VERSION = "0.13.0"
 
 FEATURE_LEVEL = {
     "rde_selection": "stable",
@@ -10,6 +10,7 @@ FEATURE_LEVEL = {
     "local_calibration": "experimental",
     "local_energy": "windows_gpu_partial_provenance",
     "online_feedback": "append_only_observational",
+    "feedback_analysis": "read_only_prediction_audit",
     "system_aware": "experimental",
     "content_aware": "offline_validated",
     "content_classifier": "experimental",

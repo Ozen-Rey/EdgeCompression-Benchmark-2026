@@ -11,9 +11,30 @@ calibration JSON = local controlled adaptation
 online feedback CSV = observed deployment trace
 ```
 
+The full methodological pipeline is:
+
+```text
+offline benchmark -> router decision
+local calibration -> controlled local adaptation
+online feedback -> append-only deployment trace
+feedback analysis -> read-only prediction audit
+```
+
 The feedback CSV records predicted router values, observed execution values and
 energy provenance. It does not update benchmark CSVs and is not used as router
 input in v0.12.0.
+
+Router v0.13.0 adds a read-only feedback analysis layer:
+
+```powershell
+python -m src.router.feedback_analysis `
+  --feedback results/routing_context/online_feedback.csv `
+  --out-dir results/routing_context/feedback_analysis
+```
+
+The analyzer produces summary JSON/CSV files, per-codec aggregates and an error
+row extract. It audits prediction error for rate, time and energy, but it does
+not feed results back into the router. There is no online learning in v0.13.0.
 
 By default, executed router runs append to:
 
@@ -37,3 +58,6 @@ Energy fields must be interpreted through provenance:
 
 On Windows, NVML GPU-only readings are partial deployment telemetry. They are
 not total pipeline energy and must not be used to overwrite benchmark energy.
+The feedback analyzer follows the same rule: energy prediction errors are
+computed only when `energy_usable_for_total=true` and `local_energy_j` is
+numeric.

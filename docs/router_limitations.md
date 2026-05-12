@@ -89,6 +89,12 @@ Windows NVML GPU-only reading remains partial (`energy_scope=gpu`,
 `energy_usable_for_total=false`) and is not comparable with total pipeline
 energy for CPU-side codecs.
 
+Router v0.13.0 adds read-only feedback analysis. It audits prediction error in
+the append-only feedback CSV but does not change router decisions, `J_RDE`,
+normalization, calibration, or benchmark CSV files. Energy error metrics are
+computed only for rows with usable total energy; partial GPU-only telemetry is
+reported as provenance but excluded from total-energy error calculations.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
