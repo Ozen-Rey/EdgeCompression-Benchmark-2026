@@ -3,15 +3,20 @@ import csv
 import json
 import statistics
 import subprocess
-import time
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
+    from src.router.version import ROUTER_VERSION
+    from src.utils.energy_backends import CompositeEnergyMeter
     from .codec_capabilities import build_execution_plan
     from .system_probe import probe_system
 except ImportError:
+    sys.path.append(str(Path(__file__).resolve().parents[1] / "utils"))
+    from version import ROUTER_VERSION
+    from energy_backends import CompositeEnergyMeter
     from codec_capabilities import build_execution_plan
     from system_probe import probe_system
 
@@ -96,21 +101,39 @@ def _get_image_pixels(image_path: Path) -> Optional[int]:
 
 
 def _run_command(command: List[str]) -> Dict[str, Any]:
-    t0 = time.perf_counter()
+    meter = CompositeEnergyMeter()
 
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    def run_once():
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
-    t1 = time.perf_counter()
+    result, energy = meter.measure_callable(run_once)
+    energy_scope = []
+    if energy.cpu_j is not None:
+        energy_scope.append("cpu")
+    if energy.gpu_j is not None:
+        energy_scope.append("gpu")
+
+    energy_scope_str = "+".join(energy_scope) if energy_scope else "none"
 
     return {
         "success": result.returncode == 0,
         "returncode": result.returncode,
-        "time_ms": (t1 - t0) * 1000.0,
+        "time_ms": energy.time_s * 1000.0,
+        "local_cpu_energy_j": energy.cpu_j,
+        "local_gpu_energy_j": energy.gpu_j,
+        "local_energy_j": energy.total_j,
+        "energy_backend": energy.energy_backend,
+        "energy_method": energy.energy_method,
+        "energy_is_measured": energy.energy_is_measured,
+        "energy_quality": energy.energy_quality,
+        "energy_scope": energy_scope_str,
+        "energy_usable_for_total": energy.cpu_j is not None,
+        "energy_warnings": ";".join(energy.warnings),
         "stdout": result.stdout,
         "stderr": result.stderr,
     }
@@ -133,6 +156,24 @@ def _summarize(values: List[float]) -> Dict[str, Optional[float]]:
         "max": max(values),
         "std": statistics.stdev(values) if len(values) > 1 else 0.0,
     }
+
+
+def _unique_nonempty(values: List[Any]) -> List[str]:
+    seen = set()
+    out: List[str] = []
+
+    for value in values:
+        if value is None:
+            continue
+
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+
+        seen.add(text)
+        out.append(text)
+
+    return out
 
 
 def _select_configs(level: str, codecs: List[str]) -> Dict[str, List[str]]:
@@ -250,6 +291,16 @@ def run_calibration(
                         "time_ms": None,
                         "output_bytes": None,
                         "local_bpp": None,
+                        "local_cpu_energy_j": None,
+                        "local_gpu_energy_j": None,
+                        "local_energy_j": None,
+                        "energy_backend": None,
+                        "energy_method": None,
+                        "energy_is_measured": False,
+                        "energy_quality": None,
+                        "energy_scope": "none",
+                        "energy_usable_for_total": False,
+                        "energy_warnings": None,
                     }
 
                     if dry_run:
@@ -273,6 +324,16 @@ def run_calibration(
                     record["success"] = run["success"]
                     record["returncode"] = run["returncode"]
                     record["time_ms"] = run["time_ms"]
+                    record["local_cpu_energy_j"] = run["local_cpu_energy_j"]
+                    record["local_gpu_energy_j"] = run["local_gpu_energy_j"]
+                    record["local_energy_j"] = run["local_energy_j"]
+                    record["energy_backend"] = run["energy_backend"]
+                    record["energy_method"] = run["energy_method"]
+                    record["energy_is_measured"] = run["energy_is_measured"]
+                    record["energy_quality"] = run["energy_quality"]
+                    record["energy_scope"] = run["energy_scope"]
+                    record["energy_usable_for_total"] = run["energy_usable_for_total"]
+                    record["energy_warnings"] = run["energy_warnings"]
 
                     output = plan.get("output")
                     if output and Path(output).exists():
@@ -291,7 +352,7 @@ def run_calibration(
     summary = _build_summary(measurements)
 
     report = {
-        "version": "0.3",
+        "version": ROUTER_VERSION,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "level": level,
         "dry_run": dry_run,
@@ -301,9 +362,19 @@ def run_calibration(
         "codecs": list(configs_by_codec.keys()),
         "configs_by_codec": configs_by_codec,
         "repeats": repeats,
-        "measured": ["time_ms", "output_bytes", "local_bpp"],
+        "measured": [
+            "time_ms",
+            "output_bytes",
+            "local_bpp",
+            "local_energy_j_if_backend_available",
+        ],
         "estimated": [],
-        "not_calibrated": ["quality", "energy"],
+        "not_calibrated": ["quality"],
+        "energy_measurement": {
+            "enabled": True,
+            "backend_dependent": True,
+            "fallback_behavior": "energy_is_measured_false_when_no_backend_available",
+        },
         "system_state": system_state,
         "summary": summary,
         "summary_csv": summary_csv,
@@ -352,6 +423,51 @@ def _build_summary(measurements: List[Dict[str, Any]]) -> Dict[str, Any]:
                 for r in successful
                 if r.get("output_bytes") is not None
             ]
+            cpu_energy_values = [
+                float(r["local_cpu_energy_j"])
+                for r in successful
+                if r.get("local_cpu_energy_j") is not None
+            ]
+            gpu_energy_values = [
+                float(r["local_gpu_energy_j"])
+                for r in successful
+                if r.get("local_gpu_energy_j") is not None
+            ]
+            local_energy_values = [
+                float(r["local_energy_j"])
+                for r in successful
+                if r.get("local_energy_j") is not None
+            ]
+            measured_energy_values = [
+                float(r["local_energy_j"])
+                for r in successful
+                if r.get("local_energy_j") is not None
+                and bool(r.get("energy_is_measured", False))
+            ]
+            usable_total_energy_values = [
+                float(r["local_energy_j"])
+                for r in successful
+                if r.get("local_energy_j") is not None
+                and bool(r.get("energy_usable_for_total", False))
+            ]
+            energy_backends = _unique_nonempty(
+                [r.get("energy_backend") for r in successful]
+            )
+            energy_methods = _unique_nonempty(
+                [r.get("energy_method") for r in successful]
+            )
+            energy_qualities = _unique_nonempty(
+                [r.get("energy_quality") for r in successful]
+            )
+            energy_scopes = _unique_nonempty(
+                [r.get("energy_scope") for r in successful]
+            )
+            energy_warnings = _unique_nonempty(
+                [r.get("energy_warnings") for r in successful]
+            )
+            energy_usable_for_total = bool(usable_total_energy_values) and len(
+                usable_total_energy_values
+            ) == len(local_energy_values)
 
             summary[codec][config] = {
                 "num_runs": len(rows),
@@ -360,6 +476,18 @@ def _build_summary(measurements: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "time_ms": _summarize(time_values),
                 "local_bpp": _summarize(bpp_values),
                 "output_bytes": _summarize(bytes_values),
+                "local_cpu_energy_j": _summarize(cpu_energy_values),
+                "local_gpu_energy_j": _summarize(gpu_energy_values),
+                "local_energy_j": _summarize(local_energy_values),
+                "local_measured_energy_j": _summarize(measured_energy_values),
+                "local_usable_total_energy_j": _summarize(usable_total_energy_values),
+                "energy_is_measured": bool(measured_energy_values),
+                "energy_scope": "+".join(energy_scopes) if energy_scopes else "none",
+                "energy_usable_for_total": energy_usable_for_total,
+                "energy_backend": ";".join(energy_backends) or None,
+                "energy_method": ";".join(energy_methods) or None,
+                "energy_quality": ";".join(energy_qualities) or None,
+                "energy_warnings": ";".join(energy_warnings) or None,
             }
 
     return summary
@@ -390,6 +518,16 @@ def _write_summary_csv(summary: Dict[str, Any], path: str) -> None:
         "output_bytes_min",
         "output_bytes_max",
         "output_bytes_std",
+        "local_cpu_energy_j_mean",
+        "local_gpu_energy_j_mean",
+        "local_energy_j_mean",
+        "energy_is_measured",
+        "energy_scope",
+        "energy_usable_for_total",
+        "energy_backend",
+        "energy_method",
+        "energy_quality",
+        "energy_warnings",
     ]
 
     rows = []
@@ -399,6 +537,9 @@ def _write_summary_csv(summary: Dict[str, Any], path: str) -> None:
             time_stats = stats.get("time_ms", {})
             bpp_stats = stats.get("local_bpp", {})
             bytes_stats = stats.get("output_bytes", {})
+            cpu_energy_stats = stats.get("local_cpu_energy_j", {})
+            gpu_energy_stats = stats.get("local_gpu_energy_j", {})
+            local_energy_stats = stats.get("local_energy_j", {})
 
             rows.append(
                 {
@@ -425,6 +566,17 @@ def _write_summary_csv(summary: Dict[str, Any], path: str) -> None:
                     "output_bytes_min": bytes_stats.get("min"),
                     "output_bytes_max": bytes_stats.get("max"),
                     "output_bytes_std": bytes_stats.get("std"),
+
+                    "local_cpu_energy_j_mean": cpu_energy_stats.get("mean"),
+                    "local_gpu_energy_j_mean": gpu_energy_stats.get("mean"),
+                    "local_energy_j_mean": local_energy_stats.get("mean"),
+                    "energy_is_measured": stats.get("energy_is_measured"),
+                    "energy_scope": stats.get("energy_scope"),
+                    "energy_usable_for_total": stats.get("energy_usable_for_total"),
+                    "energy_backend": stats.get("energy_backend"),
+                    "energy_method": stats.get("energy_method"),
+                    "energy_quality": stats.get("energy_quality"),
+                    "energy_warnings": stats.get("energy_warnings"),
                 }
             )
 

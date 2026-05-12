@@ -102,16 +102,64 @@ except ImportError:
     from system_probe import probe_system
 
 
-def _build_energy_provenance_report() -> Dict[str, Any]:
+def _build_energy_provenance_report(
+    calibration_report: Optional[Dict[str, Any]] = None,
+    selected_calibration: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    selected_calibration = selected_calibration or {}
+    calibration_report = calibration_report or {}
+
+    energy_backend = "benchmark_csv"
+    energy_method = "benchmark_energy_from_input_csv"
+    energy_is_measured = False
+    energy_quality = "benchmark_derived"
+    energy_scope = "none"
+    energy_usable_for_total = False
+    local_measurement_energy_is_measured = False
+    current_method = "benchmark_energy"
+
+    if selected_calibration.get("enabled", False):
+        energy_backend = selected_calibration.get("energy_backend") or energy_backend
+        energy_method = selected_calibration.get("energy_method") or energy_method
+        energy_quality = selected_calibration.get("energy_quality") or energy_quality
+        energy_scope = selected_calibration.get("energy_scope") or energy_scope
+        energy_usable_for_total = bool(
+            selected_calibration.get("energy_usable_for_total", False)
+        )
+        local_measurement_energy_is_measured = bool(
+            selected_calibration.get("energy_is_measured", False)
+        )
+
+        scaling_method = selected_calibration.get("energy_scaling_method")
+        if scaling_method == "local_hardware_energy_measurement":
+            current_method = "local_hardware_energy_measurement"
+            energy_is_measured = True
+        elif str(scaling_method).startswith("benchmark_energy_scaled_by_time_ratio"):
+            current_method = str(scaling_method)
+            energy_is_measured = False
+
     return {
-        "local_energy_measurement": "not_yet_hardware_measured",
-        "current_method": "benchmark_energy_or_time_scaled_estimate",
-        "hardware_backends": [],
+        "local_energy_measurement": "hardware_backend_or_fallback",
+        "current_method": current_method,
+        "energy_backend": energy_backend,
+        "energy_method": energy_method,
+        "energy_is_measured": energy_is_measured,
+        "energy_quality": energy_quality,
+        "energy_scope": energy_scope,
+        "energy_usable_for_total": energy_usable_for_total,
+        "local_measurement_energy_is_measured": local_measurement_energy_is_measured,
+        "hardware_backends": [
+            part
+            for part in str(energy_backend).split(";")
+            if part and not part.endswith("=none") and part != "benchmark_csv"
+        ],
         "fallback": "benchmark_energy_scaled_by_time_ratio_when_calibration_is_used",
+        "calibration_energy_measurement": calibration_report.get(
+            "energy_measurement", {}
+        ),
         "warning": (
-            "Energy values are currently benchmark-derived or estimated unless "
-            "explicitly tagged otherwise. Hardware energy backends are introduced "
-            "in router v0.10."
+            "Energy values are hardware-measured only when energy_is_measured=true. "
+            "Otherwise they are benchmark-derived or time-scaled estimates."
         ),
     }
 
@@ -498,7 +546,10 @@ def _make_report(
         "weight_source": weight_source,
         "context_policy": context_policy,
         "calibration": calibration_report,
-        "energy_provenance": _build_energy_provenance_report(),
+        "energy_provenance": _build_energy_provenance_report(
+            calibration_report=calibration_report,
+            selected_calibration=selected_calibration,
+        ),
         "codec_registry": getattr(
             args,
             "_codec_registry_report",
@@ -1150,6 +1201,9 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
         print(f"  energy:  {selected_calibration.get('energy_before')} -> {selected_calibration.get('energy_after')}")
         print(f"  time ms: {selected_calibration.get('time_ms_before')} -> {selected_calibration.get('time_ms_after')}")
         print(f"  method:  {selected_calibration.get('energy_scaling_method')}")
+        print(f"  backend: {selected_calibration.get('energy_backend')}")
+        print(f"  scope:   {selected_calibration.get('energy_scope')}")
+        print(f"  usable total: {selected_calibration.get('energy_usable_for_total')}")
 
     execution_plan = report.get("execution_plan", {})
     if execution_plan.get("requested", False):

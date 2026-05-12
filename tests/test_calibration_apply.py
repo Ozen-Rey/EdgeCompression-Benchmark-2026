@@ -61,3 +61,119 @@ def test_apply_local_calibration_updates_rate_time_and_energy():
     assert report["applied"][0]["rate_before"] == 1.2
     assert report["applied"][0]["rate_after"] == 0.8
     assert report["applied"][0]["time_scale"] == 3.0
+    assert (
+        report["applied"][0]["energy_scaling_method"]
+        == "benchmark_energy_scaled_by_time_ratio"
+    )
+    assert report["estimated"] == ["energy_by_time_scaling"]
+
+
+def test_apply_local_calibration_prefers_measured_local_energy():
+    calibration = {
+        "version": "0.10.0",
+        "level": "quick",
+        "created_at": "test",
+        "measured": [
+            "time_ms",
+            "output_bytes",
+            "local_bpp",
+            "local_energy_j_if_backend_available",
+        ],
+        "energy_measurement": {
+            "enabled": True,
+            "backend_dependent": True,
+        },
+        "summary": {
+            "JXL": {
+                "d=1.0": {
+                    "success_rate": 1.0,
+                    "time_ms": {"mean": 300.0},
+                    "local_bpp": {"mean": 0.8},
+                    "local_energy_j": {"mean": 4.2},
+                    "energy_is_measured": True,
+                    "energy_scope": "cpu",
+                    "energy_usable_for_total": True,
+                    "energy_backend": "cpu=linux_rapl;gpu=none",
+                    "energy_method": "cpu=rapl_package_energy_uj_delta;gpu=unavailable",
+                    "energy_quality": "cpu=hardware_counter;gpu=not_measured",
+                }
+            }
+        },
+    }
+
+    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir.mkdir(exist_ok=True)
+    path = tmp_dir / "calibration_measured_energy.json"
+    path.write_text(json.dumps(calibration), encoding="utf-8")
+
+    points = [
+        Point("JXL", "d=1.0", rate=1.2, quality=85.0, energy=2.0, time_ms=100.0),
+    ]
+
+    calibrated, report = apply_local_calibration(points, str(path))
+
+    assert calibrated[0].energy == 4.2
+    assert report["estimated"] == []
+    assert report["applied"][0]["local_energy_j"] == 4.2
+    assert report["applied"][0]["energy_is_measured"] is True
+    assert report["applied"][0]["energy_scope"] == "cpu"
+    assert report["applied"][0]["energy_usable_for_total"] is True
+    assert report["applied"][0]["energy_backend"] == "cpu=linux_rapl;gpu=none"
+    assert (
+        report["applied"][0]["energy_scaling_method"]
+        == "local_hardware_energy_measurement"
+    )
+
+
+def test_partial_gpu_only_energy_is_not_used_as_total_energy():
+    calibration = {
+        "version": "0.10.0",
+        "level": "quick",
+        "created_at": "test",
+        "measured": [
+            "time_ms",
+            "output_bytes",
+            "local_bpp",
+            "local_energy_j_if_backend_available",
+        ],
+        "summary": {
+            "JXL": {
+                "d=1.0": {
+                    "success_rate": 1.0,
+                    "time_ms": {"mean": 300.0},
+                    "local_bpp": {"mean": 0.8},
+                    "local_energy_j": {"mean": 4.2},
+                    "energy_is_measured": True,
+                    "energy_scope": "gpu",
+                    "energy_usable_for_total": False,
+                    "energy_backend": "cpu=none;gpu=nvidia_nvml_total_energy",
+                    "energy_method": "cpu=unavailable;gpu=nvml_total_energy_counter_delta",
+                    "energy_quality": "cpu=not_measured;gpu=hardware_counter",
+                }
+            }
+        },
+    }
+
+    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir.mkdir(exist_ok=True)
+    path = tmp_dir / "calibration_gpu_only_energy.json"
+    path.write_text(json.dumps(calibration), encoding="utf-8")
+
+    points = [
+        Point("JXL", "d=1.0", rate=1.2, quality=85.0, energy=2.0, time_ms=100.0),
+    ]
+
+    calibrated, report = apply_local_calibration(points, str(path))
+
+    assert calibrated[0].energy == 6.0
+    assert calibrated[0].energy != 4.2
+    assert report["estimated"] == ["energy_by_time_scaling"]
+    assert report["applied"][0]["local_energy_j"] == 4.2
+    assert report["applied"][0]["energy_is_measured"] is True
+    assert report["applied"][0]["energy_scope"] == "gpu"
+    assert report["applied"][0]["energy_usable_for_total"] is False
+    assert (
+        report["applied"][0]["energy_scaling_method"]
+        == "benchmark_energy_scaled_by_time_ratio_"
+        "local_measurement_partial_not_comparable"
+    )

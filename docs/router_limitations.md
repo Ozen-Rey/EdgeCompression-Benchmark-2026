@@ -36,8 +36,21 @@ from benchmark CSV files or obtained through local calibration by time-scaling
 benchmark energy. Therefore, locally calibrated energy should be interpreted as
 an estimate, not as a direct hardware telemetry measurement.
 
-Direct local hardware energy backends are planned for v0.10. The intended
-backend hierarchy is:
+Router v0.10.0 introduces hardware energy backends with explicit provenance.
+When a backend is available, the calibration report stores measured local
+energy and tags it with backend, method and quality fields. When no backend is
+available, the router keeps `energy_is_measured=false` and falls back to the
+time-scaling estimator instead of presenting the estimate as measured energy.
+
+A hardware reading is not automatically equivalent to total pipeline energy.
+For the currently executable image backends (JPEG/Pillow, JPEG XL/cjxl and
+HEVC/ffmpeg), local energy is usable as total energy only when the measurement
+scope includes CPU energy. A GPU-only NVML reading is still recorded, but it is
+tagged as `energy_scope=gpu` and `energy_usable_for_total=false`; the router
+then keeps using the benchmark-energy time-scaling fallback for the R-D-E
+energy term.
+
+The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
 2. Windows NVIDIA GPU: NVML/Zeus when available, with nvidia-smi sampling as fallback.
@@ -45,6 +58,6 @@ backend hierarchy is:
 4. Windows Intel CPU: Intel PCM when available.
 5. Fallback: calibrated time-scaling estimator.
 
-All future local energy values should be tagged with explicit provenance fields
-such as `energy_backend`, `energy_method`, `energy_is_measured`, and
+All local energy values should be tagged with explicit provenance fields such
+as `energy_backend`, `energy_method`, `energy_is_measured`, and
 `energy_quality`.

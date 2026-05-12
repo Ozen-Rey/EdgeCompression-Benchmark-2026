@@ -35,6 +35,30 @@ def _get_nested_mean(stats: Dict[str, Any], field: str):
     return None
 
 
+def _get_optional_stat_value(stats: Dict[str, Any], field: str):
+    value = stats.get(field)
+    if isinstance(value, dict):
+        return value.get("mean")
+    return value
+
+
+def _parse_float_or_none(value: Any):
+    if value in (None, ""):
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
 def _clone_point_with_updates(point, updates: Dict[str, Any]):
     clean_updates = {
         k: v for k, v in updates.items()
@@ -108,6 +132,18 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
         benchmark_time_ms = getattr(point, "time_ms", None)
         benchmark_energy = getattr(point, "energy", None)
         time_scale = None
+        local_energy_j = _parse_float_or_none(
+            _get_optional_stat_value(stats, "local_energy_j")
+        )
+        energy_is_measured = _parse_bool(stats.get("energy_is_measured", False))
+        energy_scope = stats.get("energy_scope")
+        energy_usable_for_total = _parse_bool(
+            stats.get("energy_usable_for_total", False)
+        )
+        energy_backend = stats.get("energy_backend")
+        energy_method = stats.get("energy_method")
+        energy_quality = stats.get("energy_quality")
+        energy_scaling_method = None
 
         if (
             local_time_ms is not None
@@ -116,9 +152,22 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
         ):
             time_scale = float(local_time_ms) / float(benchmark_time_ms)
 
-        if benchmark_energy is not None and time_scale is not None:
+        if local_energy_j is not None and energy_is_measured and energy_usable_for_total:
+            calibrated_energy = local_energy_j
+            updates["energy"] = calibrated_energy
+            energy_scaling_method = "local_hardware_energy_measurement"
+        elif benchmark_energy is not None and time_scale is not None:
             calibrated_energy = float(benchmark_energy) * time_scale
             updates["energy"] = calibrated_energy
+            if local_energy_j is not None and energy_is_measured:
+                energy_scaling_method = (
+                    "benchmark_energy_scaled_by_time_ratio_"
+                    "local_measurement_partial_not_comparable"
+                )
+            else:
+                energy_scaling_method = "benchmark_energy_scaled_by_time_ratio"
+        else:
+            calibrated_energy = benchmark_energy
 
         new_point = _clone_point_with_updates(point, updates)
         calibrated_points.append(new_point)
@@ -144,17 +193,30 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
 
                 "local_time_ms": local_time_ms,
                 "local_bpp": local_bpp,
+                "local_energy_j": local_energy_j,
+                "energy_is_measured": energy_is_measured,
+                "energy_scope": energy_scope,
+                "energy_usable_for_total": energy_usable_for_total,
+                "energy_backend": energy_backend,
+                "energy_method": energy_method,
+                "energy_quality": energy_quality,
                 "time_scale": time_scale,
 
-                "energy_scaling_method": (
-                    "benchmark_energy_scaled_by_time_ratio"
-                    if calibrated_energy is not None and time_scale is not None
-                    else None
-                ),
+                "energy_scaling_method": energy_scaling_method,
 
                 "updated_fields": sorted(list(updates.keys())),
             }
         )
+
+    estimated = sorted(
+        {
+            "energy_by_time_scaling"
+            for item in applied
+            if str(item.get("energy_scaling_method", "")).startswith(
+                "benchmark_energy_scaled_by_time_ratio"
+            )
+        }
+    )
 
     report = {
         "enabled": True,
@@ -163,8 +225,9 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
         "level": calibration.get("level"),
         "created_at": calibration.get("created_at"),
         "measured": calibration.get("measured", []),
-        "estimated": ["energy_by_time_scaling"],
+        "estimated": estimated,
         "not_calibrated": ["quality"],
+        "energy_measurement": calibration.get("energy_measurement", {}),
         "num_points_before": len(points),
         "num_points_after": len(calibrated_points),
         "num_applied": len(applied),

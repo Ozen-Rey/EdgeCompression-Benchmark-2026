@@ -58,9 +58,8 @@ def test_router_end_to_end_on_real_small_image_fixture():
     assert report["domain_support"] == DOMAIN_SUPPORT
     assert (
         report["energy_provenance"]["local_energy_measurement"]
-        == "not_yet_hardware_measured"
+        == "hardware_backend_or_fallback"
     )
-    assert (
-        report["energy_provenance"]["current_method"]
-        == "benchmark_energy_or_time_scaled_estimate"
-    )
+    assert report["energy_provenance"]["current_method"] == "benchmark_energy"
+    assert report["energy_provenance"]["energy_backend"] == "benchmark_csv"
+    assert report["energy_provenance"]["energy_is_measured"] is False
