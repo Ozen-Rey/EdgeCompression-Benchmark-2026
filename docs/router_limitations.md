@@ -151,6 +151,17 @@ files, promotion profiles or calibration manifests automatically.
 This release prepares a future explicit `--calibrated-database` /
 `--calibration-manifest` workflow, but does not introduce that router mode yet.
 
+Router v0.19.0 introduces that workflow in conservative form through
+`rde_router --calibration-bundle-manifest`. The router consumes a calibrated CSV
+only when the user names a manifest explicitly. It validates manifest structure,
+requires the calibrated CSV to exist, and verifies the CSV SHA256 hash before
+loading it. Hash mismatch, missing CSV, or incomplete manifest produce a
+controlled error.
+
+No automatic discovery is performed in v0.19.0. The router still does not read
+`online_feedback.csv`, proposal files, validation files, or promotion profiles
+directly, and it does not use the latest available manifest implicitly.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

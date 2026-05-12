@@ -23,6 +23,7 @@ feedback proposal validation -> offline scale validation
 feedback calibration promotion -> audit-only candidate profile
 promoted calibration apply -> explicit opt-in calibration input
 calibration bundle manifest -> audit provenance for calibrated CSVs
+calibration bundle consumption -> explicit manifest-validated router input
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -85,6 +86,7 @@ v0.15 feedback_proposal_validation: offline validation of candidate scales
 v0.16 feedback_calibration_promotion: audit-only candidate calibration profile
 v0.17 calibration_apply --promotion-profile: explicit opt-in application
 v0.18 calibration_apply --manifest-out: auditable calibration bundle manifest
+v0.19 rde_router --calibration-bundle-manifest: explicit verified bundle input
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -140,6 +142,21 @@ The manifest records source paths, output path, router version, UTC creation
 time, applied promoted scales, rejected/non-applied scale count, energy policy
 and SHA256 hashes for the source and output artifacts. It is provenance only:
 the router does not read calibration manifests automatically in v0.18.0.
+
+Router v0.19.0 adds explicit bundle consumption:
+
+```powershell
+python -m src.router.rde_router `
+  --csv data/rde_points.csv `
+  --calibration-bundle-manifest results/routing_calibration/calibrated_manifest.json `
+  --out results/routing/router_decision_report.json
+```
+
+When this flag is present, the router validates the manifest, checks that the
+calibrated CSV exists, verifies its SHA256 hash, and then uses the manifest's
+CSV as the R-D-E input. Without the flag, behavior is unchanged. The router
+still does not read `online_feedback.csv`, proposal, validation, promotion or
+manifest files automatically.
 
 By default, executed router runs append to:
 

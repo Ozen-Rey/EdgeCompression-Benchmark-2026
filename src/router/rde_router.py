@@ -11,6 +11,7 @@ try:
     from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from src.utils.energy_backends import CompositeEnergyMeter
     from .calibration_apply import apply_local_calibration
+    from .calibration_bundle import validate_calibration_bundle_manifest
     from .codec_capabilities import (
         build_execution_plan,
         filter_points_by_capabilities,
@@ -60,6 +61,7 @@ except ImportError:
     sys.path.append(str(Path(__file__).resolve().parents[1] / "utils"))
     from energy_backends import CompositeEnergyMeter
     from calibration_apply import apply_local_calibration
+    from calibration_bundle import validate_calibration_bundle_manifest
     from codec_capabilities import (
         build_execution_plan,
         filter_points_by_capabilities,
@@ -557,6 +559,13 @@ def _make_report(
         "weight_source": weight_source,
         "context_policy": context_policy,
         "calibration": calibration_report,
+        "calibration_bundle": getattr(
+            args,
+            "_calibration_bundle_report",
+            {
+                "enabled": False,
+            },
+        ),
         "energy_provenance": _build_energy_provenance_report(
             calibration_report=calibration_report,
             selected_calibration=selected_calibration,
@@ -1201,6 +1210,12 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
         print(f"Calibration file: {calibration.get('source')}")
         print(f"Calibration level: {calibration.get('level')}")
         print(f"Calibration applied points: {calibration.get('num_applied')}")
+    calibration_bundle = report.get("calibration_bundle", {})
+    print(f"Calibration bundle: {calibration_bundle.get('enabled', False)}")
+    if calibration_bundle.get("enabled", False):
+        print(f"Bundle manifest: {calibration_bundle.get('manifest_path')}")
+        print(f"Bundle CSV: {calibration_bundle.get('calibrated_csv_path')}")
+        print(f"Bundle validated: {calibration_bundle.get('validated')}")
     normalization_profile = report.get("normalization_profile", {})
     if normalization_profile.get("enabled", False):
         print(
@@ -1619,6 +1634,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
 
     parser.add_argument("--csv", required=True, help="Path del CSV con i punti R-D-E.")
+
+    parser.add_argument(
+        "--calibration-bundle-manifest",
+        default=None,
+        help=(
+            "Explicit calibration bundle manifest. When provided, the router "
+            "validates the manifest and uses its calibrated CSV as the R-D-E input."
+        ),
+    )
 
     parser.add_argument(
         "--calibration-file",
@@ -2154,8 +2178,28 @@ def main(argv: Optional[List[str]] = None) -> None:
     args.quality_floor = quality_threshold_report["effective_quality_floor"]
     args._quality_threshold_report = quality_threshold_report
 
+    effective_csv_path = args.csv
+    if args.calibration_bundle_manifest:
+        if args.calibration_file:
+            raise ValueError(
+                "--calibration-bundle-manifest cannot be combined with "
+                "--calibration-file. Use a prebuilt calibrated CSV bundle, or "
+                "apply local calibration separately before routing."
+            )
+
+        calibration_bundle_report = validate_calibration_bundle_manifest(
+            args.calibration_bundle_manifest
+        )
+        effective_csv_path = calibration_bundle_report["calibrated_csv_path"]
+    else:
+        calibration_bundle_report = {
+            "enabled": False,
+        }
+
+    args._calibration_bundle_report = calibration_bundle_report
+
     points = load_rde_points(
-        csv_path=args.csv,
+        csv_path=effective_csv_path,
         codec_col=args.codec_col,
         config_col=args.config_col,
         rate_col=args.rate_col,
@@ -2205,7 +2249,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             if len(filtered_points) == 0:
                 raise ValueError(
                     "Content/source filter removed all candidate rows: "
-                    f"{filter_column}={filter_value}"
+                f"{filter_column}={filter_value}"
                 )
 
             points = filtered_points
@@ -2389,8 +2433,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                 profile_name=profile_name,
                 points=points,
                 normalization_points=normalization_points,
-                normalization_scope=normalization_scope_label,
-                csv_path=args.csv,
+        normalization_scope=normalization_scope_label,
+                csv_path=effective_csv_path,
                 num_rows_loaded=num_rows_loaded,
                 system_state=system_state,
                 filter_report=filter_report,
@@ -2443,7 +2487,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             points=points,
             normalization_points=normalization_points,
             normalization_scope=normalization_scope_label,
-            csv_path=args.csv,
+            csv_path=effective_csv_path,
             num_rows_loaded=num_rows_loaded,
             system_state=system_state,
             filter_report=filter_report,

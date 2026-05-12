@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from src.router.calibration_apply import main
+from src.router.version import ROUTER_VERSION
 
 
 def _tmp_dir(name: str) -> Path:
@@ -147,7 +148,7 @@ def test_manifest_contains_version_mode_source_paths_and_output_path():
     data = json.loads(manifest.read_text(encoding="utf-8"))
 
     assert data["artifact_type"] == "promoted_calibration_bundle"
-    assert data["router_version"] == "0.18.0"
+    assert data["router_version"] == ROUTER_VERSION
     assert data["mode"] == "explicit_opt_in_calibration_apply"
     assert data["source_benchmark"] == str(benchmark)
     assert data["source_calibration"] == str(calibration)
