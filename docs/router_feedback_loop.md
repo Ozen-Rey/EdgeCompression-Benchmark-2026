@@ -94,6 +94,7 @@ v0.20 calibration_impact_audit: read-only decision impact audit
 v0.21 shadow_decision_comparison: offline baseline vs calibrated what-if
 v0.22 shadow_decision_validation: read-only shadow acceptance gate
 v0.23 rde_router --calibration-bundle-validation: explicit validated consumption
+v0.24 cross-artifact integrity: validation bound to exact bundle hash
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -227,6 +228,15 @@ v0.19. With the flag, the named validation report must have
 malformed validation reports block bundle consumption. The router still performs
 no automatic discovery and does not read feedback, proposal, promotion,
 comparison or validation artifacts unless the user names the relevant file.
+
+Router v0.24.0 binds the validated bundle chain by artifact hash. Shadow
+comparison reports include the baseline CSV hash, candidate calibration bundle
+manifest hash and calibrated CSV hash. Shadow validation reports propagate the
+comparison hash and candidate bundle hashes. When `rde_router` is given both
+`--calibration-bundle-manifest` and `--calibration-bundle-validation`, it now
+requires the validation report to refer to exactly that bundle manifest hash.
+Legacy validation reports without v0.24 hash fields are rejected when the
+validation flag is used.
 
 By default, executed router runs append to:
 

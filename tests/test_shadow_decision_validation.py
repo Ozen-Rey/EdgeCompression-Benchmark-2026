@@ -76,8 +76,12 @@ def _comparison(rows: list[dict[str, object]]) -> dict[str, object]:
         "mode": "shadow_decision_comparison_only",
         "router_version": "0.21.0",
         "baseline_csv": "baseline.csv",
+        "baseline_csv_sha256": "a" * 64,
         "bundle_manifest": "manifest.json",
         "calibrated_csv": "calibrated.csv",
+        "candidate_calibration_bundle_manifest_path": "manifest.json",
+        "candidate_calibration_bundle_manifest_sha256": "b" * 64,
+        "candidate_calibrated_csv_sha256": "d" * 64,
         "calibration_bundle": {
             "validated": True,
             "energy_policy": "usable_total_only",
@@ -125,6 +129,10 @@ def test_accepted_when_candidate_improves_cost_with_few_flips_and_no_violations(
     assert report["mode"] == "shadow_decision_validation_only"
     assert report["router_version"] == ROUTER_VERSION
     assert report["accepted"] is True
+    assert report["validated_comparison_path"].endswith("comparison.json")
+    assert len(report["validated_comparison_sha256"]) == 64
+    assert report["candidate_calibration_bundle_manifest_sha256"] == "b" * 64
+    assert report["candidate_calibrated_csv_sha256"] == "d" * 64
     assert report["decision_count"] == 3
     assert report["changed_decision_count"] == 1
     assert report["decision_churn_rate"] == 1 / 3
@@ -227,6 +235,7 @@ def test_csv_and_json_outputs_are_written():
     assert len(csv_rows) == 1
     assert csv_rows[0]["mode"] == "shadow_decision_validation_only"
     assert csv_rows[0]["accepted"] == "True"
+    assert csv_rows[0]["candidate_calibration_bundle_manifest_sha256"] == "b" * 64
 
 
 def test_module_is_read_only_and_not_imported_by_router():

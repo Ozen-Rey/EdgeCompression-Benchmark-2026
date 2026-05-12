@@ -25,6 +25,15 @@ def _require_key(data: dict[str, Any], key: str, *, label: str) -> Any:
     return data[key]
 
 
+def _require_validation_key(data: dict[str, Any], key: str) -> Any:
+    if key not in data:
+        raise ValueError(
+            "Calibration bundle validation requires v0.24+ field: "
+            f"{key}"
+        )
+    return data[key]
+
+
 def _load_manifest(path: str | Path) -> dict[str, Any]:
     manifest_path = Path(path)
     if not manifest_path.exists():
@@ -128,37 +137,34 @@ def validate_calibration_bundle_manifest(path: str | Path) -> dict[str, Any]:
     }
 
 
-def validate_calibration_bundle_validation(path: str | Path) -> dict[str, Any]:
+def validate_calibration_bundle_validation(
+    path: str | Path,
+    *,
+    bundle_manifest_path: str | Path,
+) -> dict[str, Any]:
     """Validate an explicit shadow decision validation report for bundle use."""
 
     validation_path = Path(path)
+    manifest_path = Path(bundle_manifest_path)
     validation = _load_json_object(
         validation_path,
         label="Calibration bundle validation",
     )
 
-    mode = _require_key(validation, "mode", label="validation mode")
+    mode = _require_validation_key(validation, "mode")
     if mode != "shadow_decision_validation_only":
         raise ValueError(
             "Unsupported calibration bundle validation mode: "
             f"{mode!r}"
         )
 
-    accepted = _require_key(
-        validation,
-        "accepted",
-        label="validation accepted flag",
-    )
+    accepted = _require_validation_key(validation, "accepted")
     if not isinstance(accepted, bool):
         raise ValueError(
             "Calibration bundle validation accepted must be a boolean."
         )
 
-    rejection_reasons = _require_key(
-        validation,
-        "rejection_reasons",
-        label="validation rejection reasons",
-    )
+    rejection_reasons = _require_validation_key(validation, "rejection_reasons")
     if not isinstance(rejection_reasons, list):
         raise ValueError(
             "Calibration bundle validation rejection_reasons must be a list."
@@ -169,12 +175,30 @@ def validate_calibration_bundle_validation(path: str | Path) -> dict[str, Any]:
         "changed_decision_count",
         "decision_churn_rate",
         "relative_cost_improvement",
+        "validated_comparison_path",
+        "validated_comparison_sha256",
+        "candidate_calibration_bundle_manifest_sha256",
+        "candidate_calibrated_csv_sha256",
     ):
-        _require_key(validation, key, label="validation metadata")
+        _require_validation_key(validation, key)
+
+    validation_sha256 = sha256_file(validation_path)
+    bundle_manifest_sha256 = sha256_file(manifest_path)
+    validation_bundle_manifest_sha256 = str(
+        validation["candidate_calibration_bundle_manifest_sha256"]
+    )
+
+    if validation_bundle_manifest_sha256 != bundle_manifest_sha256:
+        raise ValueError(
+            "Calibration bundle validation bundle manifest hash mismatch: "
+            f"validation={validation_bundle_manifest_sha256}, "
+            f"bundle={bundle_manifest_sha256}"
+        )
 
     return {
         "enabled": True,
         "validation_path": str(validation_path),
+        "validation_sha256": validation_sha256,
         "accepted": accepted,
         "mode": mode,
         "rejection_reasons": list(rejection_reasons),
@@ -184,5 +208,19 @@ def validate_calibration_bundle_validation(path: str | Path) -> dict[str, Any]:
         "relative_cost_improvement": validation.get(
             "relative_cost_improvement"
         ),
+        "validated_comparison_path": validation.get(
+            "validated_comparison_path"
+        ),
+        "validated_comparison_sha256": validation.get(
+            "validated_comparison_sha256"
+        ),
+        "bundle_manifest_sha256": bundle_manifest_sha256,
+        "validation_bundle_manifest_sha256": (
+            validation_bundle_manifest_sha256
+        ),
+        "candidate_calibrated_csv_sha256": validation.get(
+            "candidate_calibrated_csv_sha256"
+        ),
+        "integrity_match": True,
         "source": "explicit_shadow_decision_validation",
     }

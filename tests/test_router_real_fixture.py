@@ -53,32 +53,47 @@ def _write_bundle_manifest(path: Path, calibrated_csv: Path, *, hash_value: str 
     )
 
 
-def _write_bundle_validation(path: Path, *, accepted: bool = True) -> None:
+def _write_bundle_validation(
+    path: Path,
+    *,
+    bundle_manifest: Path | None = None,
+    calibrated_csv: Path | None = None,
+    accepted: bool = True,
+    candidate_manifest_hash: str | None = None,
+    include_hashes: bool = True,
+) -> None:
+    payload = {
+        "mode": "shadow_decision_validation_only",
+        "router_version": "0.22.0",
+        "comparison": "shadow_decision_comparison.json",
+        "validated_comparison_path": "shadow_decision_comparison.json",
+        "validated_comparison_sha256": "c" * 64,
+        "accepted": accepted,
+        "decision_count": 3,
+        "changed_decision_count": 1,
+        "decision_churn_rate": 1 / 3,
+        "mean_baseline_cost": 1.0,
+        "mean_candidate_cost": 0.9,
+        "mean_delta_cost": -0.1,
+        "relative_cost_improvement": 0.1,
+        "rejection_reasons": []
+        if accepted
+        else ["candidate_cost_regression"],
+        "acceptance_reasons": ["candidate_cost_not_regressed"]
+        if accepted
+        else [],
+    }
+    if include_hashes:
+        payload["candidate_calibration_bundle_manifest_sha256"] = (
+            candidate_manifest_hash
+            or (_sha256(bundle_manifest) if bundle_manifest else "b" * 64)
+        )
+        payload["candidate_calibrated_csv_sha256"] = (
+            _sha256(calibrated_csv) if calibrated_csv else "d" * 64
+        )
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                "mode": "shadow_decision_validation_only",
-                "router_version": "0.22.0",
-                "comparison": "shadow_decision_comparison.json",
-                "accepted": accepted,
-                "decision_count": 3,
-                "changed_decision_count": 1,
-                "decision_churn_rate": 1 / 3,
-                "mean_baseline_cost": 1.0,
-                "mean_candidate_cost": 0.9,
-                "mean_delta_cost": -0.1,
-                "relative_cost_improvement": 0.1,
-                "rejection_reasons": []
-                if accepted
-                else ["candidate_cost_regression"],
-                "acceptance_reasons": ["candidate_cost_not_regressed"]
-                if accepted
-                else [],
-            }
-        ),
-        encoding="utf-8",
-    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_router_end_to_end_on_real_small_image_fixture():
@@ -205,7 +220,12 @@ def test_router_with_validated_bundle_reports_validation_provenance():
     manifest = _tmp_path("validated_bundle_manifest.json")
     validation = _tmp_path("validated_bundle_validation.json")
     _write_bundle_manifest(manifest, calibrated_csv)
-    _write_bundle_validation(validation, accepted=True)
+    _write_bundle_validation(
+        validation,
+        bundle_manifest=manifest,
+        calibrated_csv=calibrated_csv,
+        accepted=True,
+    )
     out_path = _tmp_path("validated_bundle_report.json")
 
     main(
@@ -246,6 +266,15 @@ def test_router_with_validated_bundle_reports_validation_provenance():
     assert validation_report["accepted"] is True
     assert validation_report["mode"] == "shadow_decision_validation_only"
     assert validation_report["validation_path"] == str(validation)
+    assert validation_report["validation_sha256"] == _sha256(validation)
+    assert validation_report["bundle_manifest_sha256"] == _sha256(manifest)
+    assert validation_report["validation_bundle_manifest_sha256"] == _sha256(
+        manifest
+    )
+    assert validation_report["candidate_calibrated_csv_sha256"] == _sha256(
+        calibrated_csv
+    )
+    assert validation_report["integrity_match"] is True
     assert validation_report["rejection_reasons"] == []
     assert validation_report["decision_count"] == 3
     assert validation_report["changed_decision_count"] == 1
@@ -265,9 +294,95 @@ def test_router_rejects_bundle_with_rejected_validation():
     manifest = _tmp_path("rejected_validation_manifest.json")
     validation = _tmp_path("rejected_validation.json")
     _write_bundle_manifest(manifest, calibrated_csv)
-    _write_bundle_validation(validation, accepted=False)
+    _write_bundle_validation(
+        validation,
+        bundle_manifest=manifest,
+        calibrated_csv=calibrated_csv,
+        accepted=False,
+    )
 
     with pytest.raises(ValueError, match="validation was not accepted"):
+        main(
+            [
+                "--csv",
+                str(fixture),
+                "--calibration-bundle-manifest",
+                str(manifest),
+                "--calibration-bundle-validation",
+                str(validation),
+                "--codec-col",
+                "codec",
+                "--config-col",
+                "param",
+                "--rate-col",
+                "bpp",
+                "--quality-col",
+                "ssimulacra2",
+                "--energy-col",
+                "energy_per_image_j",
+            ]
+        )
+
+
+def test_router_rejects_validation_bound_to_different_bundle():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("mismatch_validation_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = _tmp_path("mismatch_validation_manifest.json")
+    validation = _tmp_path("mismatch_validation.json")
+    _write_bundle_manifest(manifest, calibrated_csv)
+    _write_bundle_validation(
+        validation,
+        calibrated_csv=calibrated_csv,
+        accepted=True,
+        candidate_manifest_hash="0" * 64,
+    )
+
+    with pytest.raises(ValueError, match="hash mismatch"):
+        main(
+            [
+                "--csv",
+                str(fixture),
+                "--calibration-bundle-manifest",
+                str(manifest),
+                "--calibration-bundle-validation",
+                str(validation),
+                "--codec-col",
+                "codec",
+                "--config-col",
+                "param",
+                "--rate-col",
+                "bpp",
+                "--quality-col",
+                "ssimulacra2",
+                "--energy-col",
+                "energy_per_image_j",
+            ]
+        )
+
+
+def test_router_rejects_legacy_validation_without_bundle_hash():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("legacy_validation_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = _tmp_path("legacy_validation_manifest.json")
+    validation = _tmp_path("legacy_validation.json")
+    _write_bundle_manifest(manifest, calibrated_csv)
+    _write_bundle_validation(
+        validation,
+        accepted=True,
+        include_hashes=False,
+    )
+
+    with pytest.raises(ValueError, match="v0.24"):
         main(
             [
                 "--csv",
@@ -326,7 +441,7 @@ def test_router_rejects_missing_or_malformed_bundle_validation():
     malformed = _tmp_path("malformed_validation.json")
     malformed.write_text(json.dumps({"accepted": True}), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="missing"):
+    with pytest.raises(ValueError, match="requires"):
         main(
             [
                 "--csv",
@@ -390,7 +505,12 @@ def test_bundle_validation_flag_only_gates_and_does_not_change_ranking():
     manifest = _tmp_path("ranking_gate_manifest.json")
     validation = _tmp_path("ranking_gate_validation.json")
     _write_bundle_manifest(manifest, calibrated_csv)
-    _write_bundle_validation(validation, accepted=True)
+    _write_bundle_validation(
+        validation,
+        bundle_manifest=manifest,
+        calibrated_csv=calibrated_csv,
+        accepted=True,
+    )
     out_without_validation = _tmp_path("ranking_gate_without_validation.json")
     out_with_validation = _tmp_path("ranking_gate_with_validation.json")
 
@@ -456,7 +576,12 @@ def test_router_does_not_auto_discover_bundle_validation():
     manifest = _tmp_path("no_auto_validation_manifest.json")
     adjacent_rejected = manifest.with_name("shadow_decision_validation.json")
     _write_bundle_manifest(manifest, calibrated_csv)
-    _write_bundle_validation(adjacent_rejected, accepted=False)
+    _write_bundle_validation(
+        adjacent_rejected,
+        bundle_manifest=manifest,
+        calibrated_csv=calibrated_csv,
+        accepted=False,
+    )
     out_path = _tmp_path("no_auto_validation_report.json")
 
     main(

@@ -192,6 +192,14 @@ shadow validation report. Rejected, missing or malformed validation blocks
 consumption when the validation flag is used; without that flag, v0.19 bundle
 behavior is preserved.
 
+Router v0.24.0 adds cross-artifact integrity binding. An accepted validation
+report is no longer enough by itself: when the validation flag is used, the
+validation report must carry v0.24 hash provenance and its candidate calibration
+bundle manifest SHA256 must match the actual manifest passed to the router.
+This prevents accidentally pairing a validation report for Bundle A with Bundle
+B. No automatic discovery, online learning, ranking change or decision-policy
+change is introduced.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

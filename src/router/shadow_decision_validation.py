@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
+    from src.router.calibration_bundle import sha256_file
     from src.router.version import ROUTER_VERSION
 except ImportError:  # pragma: no cover - direct script fallback
+    from calibration_bundle import sha256_file
     from version import ROUTER_VERSION
 
 
@@ -18,6 +20,10 @@ SUMMARY_FIELDS = [
     "mode",
     "router_version",
     "comparison",
+    "validated_comparison_path",
+    "validated_comparison_sha256",
+    "candidate_calibration_bundle_manifest_sha256",
+    "candidate_calibrated_csv_sha256",
     "accepted",
     "decision_count",
     "changed_decision_count",
@@ -303,6 +309,14 @@ def validate_shadow_decision_comparison(
         "mode": "shadow_decision_validation_only",
         "router_version": ROUTER_VERSION,
         "comparison": str(comparison_path),
+        "validated_comparison_path": str(comparison_path),
+        "validated_comparison_sha256": sha256_file(comparison_path),
+        "candidate_calibration_bundle_manifest_sha256": comparison.get(
+            "candidate_calibration_bundle_manifest_sha256"
+        ),
+        "candidate_calibrated_csv_sha256": comparison.get(
+            "candidate_calibrated_csv_sha256"
+        ),
         "accepted": len(rejection_reasons) == 0,
         "thresholds": {
             "min_decisions": int(min_decisions),

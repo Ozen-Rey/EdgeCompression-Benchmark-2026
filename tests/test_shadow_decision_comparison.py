@@ -202,9 +202,16 @@ def test_bundle_valid_comparison_produces_json_and_csv():
     assert report["mode"] == "shadow_decision_comparison_only"
     assert report["router_version"] == ROUTER_VERSION
     assert report["baseline_csv"] == str(baseline_csv)
+    assert report["baseline_csv_sha256"] == sha256_file(baseline_csv)
     assert report["bundle_manifest"] == str(manifest)
     assert report["calibrated_csv"] == str(calibrated_csv)
+    assert report["candidate_calibration_bundle_manifest_path"] == str(manifest)
+    assert report["candidate_calibration_bundle_manifest_sha256"] == sha256_file(
+        manifest
+    )
+    assert report["candidate_calibrated_csv_sha256"] == sha256_file(calibrated_csv)
     assert report["calibration_bundle"]["validated"] is True
+    assert report["calibration_bundle"]["manifest_sha256"] == sha256_file(manifest)
     assert report["calibration_bundle"]["calibrated_csv_sha256"] == sha256_file(
         calibrated_csv
     )

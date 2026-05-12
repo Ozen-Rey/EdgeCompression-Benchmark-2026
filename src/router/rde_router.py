@@ -2237,7 +2237,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         if args.calibration_bundle_validation:
             calibration_bundle_validation_report = (
                 validate_calibration_bundle_validation(
-                    args.calibration_bundle_validation
+                    args.calibration_bundle_validation,
+                    bundle_manifest_path=args.calibration_bundle_manifest,
                 )
             )
             if calibration_bundle_validation_report.get("accepted") is not True:

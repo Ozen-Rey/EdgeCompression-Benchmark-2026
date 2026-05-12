@@ -12,12 +12,15 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from src.router.calibration_bundle import validate_calibration_bundle_manifest
+    from src.router.calibration_bundle import (
+        sha256_file,
+        validate_calibration_bundle_manifest,
+    )
     from src.router.rde_router import main as router_main
     from src.router.router_config import load_router_config
     from src.router.version import ROUTER_VERSION
 except ImportError:  # pragma: no cover - direct script fallback
-    from calibration_bundle import validate_calibration_bundle_manifest
+    from calibration_bundle import sha256_file, validate_calibration_bundle_manifest
     from rde_router import main as router_main
     from router_config import load_router_config
     from version import ROUTER_VERSION
@@ -100,6 +103,7 @@ def _bundle_summary(
     return {
         "validated": bool(bundle_report.get("validated", False)),
         "manifest_path": str(manifest_path),
+        "manifest_sha256": sha256_file(manifest_path),
         "calibrated_csv_path": bundle_report.get("calibrated_csv_path"),
         "calibrated_csv_sha256": bundle_report.get("calibrated_csv_sha256"),
         "applied_scales_count": bundle_report.get("applied_scales_count"),
@@ -186,8 +190,16 @@ def build_shadow_decision_comparison(
         "mode": "shadow_decision_comparison_only",
         "router_version": ROUTER_VERSION,
         "baseline_csv": str(baseline_csv),
+        "baseline_csv_sha256": sha256_file(baseline_csv),
         "bundle_manifest": str(bundle_manifest),
         "calibrated_csv": bundle_report.get("calibrated_csv_path"),
+        "candidate_calibration_bundle_manifest_path": str(bundle_manifest),
+        "candidate_calibration_bundle_manifest_sha256": sha256_file(
+            bundle_manifest
+        ),
+        "candidate_calibrated_csv_sha256": bundle_report.get(
+            "calibrated_csv_sha256"
+        ),
         "calibration_bundle": _bundle_summary(
             manifest_path=bundle_manifest,
             bundle_report=bundle_report,
