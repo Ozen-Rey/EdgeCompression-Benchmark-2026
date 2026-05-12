@@ -19,6 +19,7 @@ local calibration -> controlled local adaptation
 online feedback -> append-only deployment trace
 feedback analysis -> read-only prediction audit
 feedback calibration proposal -> shadow correction proposal
+feedback proposal validation -> offline scale validation
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -61,6 +62,30 @@ feedback, but it is not loaded by the router and does not modify benchmark CSVs,
 normalization, ranking or `J_RDE`. It is a review artifact for future controlled
 calibration, not online learning.
 
+Router v0.15.0 adds offline validation for those shadow proposals:
+
+```powershell
+python -m src.router.feedback_proposal_validation `
+  --feedback results/routing_context/online_feedback.csv `
+  --proposal results/routing_context/feedback_calibration_proposal.json `
+  --out results/routing_context/feedback_proposal_validation.json `
+  --summary-out results/routing_context/feedback_proposal_validation.csv
+```
+
+The release ladder is:
+
+```text
+v0.12 feedback_logger: append-only observations
+v0.13 feedback_analysis: audit/read-only analysis
+v0.14 feedback_calibration_proposal: shadow correction candidates
+v0.15 feedback_proposal_validation: offline validation of candidate scales
+```
+
+The validator compares prediction error before and after a proposed scale using
+absolute log error. It is still read-only: it writes validation reports, but it
+does not change router decisions, calibration files, benchmark CSVs or
+normalization.
+
 By default, executed router runs append to:
 
 ```text
@@ -91,3 +116,8 @@ The feedback calibration proposal follows the same energy rule. It computes
 `energy_scale` only from successful rows with numeric predicted energy, numeric
 `local_energy_j` and `energy_usable_for_total=true`. GPU-only readings are
 ignored for total-energy scale proposals.
+
+The proposal validator uses the same rule again. Energy validation is computed
+only for rows with usable total energy and a proposal marked
+`usable_for_energy=true`; GPU-only rows remain excluded from total-pipeline
+energy error.

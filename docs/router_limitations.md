@@ -107,6 +107,17 @@ Energy proposals follow the same provenance rule as the router. A GPU-only
 Windows NVML observation is useful telemetry, but it is partial and is not used
 to derive a total pipeline `energy_scale`.
 
+Router v0.15.0 adds offline validation of feedback-derived proposal files. It
+checks whether proposed rate, time and usable total-energy scales would reduce
+observed prediction error on the feedback CSV, using absolute log error before
+and after scaling. The validation report is read-only and still does not perform
+online learning: it does not modify router decisions, `J_RDE`, normalization,
+`calibration_apply`, benchmark CSVs, content-aware logic, or backend execution.
+
+Energy validation is restricted to rows with `energy_usable_for_total=true`.
+GPU-only telemetry remains excluded from total pipeline energy validation, even
+when a GPU energy number is present in feedback.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
