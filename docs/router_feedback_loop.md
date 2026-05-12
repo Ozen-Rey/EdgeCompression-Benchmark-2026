@@ -97,6 +97,7 @@ v0.23 rde_router --calibration-bundle-validation: explicit validated consumption
 v0.24 cross-artifact integrity: validation bound to exact bundle hash
 v0.25 decision receipt/replay: auditable decision reproducibility check
 v0.26 router_overhead_audit: read-only runtime overhead measurement
+v0.27 router_effectiveness_audit: read-only comparison against simple baselines
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -271,6 +272,24 @@ bundle and validated-bundle modes when the required explicit files are provided.
 It records wall time, process CPU time, optional Python peak-memory tracing,
 candidate counts and decision match against baseline. Replay can be included
 separately and is marked as offline, not as a normal runtime path.
+
+Router v0.27.0 adds a read-only effectiveness audit:
+
+```powershell
+python -m src.router.router_effectiveness_audit `
+  --csv results/routing_context/original.csv `
+  --config configs/router_image_v08.json `
+  --out-dir results/routing_context/effectiveness_audit
+```
+
+The audit compares the router-selected point against simple baseline policies
+such as lowest rate, highest quality, lowest energy, fastest time,
+fixed codec/config and the best costed admissible candidate. Baselines are
+evaluated offline and must respect the same quality/constraint guards; a
+baseline that would violate the guard is marked non-comparable. Explicit bundle
+and validated-bundle scenarios can be audited only when their paths are passed
+directly. The module does not alter ranking, `J_RDE`, calibration, bundle
+validation, feedback, replay, content-aware logic or system-aware logic.
 
 By default, executed router runs append to:
 

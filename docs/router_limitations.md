@@ -214,6 +214,17 @@ feedback, replay semantics, content-aware behavior, system-aware behavior, or
 backend execution. Bundle and validation modes are only measured when their
 paths are provided explicitly; no latest-file discovery is performed.
 
+Router v0.27.0 adds `router_effectiveness_audit`, a read-only baseline-policy
+effectiveness audit. It compares the router choice against simple policies such
+as lowest rate, highest quality, lowest energy and fastest time under the same
+explicit CSV/config inputs. These baselines do not bypass quality or constraint
+guards; violating candidates are reported as non-comparable rather than treated
+as valid alternatives. Bundle and validated-bundle effectiveness are audited
+only when their paths are provided explicitly. The module writes audit reports
+but does not change `J_RDE`, ranking, normalization, calibration, bundle
+validation, feedback, replay semantics, content-aware behavior, system-aware
+behavior, or backend execution.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
