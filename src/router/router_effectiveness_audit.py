@@ -47,6 +47,10 @@ POLICY_FIELDS = [
     "scenario",
     "scenario_type",
     "policy",
+    "is_router_decision",
+    "candidate_source",
+    "cost_status",
+    "cost_reason_detail",
     "comparable",
     "reason",
     "selected_codec",
@@ -246,7 +250,7 @@ def _load_csv_candidates(report: dict[str, Any]) -> list[Candidate]:
             time_ms=point.time_ms,
             quality_constraint_value=_point_quality_guard_value(point, stat),
             raw=dict(point.raw),
-            source="csv",
+            source="raw_candidate_pool",
         )
         for point in points
     ]
@@ -266,7 +270,7 @@ def _candidate_pool(report: dict[str, Any]) -> list[Candidate]:
             candidate.cost = scored.cost
             candidate.ranking_cost = scored.ranking_cost
             candidate.quality_constraint_value = scored.quality_constraint_value
-            candidate.source = "csv+router_scored_pool"
+            candidate.source = "router_scored_pool"
         merged[candidate.key] = candidate
 
     for key, scored in scored_by_key.items():
@@ -323,6 +327,7 @@ def _candidate_to_dict(candidate: Candidate | None) -> dict[str, Any]:
             "time_ms": None,
             "cost": None,
             "ranking_cost": None,
+            "candidate_source": None,
         }
 
     return {
@@ -336,7 +341,72 @@ def _candidate_to_dict(candidate: Candidate | None) -> dict[str, Any]:
         "cost": candidate.cost,
         "ranking_cost": candidate.ranking_cost,
         "source": candidate.source,
+        "candidate_source": _candidate_source(candidate),
     }
+
+
+def _candidate_source(
+    candidate: Candidate | None,
+    *,
+    is_router_decision: bool = False,
+) -> str | None:
+    if is_router_decision:
+        return "router_decision"
+    if candidate is None:
+        return None
+    if candidate.source == "router_selected":
+        return "router_decision"
+    if candidate.source == "router_scored_pool":
+        return "router_scored_pool"
+    if candidate.source == "raw_candidate_pool":
+        return "raw_candidate_pool"
+    return "baseline_only"
+
+
+def _cost_status_and_detail(
+    *,
+    candidate: Candidate | None,
+    quality_violations: list[str],
+    base_violations: list[str],
+    reason: str | None,
+    is_router_decision: bool,
+) -> tuple[str, str]:
+    if candidate is None:
+        if reason == "fixed_codec_config_not_requested":
+            return "unavailable_missing_metric", "fixed_codec_config_not_requested"
+        if reason in {
+            "no_candidate_with_time",
+            "no_quality_guard_passing_candidates",
+        }:
+            return "unavailable_missing_metric", "missing_required_metric"
+        return "unavailable_not_exported", reason or "candidate_not_found"
+
+    if candidate.cost is not None:
+        return "available", "router_decision" if is_router_decision else "ok"
+
+    if quality_violations:
+        return "unavailable_filtered", "filtered_by_quality_guard"
+
+    if base_violations:
+        return "unavailable_filtered", "filtered_by_constraints"
+
+    if reason == "no_candidate_with_time":
+        return "unavailable_missing_metric", "missing_required_metric"
+
+    if _candidate_source(candidate) == "raw_candidate_pool":
+        return (
+            "unavailable_feasible_but_unscored",
+            (
+                "feasible_but_unscored;"
+                "candidate_not_in_scored_pool;"
+                "cost_unavailable_report_lacks_scored_candidate"
+            ),
+        )
+
+    return (
+        "unavailable_not_exported",
+        "cost_not_exported_by_router_report",
+    )
 
 
 def _make_policy_result(
@@ -350,13 +420,25 @@ def _make_policy_result(
     constraints: dict[str, Any],
     reason: str | None = None,
     notes: list[str] | None = None,
+    is_router_decision: bool = False,
 ) -> dict[str, Any]:
     notes = list(notes or [])
     if candidate is None:
+        cost_status, cost_detail = _cost_status_and_detail(
+            candidate=None,
+            quality_violations=[],
+            base_violations=[],
+            reason=reason,
+            is_router_decision=is_router_decision,
+        )
         return {
             "scenario": scenario,
             "scenario_type": scenario_type,
             "policy": policy,
+            "is_router_decision": is_router_decision,
+            "candidate_source": None,
+            "cost_status": cost_status,
+            "cost_reason_detail": cost_detail,
             "comparable": False,
             "reason": reason or "no_candidate",
             "selected": _candidate_to_dict(None),
@@ -383,25 +465,37 @@ def _make_policy_result(
     comparable = not quality_violations and not base_violations
     if comparable and candidate.cost is None:
         comparable = False
-        notes.append("missing_cost_for_regret")
+        notes.append("cost_unavailable_for_regret")
 
     effective_reason = reason
     if quality_violations:
-        effective_reason = ";".join(quality_violations)
+        effective_reason = "filtered_by_quality_guard"
     elif base_violations:
-        effective_reason = ";".join(base_violations)
+        effective_reason = "filtered_by_constraints"
     elif candidate.cost is None:
-        effective_reason = "missing_cost"
+        effective_reason = "feasible_but_unscored"
     elif effective_reason is None:
         effective_reason = "ok"
 
+    cost_status, cost_detail = _cost_status_and_detail(
+        candidate=candidate,
+        quality_violations=quality_violations,
+        base_violations=base_violations,
+        reason=reason,
+        is_router_decision=is_router_decision,
+    )
+
     regret = None
-    if comparable and best_cost is not None and candidate.cost is not None:
+    if is_router_decision and candidate.cost is not None:
+        regret = 0.0
+    elif comparable and best_cost is not None and candidate.cost is not None:
         regret = candidate.cost - best_cost
 
     router_cost = router_candidate.cost if router_candidate is not None else None
     improvement = None
-    if (
+    if is_router_decision and candidate.cost is not None:
+        improvement = 0.0
+    elif (
         comparable
         and router_cost is not None
         and candidate.cost is not None
@@ -409,7 +503,7 @@ def _make_policy_result(
     ):
         improvement = ((candidate.cost - router_cost) / abs(candidate.cost)) * 100.0
 
-    decision_changed = (
+    decision_changed = False if is_router_decision else (
         candidate.key != router_candidate.key
         if router_candidate is not None
         else None
@@ -419,6 +513,13 @@ def _make_policy_result(
         "scenario": scenario,
         "scenario_type": scenario_type,
         "policy": policy,
+        "is_router_decision": is_router_decision,
+        "candidate_source": _candidate_source(
+            candidate,
+            is_router_decision=is_router_decision,
+        ),
+        "cost_status": cost_status,
+        "cost_reason_detail": cost_detail,
         "comparable": comparable,
         "reason": effective_reason,
         "selected": _candidate_to_dict(candidate),
@@ -485,6 +586,22 @@ def _policy_results(
     best_cost = best.cost if best is not None else None
 
     results: list[dict[str, Any]] = []
+
+    if router_candidate is not None:
+        results.append(
+            _make_policy_result(
+                scenario=scenario,
+                scenario_type=scenario_type,
+                policy="router",
+                candidate=router_candidate,
+                router_candidate=router_candidate,
+                best_cost=best_cost,
+                constraints=constraints,
+                reason=None,
+                notes=[],
+                is_router_decision=True,
+            )
+        )
 
     policies: list[tuple[str, Candidate | None, str | None, list[str]]] = [
         (

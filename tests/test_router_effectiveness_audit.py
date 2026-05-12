@@ -187,6 +187,13 @@ def test_router_decision_included_in_report():
     assert router["config"]
     assert isinstance(router["cost"], float)
 
+    router_row = _policy(_scenario(report), "router")
+    assert router_row["is_router_decision"] is True
+    assert router_row["candidate_source"] == "router_decision"
+    assert router_row["cost_status"] == "available"
+    assert router_row["regret"] == 0.0
+    assert router_row["router_relative_improvement_percent"] == 0.0
+
 
 def test_baseline_policies_are_calculated_correctly():
     root = _tmp_dir("baselines")
@@ -244,6 +251,71 @@ def test_regret_is_calculated_only_for_comparable_candidates():
     assert _policy(scenario, "lowest_rate")["regret"] is not None
     assert _policy(scenario, "fixed_codec_config")["comparable"] is False
     assert _policy(scenario, "fixed_codec_config")["regret"] is None
+
+
+def test_baseline_matching_router_has_zero_regret():
+    root = _tmp_dir("matching_router")
+    csv_path, config = _base_inputs(root)
+
+    report = run_router_effectiveness_audit(
+        csv_path=str(csv_path),
+        config_path=str(config),
+        out_dir=str(root / "audit"),
+    )
+    scenario = _scenario(report)
+    router = _policy(scenario, "router")
+    global_best = _policy(scenario, "global_best_average")
+
+    assert global_best["selected_codec"] == router["selected_codec"]
+    assert global_best["selected_config"] == router["selected_config"]
+    assert global_best["regret"] == 0.0
+    assert global_best["router_relative_improvement_percent"] == 0.0
+
+
+def test_feasible_unscored_candidate_is_not_generic_missing_cost():
+    root = _tmp_dir("feasible_unscored")
+    csv_path, config = _base_inputs(root)
+
+    report = run_router_effectiveness_audit(
+        csv_path=str(csv_path),
+        config_path=str(config),
+        out_dir=str(root / "audit"),
+        audit_top_k=1,
+    )
+    scenario = _scenario(report)
+    highest_quality = _policy(scenario, "highest_quality")
+
+    assert highest_quality["selected_codec"] == "JXL"
+    assert highest_quality["comparable"] is False
+    assert highest_quality["reason"] == "feasible_but_unscored"
+    assert highest_quality["reason"] != "missing_cost"
+    assert highest_quality["cost_status"] == "unavailable_feasible_but_unscored"
+    assert highest_quality["candidate_source"] == "raw_candidate_pool"
+    assert "candidate_not_in_scored_pool" in highest_quality["cost_reason_detail"]
+
+
+def test_candidate_source_and_cost_status_are_populated():
+    root = _tmp_dir("cost_status")
+    csv_path, config = _base_inputs(root)
+
+    report = run_router_effectiveness_audit(
+        csv_path=str(csv_path),
+        config_path=str(config),
+        out_dir=str(root / "audit"),
+    )
+    scenario = _scenario(report)
+
+    for policy in scenario["policies"]:
+        assert "candidate_source" in policy
+        assert "cost_status" in policy
+        assert "cost_reason_detail" in policy
+
+    router = _policy(scenario, "router")
+    global_best = _policy(scenario, "global_best_average")
+    assert router["candidate_source"] == "router_decision"
+    assert router["cost_status"] == "available"
+    assert global_best["candidate_source"] == "router_scored_pool"
+    assert global_best["cost_status"] == "available"
 
 
 def test_bundle_and_validation_are_only_explicit():

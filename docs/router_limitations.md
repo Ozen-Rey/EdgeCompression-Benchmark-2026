@@ -225,6 +225,14 @@ but does not change `J_RDE`, ranking, normalization, calibration, bundle
 validation, feedback, replay semantics, content-aware behavior, system-aware
 behavior, or backend execution.
 
+Router v0.28.0 refines the audit output rather than improving router behavior.
+The effectiveness audit now separates three cases: comparable baselines with a
+router-exported cost, filtered candidates that violate quality or constraints,
+and feasible-but-unscored candidates that are visible in the raw candidate pool
+but absent from the exported scored pool. Regret is computed only for the first
+case. If cost is unavailable, the audit reports `cost_status` and
+`cost_reason_detail` instead of inventing `J_RDE` outside the router.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

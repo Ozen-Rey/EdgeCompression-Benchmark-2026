@@ -98,6 +98,7 @@ v0.24 cross-artifact integrity: validation bound to exact bundle hash
 v0.25 decision receipt/replay: auditable decision reproducibility check
 v0.26 router_overhead_audit: read-only runtime overhead measurement
 v0.27 router_effectiveness_audit: read-only comparison against simple baselines
+v0.28 effectiveness cost explainability: explicit audit cost provenance
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -290,6 +291,16 @@ baseline that would violate the guard is marked non-comparable. Explicit bundle
 and validated-bundle scenarios can be audited only when their paths are passed
 directly. The module does not alter ranking, `J_RDE`, calibration, bundle
 validation, feedback, replay, content-aware logic or system-aware logic.
+
+Router v0.28.0 improves the effectiveness audit's cost explainability without
+changing the router. The by-policy CSV/JSON now includes an explicit
+`policy=router` row plus `candidate_source`, `cost_status` and
+`cost_reason_detail` fields. A baseline is `comparable` only when it satisfies
+the guards and has a router-exported cost. A candidate can be feasible but
+unscored when it appears in the raw candidate pool but not in the router's
+exported scored pool; in that case regret is left empty and the reason is
+reported as `feasible_but_unscored` rather than a generic missing-cost label.
+Filtered candidates remain separate from feasible-but-unscored candidates.
 
 By default, executed router runs append to:
 
