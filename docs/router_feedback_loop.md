@@ -21,6 +21,7 @@ feedback analysis -> read-only prediction audit
 feedback calibration proposal -> shadow correction proposal
 feedback proposal validation -> offline scale validation
 feedback calibration promotion -> audit-only candidate profile
+promoted calibration apply -> explicit opt-in calibration input
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -81,6 +82,7 @@ v0.13 feedback_analysis: audit/read-only analysis
 v0.14 feedback_calibration_proposal: shadow correction candidates
 v0.15 feedback_proposal_validation: offline validation of candidate scales
 v0.16 feedback_calibration_promotion: audit-only candidate calibration profile
+v0.17 calibration_apply --promotion-profile: explicit opt-in application
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -104,6 +106,22 @@ python -m src.router.feedback_calibration_promotion `
 `feedback_calibration_promotion` turns validated shadow proposals into an
 audit-only candidate calibration profile. The router does not consume this
 profile automatically, and no router flag is added in v0.16.0.
+
+Router v0.17.0 adds explicit opt-in application of a promoted calibration
+profile in `calibration_apply`:
+
+```powershell
+python -m src.router.calibration_apply `
+  --benchmark data/rde_points.csv `
+  --calibration results/routing_calibration/quick.json `
+  --promotion-profile results/routing_context/feedback_calibration_profile_candidate.json `
+  --out results/routing_context/rde_points_calibrated_with_feedback.csv
+```
+
+Without `--promotion-profile`, `calibration_apply` behaves as before. With the
+flag, only promoted/accepted/usable scales are applied; rejected scales are
+ignored and reported. This remains an explicit offline transformation. The
+router does not auto-load promoted profiles in v0.17.0.
 
 By default, executed router runs append to:
 

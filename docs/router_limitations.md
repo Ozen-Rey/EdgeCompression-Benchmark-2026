@@ -129,6 +129,18 @@ Energy scale promotion remains restricted to validation rows backed by usable
 total-energy evidence. GPU-only telemetry is not promotable as total pipeline
 energy.
 
+Router v0.17.0 allows promoted calibration profiles to be applied only through
+an explicit `calibration_apply --promotion-profile` opt-in. Default router and
+calibration behavior remain benchmark/local-calibration driven when the flag is
+absent. This is still not automatic online learning: promoted profiles are not
+discovered or loaded by the router, and no feedback-derived scale is used unless
+the user names the profile file explicitly.
+
+Energy promotion application preserves the total-energy rule. An energy scale
+is applied only when the promoted profile marks it as accepted/promoted/usable
+and the profile carries usable total-energy evidence; GPU-only or otherwise
+partial energy remains excluded.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
