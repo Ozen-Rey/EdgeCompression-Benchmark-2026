@@ -50,6 +50,18 @@ tagged as `energy_scope=gpu` and `energy_usable_for_total=false`; the router
 then keeps using the benchmark-energy time-scaling fallback for the R-D-E
 energy term.
 
+Router v0.10.1 adds an explicit local energy policy, stored as
+`energy_mode` in calibration and router reports:
+
+- `auto`: use `local_energy_j` only when it is measured and
+  `energy_usable_for_total=true`; otherwise use benchmark energy scaled by the
+  local/benchmark time ratio.
+- `require-measured-total`: require usable total hardware energy. Calibration
+  fails fast when a local run cannot provide total energy, and applying a
+  calibration skips points whose energy is not usable as total energy.
+- `benchmark-only`: ignore local hardware energy even if present, and use only
+  benchmark energy scaled by the local/benchmark time ratio.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

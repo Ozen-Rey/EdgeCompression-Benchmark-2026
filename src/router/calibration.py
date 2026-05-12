@@ -23,6 +23,8 @@ except ImportError:
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 
+ENERGY_MODES = ("auto", "require-measured-total", "benchmark-only")
+
 
 DEFAULT_CONFIGS = {
     "quick": {
@@ -139,6 +141,44 @@ def _run_command(command: List[str]) -> Dict[str, Any]:
     }
 
 
+def _apply_energy_mode(run: Dict[str, Any], energy_mode: str) -> Dict[str, Any]:
+    out = dict(run)
+
+    if energy_mode == "benchmark-only":
+        warnings = []
+        if out.get("energy_warnings"):
+            warnings.append(str(out["energy_warnings"]))
+        warnings.append("benchmark_only_energy_mode")
+
+        out.update(
+            {
+                "local_cpu_energy_j": None,
+                "local_gpu_energy_j": None,
+                "local_energy_j": None,
+                "energy_backend": "benchmark_only",
+                "energy_method": "benchmark_only_energy_mode",
+                "energy_is_measured": False,
+                "energy_quality": "disabled",
+                "energy_scope": "disabled",
+                "energy_usable_for_total": False,
+                "energy_warnings": ";".join(warnings),
+            }
+        )
+        return out
+
+    if energy_mode == "require-measured-total" and not out.get(
+        "energy_usable_for_total", False
+    ):
+        raise RuntimeError(
+            "Strict energy mode requires usable total hardware energy, "
+            f"but got scope={out.get('energy_scope')}, "
+            f"backend={out.get('energy_backend')}, "
+            f"method={out.get('energy_method')}"
+        )
+
+    return out
+
+
 def _summarize(values: List[float]) -> Dict[str, Optional[float]]:
     if not values:
         return {
@@ -229,8 +269,14 @@ def run_calibration(
     max_images: Optional[int],
     repeats: Optional[int],
     dry_run: bool,
+    energy_mode: str = "auto",
     summary_csv: Optional[str] = None,
 ) -> Dict[str, Any]:
+    if energy_mode not in ENERGY_MODES:
+        raise ValueError(
+            "energy_mode must be one of: " + ", ".join(ENERGY_MODES)
+        )
+
     system_state = probe_system()
 
     if max_images is None:
@@ -286,6 +332,7 @@ def run_calibration(
                         "plan_reasons": plan.get("reasons", []),
                         "plan_warnings": plan.get("warnings", []),
                         "dry_run": dry_run,
+                        "energy_mode": energy_mode,
                         "success": False,
                         "returncode": None,
                         "time_ms": None,
@@ -320,7 +367,7 @@ def run_calibration(
                         measurements.append(record)
                         continue
 
-                    run = _run_command(command)
+                    run = _apply_energy_mode(_run_command(command), energy_mode)
                     record["success"] = run["success"]
                     record["returncode"] = run["returncode"]
                     record["time_ms"] = run["time_ms"]
@@ -355,6 +402,7 @@ def run_calibration(
         "version": ROUTER_VERSION,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "level": level,
+        "energy_mode": energy_mode,
         "dry_run": dry_run,
         "input_dir": str(input_dir),
         "num_images": len(images),
@@ -371,9 +419,13 @@ def run_calibration(
         "estimated": [],
         "not_calibrated": ["quality"],
         "energy_measurement": {
-            "enabled": True,
+            "enabled": energy_mode != "benchmark-only",
+            "mode": energy_mode,
             "backend_dependent": True,
             "fallback_behavior": "energy_is_measured_false_when_no_backend_available",
+            "strict_behavior": (
+                "raise_when_no_usable_total_energy_in_require_measured_total_mode"
+            ),
         },
         "system_state": system_state,
         "summary": summary,
@@ -642,6 +694,13 @@ def main() -> None:
         help="Genera il piano di calibrazione senza eseguire gli encoder.",
     )
 
+    parser.add_argument(
+        "--energy-mode",
+        default="auto",
+        choices=ENERGY_MODES,
+        help="Policy for local energy measurements.",
+    )
+
     args = parser.parse_args()
 
     codecs = [c.strip() for c in args.codecs.split(",") if c.strip()]
@@ -654,11 +713,13 @@ def main() -> None:
         max_images=args.max_images,
         repeats=args.repeats,
         dry_run=args.dry_run,
+        energy_mode=args.energy_mode,
         summary_csv=args.summary_csv,
     )
 
     print("\n=== R-D-E Router Local Calibration ===")
     print(f"Level:       {report['level']}")
+    print(f"Energy mode: {report['energy_mode']}")
     print(f"Dry run:     {report['dry_run']}")
     print(f"Images:      {report['num_images']}")
     print(f"Codecs:      {', '.join(report['codecs'])}")

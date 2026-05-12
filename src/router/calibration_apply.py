@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 
+ENERGY_MODES = {"auto", "require-measured-total", "benchmark-only"}
+
+
 def _load_calibration_file(path: str) -> Dict[str, Any]:
     p = Path(path)
 
@@ -83,6 +86,14 @@ def _clone_point_with_updates(point, updates: Dict[str, Any]):
 
 def apply_local_calibration(points: List[Any], calibration_file: str):
     calibration = _load_calibration_file(calibration_file)
+    energy_mode = str(calibration.get("energy_mode", "auto") or "auto")
+
+    if energy_mode not in ENERGY_MODES:
+        raise ValueError(
+            "Unsupported calibration energy_mode: "
+            f"{energy_mode}. Expected one of: {', '.join(sorted(ENERGY_MODES))}"
+        )
+
     lookup = _build_calibration_lookup(calibration)
 
     calibrated_points = []
@@ -152,10 +163,42 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
         ):
             time_scale = float(local_time_ms) / float(benchmark_time_ms)
 
-        if local_energy_j is not None and energy_is_measured and energy_usable_for_total:
+        has_usable_local_energy = (
+            local_energy_j is not None
+            and energy_is_measured
+            and energy_usable_for_total
+        )
+
+        if energy_mode == "require-measured-total" and not has_usable_local_energy:
+            calibrated_points.append(point)
+            skipped.append(
+                {
+                    "codec": point.codec,
+                    "config": point.config,
+                    "reason": "strict_energy_missing_usable_total",
+                    "energy_mode": energy_mode,
+                    "local_energy_j": local_energy_j,
+                    "energy_is_measured": energy_is_measured,
+                    "energy_scope": energy_scope,
+                    "energy_usable_for_total": energy_usable_for_total,
+                    "energy_backend": energy_backend,
+                    "energy_method": energy_method,
+                    "energy_quality": energy_quality,
+                }
+            )
+            continue
+
+        if energy_mode == "benchmark-only":
+            if benchmark_energy is not None and time_scale is not None:
+                calibrated_energy = float(benchmark_energy) * time_scale
+                updates["energy"] = calibrated_energy
+                energy_scaling_method = "benchmark_only_energy_mode"
+            else:
+                calibrated_energy = benchmark_energy
+        elif has_usable_local_energy:
             calibrated_energy = local_energy_j
             updates["energy"] = calibrated_energy
-            energy_scaling_method = "local_hardware_energy_measurement"
+            energy_scaling_method = "local_hardware_energy_total"
         elif benchmark_energy is not None and time_scale is not None:
             calibrated_energy = float(benchmark_energy) * time_scale
             updates["energy"] = calibrated_energy
@@ -180,6 +223,7 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
             {
                 "codec": point.codec,
                 "config": point.config,
+                "energy_mode": energy_mode,
                 "success_rate": success_rate,
 
                 "rate_before": benchmark_rate,
@@ -212,8 +256,11 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
         {
             "energy_by_time_scaling"
             for item in applied
-            if str(item.get("energy_scaling_method", "")).startswith(
-                "benchmark_energy_scaled_by_time_ratio"
+            if (
+                str(item.get("energy_scaling_method", "")).startswith(
+                    "benchmark_energy_scaled_by_time_ratio"
+                )
+                or item.get("energy_scaling_method") == "benchmark_only_energy_mode"
             )
         }
     )
@@ -223,6 +270,7 @@ def apply_local_calibration(points: List[Any], calibration_file: str):
         "source": calibration_file,
         "version": calibration.get("version"),
         "level": calibration.get("level"),
+        "energy_mode": energy_mode,
         "created_at": calibration.get("created_at"),
         "measured": calibration.get("measured", []),
         "estimated": estimated,

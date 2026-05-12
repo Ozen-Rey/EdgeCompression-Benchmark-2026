@@ -117,6 +117,7 @@ def _build_energy_provenance_report(
     energy_usable_for_total = False
     local_measurement_energy_is_measured = False
     current_method = "benchmark_energy"
+    energy_mode = calibration_report.get("energy_mode", "auto")
 
     if selected_calibration.get("enabled", False):
         energy_backend = selected_calibration.get("energy_backend") or energy_backend
@@ -131,15 +132,19 @@ def _build_energy_provenance_report(
         )
 
         scaling_method = selected_calibration.get("energy_scaling_method")
-        if scaling_method == "local_hardware_energy_measurement":
-            current_method = "local_hardware_energy_measurement"
+        if scaling_method == "local_hardware_energy_total":
+            current_method = "local_hardware_energy_total"
             energy_is_measured = True
+        elif scaling_method == "benchmark_only_energy_mode":
+            current_method = "benchmark_only_energy_mode"
+            energy_is_measured = False
         elif str(scaling_method).startswith("benchmark_energy_scaled_by_time_ratio"):
             current_method = str(scaling_method)
             energy_is_measured = False
 
     return {
         "local_energy_measurement": "hardware_backend_or_fallback",
+        "energy_mode": energy_mode,
         "current_method": current_method,
         "energy_backend": energy_backend,
         "energy_method": energy_method,
@@ -151,7 +156,9 @@ def _build_energy_provenance_report(
         "hardware_backends": [
             part
             for part in str(energy_backend).split(";")
-            if part and not part.endswith("=none") and part != "benchmark_csv"
+            if part
+            and not part.endswith("=none")
+            and part not in {"benchmark_csv", "benchmark_only"}
         ],
         "fallback": "benchmark_energy_scaled_by_time_ratio_when_calibration_is_used",
         "calibration_energy_measurement": calibration_report.get(
