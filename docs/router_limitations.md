@@ -207,6 +207,13 @@ reproduces the same selected decision. Replay is not a policy gate and does not
 prove the selected codec is better; it only checks reproducibility of the
 recorded decision under the same inputs.
 
+Router v0.26.0 adds `router_overhead_audit`, a read-only performance audit for
+router modes. It measures runtime overhead empirically but does not change
+decision logic, scoring, normalization, calibration, bundle validation,
+feedback, replay semantics, content-aware behavior, system-aware behavior, or
+backend execution. Bundle and validation modes are only measured when their
+paths are provided explicitly; no latest-file discovery is performed.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

@@ -96,6 +96,7 @@ v0.22 shadow_decision_validation: read-only shadow acceptance gate
 v0.23 rde_router --calibration-bundle-validation: explicit validated consumption
 v0.24 cross-artifact integrity: validation bound to exact bundle hash
 v0.25 decision receipt/replay: auditable decision reproducibility check
+v0.26 router_overhead_audit: read-only runtime overhead measurement
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -253,6 +254,23 @@ input artifacts. The replay validator checks those hashes, reruns the router
 without execution/output side effects, and verifies that the same decision is
 reproduced. This is audit only: it does not alter ranking, policy,
 normalization, calibration, feedback, or execution behavior.
+
+Router v0.26.0 adds a read-only overhead audit:
+
+```powershell
+python -m src.router.router_overhead_audit `
+  --csv results/routing_context/original.csv `
+  --config configs/router_image_v08.json `
+  --bundle-manifest results/routing_context/calibrated_bundle_manifest.json `
+  --bundle-validation results/routing_context/shadow_decision_validation.json `
+  --out-dir results/routing_context/overhead_audit
+```
+
+The audit runs controlled offline router invocations for baseline, receipt,
+bundle and validated-bundle modes when the required explicit files are provided.
+It records wall time, process CPU time, optional Python peak-memory tracing,
+candidate counts and decision match against baseline. Replay can be included
+separately and is marked as offline, not as a normal runtime path.
 
 By default, executed router runs append to:
 
