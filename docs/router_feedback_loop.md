@@ -26,6 +26,7 @@ calibration bundle manifest -> audit provenance for calibrated CSVs
 calibration bundle consumption -> explicit manifest-validated router input
 calibration impact audit -> read-only baseline vs bundle decision comparison
 shadow decision comparison -> offline what-if comparison only
+shadow decision validation -> offline methodological gate
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -91,6 +92,7 @@ v0.18 calibration_apply --manifest-out: auditable calibration bundle manifest
 v0.19 rde_router --calibration-bundle-manifest: explicit verified bundle input
 v0.20 calibration_impact_audit: read-only decision impact audit
 v0.21 shadow_decision_comparison: offline baseline vs calibrated what-if
+v0.22 shadow_decision_validation: read-only shadow acceptance gate
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -193,6 +195,21 @@ This module answers only a what-if question: if this verified calibration
 bundle were used as the R-D-E source, would the router choice change? It does
 not prove the calibrated decision is better; utility still requires separate
 offline regret, oracle or ablation validation.
+
+Router v0.22.0 adds a validation gate for shadow comparison outputs:
+
+```powershell
+python -m src.router.shadow_decision_validation `
+  --comparison results/routing_context/shadow_decision_comparison.json `
+  --out results/routing_context/shadow_decision_validation.json `
+  --summary-out results/routing_context/shadow_decision_validation.csv
+```
+
+The gate checks sample count, decision churn, mean cost regression, quality
+regressions, coarse rate/time/energy regressions and unsafe energy provenance.
+It produces an audit decision (`accepted=true/false`) for the shadow comparison
+artifact only. A rejected candidate has no effect on the router, and an
+accepted candidate is still not consumed automatically.
 
 By default, executed router runs append to:
 

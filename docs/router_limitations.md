@@ -177,6 +177,13 @@ show that the calibrated choice is better; it only measures potential decision
 impact. Utility validation remains a future offline regret/oracle/ablation
 step.
 
+Router v0.22.0 adds `shadow_decision_validation`, a read-only gate over shadow
+comparison reports. The gate can reject candidates for insufficient decisions,
+excessive decision churn, mean cost regression, quality/rate/energy/time guard
+violations, or unsafe energy provenance. It does not enable automatic learning,
+automatic bundle consumption, or operational decision changes. A rejected
+candidate has no effect on the router.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
