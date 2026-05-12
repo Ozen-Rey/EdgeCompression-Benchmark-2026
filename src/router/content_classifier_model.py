@@ -40,7 +40,7 @@ def load_content_classifier_config(path: str) -> Dict[str, Any]:
     with p.open("r", encoding="utf-8") as f:
         config = json.load(f)
 
-    if config.get("model_type") != "knn_oracle_classifier":
+    if config.get("model_type", "knn_oracle_classifier") != "knn_oracle_classifier":
         raise ValueError("Only model_type='knn_oracle_classifier' is supported.")
 
     feature_set = str(config.get("feature_set", ""))
@@ -55,9 +55,11 @@ def load_content_classifier_config(path: str) -> Dict[str, Any]:
     if k <= 0:
         raise ValueError("Classifier k must be positive.")
 
-    training_rows = config.get("training_rows")
+    training_rows = config.get("training_rows") or config.get("training_csv")
     if not training_rows:
         raise ValueError("Classifier config requires training_rows.")
+
+    config["training_rows"] = training_rows
 
     fallback = str(config.get("fallback", "router"))
     if fallback != "router":
@@ -77,7 +79,7 @@ def _oracle_label_from_row(row: Dict[str, Any]) -> str:
 
 
 def load_training_rows_from_config(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    training_rows = str(config["training_rows"])
+    training_rows = str(config.get("training_rows") or config.get("training_csv"))
     pixel_features = config.get("pixel_features")
 
     if pixel_features:
@@ -89,6 +91,9 @@ def load_training_rows_from_config(config: Dict[str, Any]) -> List[Dict[str, Any
         rows = load_metadata_oracle_rows(training_rows)
 
         for row in rows:
+            if row.get("oracle_label"):
+                continue
+
             row["oracle_label"] = _oracle_label_from_row(row)
 
     if not rows:
@@ -154,7 +159,7 @@ def predict_content_classifier(
 
     report: Dict[str, Any] = {
         "enabled": enabled,
-        "model_type": config.get("model_type"),
+        "model_type": config.get("model_type", "knn_oracle_classifier"),
         "feature_set": feature_set,
         "k": k,
         "training_rows": config.get("training_rows"),

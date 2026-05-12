@@ -1,4 +1,6 @@
 from src.router.content_oracle_classifier_sweep import (
+    _build_lodo_neighbor_cache,
+    _build_loio_neighbor_cache,
     evaluate_leave_one_dataset_out,
     evaluate_leave_one_image_out,
     run_sweep,
@@ -160,6 +162,58 @@ def test_evaluate_leave_one_dataset_out_returns_one_decision_per_row():
     assert len(decisions) == len(rows)
     assert {d["evaluation_mode"] for d in decisions} == {"leave_one_dataset_out"}
     assert {d["fold_id"] for d in decisions} == {"A", "B"}
+
+
+def test_leave_one_image_out_neighbor_cache_matches_uncached_predictions():
+    rows = _toy_rows()
+    lookup = _toy_lookup()
+    cache = _build_loio_neighbor_cache(rows=rows, feature_set="pixel_no_source")
+
+    uncached = evaluate_leave_one_image_out(
+        rows=rows,
+        candidate_lookup=lookup,
+        feature_set="pixel_no_source",
+        k=3,
+        quality_floor=80.0,
+        global_baseline=("HEVC", "crf=15"),
+    )
+    cached = evaluate_leave_one_image_out(
+        rows=rows,
+        candidate_lookup=lookup,
+        feature_set="pixel_no_source",
+        k=3,
+        quality_floor=80.0,
+        global_baseline=("HEVC", "crf=15"),
+        neighbor_cache=cache,
+    )
+
+    assert cached == uncached
+
+
+def test_leave_one_dataset_out_neighbor_cache_matches_uncached_predictions():
+    rows = _toy_rows()
+    lookup = _toy_lookup()
+    cache = _build_lodo_neighbor_cache(rows=rows, feature_set="pixel_no_source")
+
+    uncached = evaluate_leave_one_dataset_out(
+        rows=rows,
+        candidate_lookup=lookup,
+        feature_set="pixel_no_source",
+        k=3,
+        quality_floor=80.0,
+        global_baseline=("HEVC", "crf=15"),
+    )
+    cached = evaluate_leave_one_dataset_out(
+        rows=rows,
+        candidate_lookup=lookup,
+        feature_set="pixel_no_source",
+        k=3,
+        quality_floor=80.0,
+        global_baseline=("HEVC", "crf=15"),
+        neighbor_cache=cache,
+    )
+
+    assert cached == uncached
 
 
 def test_run_sweep_produces_flat_summary_rows():

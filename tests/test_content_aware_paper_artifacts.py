@@ -47,7 +47,7 @@ def test_build_main_paper_table_formats_core_methods():
     table = build_main_paper_table(rows)
 
     assert len(table) == 2
-    assert table[0]["method"] == "Robust global baseline"
+    assert table[0]["method"] == "Baseline globale robusta"
     assert table[0]["mean_regret"] == "0.09047"
     assert table[1]["regret_reduction_percent"] == "100.0"
 
@@ -70,9 +70,9 @@ def test_build_overhead_paper_table_computes_ratios():
     table = build_overhead_paper_table(rows)
     by_component = {row["component"]: row for row in table}
 
-    assert by_component["Pixel feature extraction"]["mean_ms"] == "30.00"
-    assert by_component["Pixel feature extraction"]["ratio_vs_jpeg_global"] == "5.00"
-    assert by_component["Pixel feature extraction"]["ratio_vs_hevc_global"] == "0.10"
+    assert by_component["Feature pixel"]["mean_ms"] == "30.00"
+    assert by_component["Feature pixel"]["ratio_vs_jpeg_global"] == "5.00"
+    assert by_component["Feature pixel"]["ratio_vs_hevc_global"] == "0.10"
 
 
 def test_build_best_k_table_keeps_best_rows():

@@ -217,13 +217,13 @@ results/routing_context/v09_content_aware_benchmark_all_methods.csv
 
 Current paper table:
 
-| Method | Evaluation protocol | Deployment setting | Mean regret | Relative regret reduction | Accuracy | Fallback rate |
+| Metodo | Protocollo | Deployment | Regret medio | Riduzione relativa | Match oracle | Fallback |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| Robust global baseline | global coverage | source-agnostic | 0.09047 | 0.0000 | 0.03125 | 0.0000 |
-| Source-aware dataset majority policy | leave-one-out | batch known source | 0.01177 | 0.86995 | 0.77083 | 0.18750 |
-| Best source-agnostic kNN | leave-one-image-out | source-agnostic | 0.01167 | 0.87105 | 0.76042 | 0.20833 |
-| Best source-agnostic kNN | leave-one-dataset-out | source-agnostic | 0.02197 | 0.75716 | 0.57292 | 0.28125 |
-| Per-image oracle | oracle | not deployable | 0.00000 | 1.00000 | 1.00000 | 0.00000 |
+| Baseline globale robusta | global coverage | source-agnostic | 0.09047 | 0.0000 | 0.03125 | 0.0000 |
+| Policy source-aware | leave-one-out | batch con sorgente | 0.01177 | 0.86995 | 0.77083 | 0.18750 |
+| kNN source-agnostic | leave-one-image-out | source-agnostic | 0.01167 | 0.87105 | 0.76042 | 0.20833 |
+| kNN source-agnostic | leave-one-dataset-out | source-agnostic | 0.02197 | 0.75716 | 0.57292 | 0.28125 |
+| Oracle per immagine | oracle | non deployable | 0.00000 | 1.00000 | 1.00000 | 0.00000 |
 
 Interpretation:
 
@@ -236,14 +236,32 @@ Under the stricter leave-one-dataset-out protocol, the source-agnostic classifie
 
 ## Router Safety Mechanism
 
-Content-aware routing is never allowed to blindly override the quality guard.
+Content-aware routing is never allowed to blindly override the quality guard,
+that is, the robust quality constraint used by the R-D-E router.
 
 The decision logic is:
 
 1. Compute the normal admissible pool using the R-D-E router.
 2. Obtain a content-aware suggestion.
-3. If the suggestion is admissible, select it.
-4. Otherwise, fall back to the normal R-D-E router selection.
+3. Rank the admissible pool with the same score used by the router.
+4. Select the suggestion only if it is admissible and competitive according to
+   that ranking score.
+5. Otherwise, fall back to the normal R-D-E/system-aware router selection.
+
+In compact form, the ranking score is:
+
+```text
+J_rank(a) = J_RDE(a)                         if the system penalty is not applied
+J_rank(a) = J_RDE(a) + lambda_sys P_sys(a)   if the system penalty is applied
+```
+
+The selected action is therefore:
+
+```text
+a_sel = a_cont_hat(x)                 if a_cont_hat(x) is admissible and
+                                      competitive under J_rank
+a_sel = argmin_{a in A_adm} J_rank(a) otherwise
+```
 
 This ensures:
 
@@ -252,6 +270,14 @@ infeasible_rate = 0
 ```
 
 for the evaluated policies.
+
+The classifier therefore cannot bypass the quality guard, capability checks,
+hardware availability, source filtering, time constraints, or the system
+penalty. It only proposes a candidate inside the same decision process.
+
+Because the offline validation uses 96 images, the reported reductions should
+be read as prototypical evidence rather than as a definitive estimate of
+generalization on much larger industrial distributions.
 
 ## Reproducibility Scripts
 
@@ -284,11 +310,21 @@ image domain only
 kNN classifier baseline
 ```
 
+The content-aware router is implemented as a deployable prototype and is
+validated offline against the measured R-D-E operating points. The remaining
+gap is not the absence of a predictor, but the lack of an end-to-end online
+deployment where new content, new platforms and updated energy measurements
+are observed in the loop.
+
 The pixel feature extractor has non-negligible overhead compared with very fast codecs such as JPEG. Therefore, pixel features are most appropriate for batch routing, cached-feature pipelines, or cases where encoding cost is larger than feature extraction cost.
 
 The source-aware policy assumes a homogeneous batch/source label. This is realistic for offline datasets, archives, and controlled pipelines, but it is not always available in streaming production settings.
 
 The kNN classifier is intentionally simple. It establishes a baseline, not a final predictive model. Future work may evaluate decision trees, calibrated probabilistic classifiers, or direct R-D-E regression models.
+
+The model ablation is not meant to prove that kNN is definitively superior to
+more expressive supervised models. Its purpose is to verify that the
+content-aware benefit does not depend on an arbitrary classifier choice.
 
 ## Overhead and Deployment Choice
 
@@ -358,11 +394,17 @@ The router follows this order:
 4. Apply system-aware policy and system penalty.
 5. Apply the quality guard and define the admissible pool.
 6. Let the source-aware policy or source-agnostic classifier suggest a candidate.
-7. Accept the suggestion only if it is inside the admissible pool.
+7. Accept the suggestion only if it is inside the admissible pool and
+   competitive under the active ranking score.
 8. Otherwise, fall back to the standard R-D-E/system-aware decision.
 ```
 
 This means that the classifier cannot bypass quality constraints, system constraints, capability constraints, or source filtering.
+
+When the system penalty is active in apply mode, the active ranking key is
+`J_total = J_RDE + lambda_sys P_sys`; otherwise it is `J_RDE`. The
+content-aware suggestion is audited against the same ranking key used for the
+final router decision.
 
 The validation script:
 

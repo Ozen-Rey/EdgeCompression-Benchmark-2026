@@ -84,23 +84,33 @@ def _write_latex_table(
     headers: List[str],
     caption: str,
     label: str,
+    resize_to_textwidth: bool = False,
+    alignment: str | None = None,
 ) -> None:
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    alignment = "l" + "r" * (len(columns) - 1)
+    alignment = alignment or ("l" + "r" * (len(columns) - 1))
 
     lines = [
         r"\begin{table}[t]",
         r"\centering",
-        r"\small",
-        rf"\caption{{{_latex_escape(caption)}}}",
-        rf"\label{{{_latex_escape(label)}}}",
-        rf"\begin{{tabular}}{{{alignment}}}",
-        r"\toprule",
-        " & ".join(_latex_escape(h) for h in headers) + r" \\",
-        r"\midrule",
+        r"\scriptsize",
+        rf"\caption{{{caption}}}",
+        rf"\label{{{label}}}",
     ]
+
+    if resize_to_textwidth:
+        lines.append(r"\resizebox{\textwidth}{!}{%")
+
+    lines.extend(
+        [
+            rf"\begin{{tabular}}{{{alignment}}}",
+            r"\toprule",
+            " & ".join(headers) + r" \\",
+            r"\midrule",
+        ]
+    )
 
     for row in rows:
         lines.append(
@@ -111,21 +121,24 @@ def _write_latex_table(
         [
             r"\bottomrule",
             r"\end{tabular}",
-            r"\end{table}",
-            "",
         ]
     )
+
+    if resize_to_textwidth:
+        lines.append(r"}")
+
+    lines.extend([r"\end{table}", ""])
 
     out.write_text("\n".join(lines), encoding="utf-8")
 
 
 def build_main_paper_table(rows: List[Dict[str, str]]) -> List[Dict[str, Any]]:
     friendly_names = {
-        "robust_global_baseline": "Robust global baseline",
-        "source_aware_dataset_majority_policy": "Source-aware majority",
-        "best_source_agnostic_knn_leave_one_image_out": "Source-agnostic kNN",
-        "best_source_agnostic_knn_leave_one_dataset_out": "Source-agnostic kNN",
-        "per_image_oracle": "Per-image oracle",
+        "robust_global_baseline": "Baseline globale robusta",
+        "source_aware_dataset_majority_policy": "Policy source-aware",
+        "best_source_agnostic_knn_leave_one_image_out": "kNN source-agnostic",
+        "best_source_agnostic_knn_leave_one_dataset_out": "kNN source-agnostic",
+        "per_image_oracle": "Oracle per immagine",
     }
 
     protocol_names = {
@@ -138,8 +151,8 @@ def build_main_paper_table(rows: List[Dict[str, str]]) -> List[Dict[str, Any]]:
 
     deployment_names = {
         "source_agnostic": "Source-agnostic",
-        "batch_known_source": "Known-source batch",
-        "not_deployable": "Non-deployable",
+        "batch_known_source": "Batch con sorgente",
+        "not_deployable": "Non deployable",
     }
 
     out = []
@@ -196,12 +209,12 @@ def build_overhead_paper_table(rows: List[Dict[str, str]]) -> List[Dict[str, Any
     hevc_global = _to_float(by_case.get("hevc_crf15_global", {}).get("mean_ms"))
 
     wanted = [
-        ("pixel_features_long_side_256", "Pixel feature extraction", "Long side 256"),
-        ("metadata_no_source", "Metadata-only features", "Header / known metadata"),
-        ("jpeg_q85_tecnick", "JPEG q=85 encode", "Tecnick"),
-        ("jpeg_q85_global", "JPEG q=85 encode", "Global"),
-        ("jxl_d1_global", "JXL d=1.0 encode", "Global"),
-        ("hevc_crf15_global", "HEVC crf=15 encode", "Global"),
+        ("pixel_features_long_side_256", "Feature pixel", "Lato lungo 256"),
+        ("metadata_no_source", "Feature metadata-only", "Header / metadati noti"),
+        ("jpeg_q85_tecnick", "Codifica JPEG q=85", "Tecnick"),
+        ("jpeg_q85_global", "Codifica JPEG q=85", "Globale"),
+        ("jxl_d1_global", "Codifica JXL d=1.0", "Globale"),
+        ("hevc_crf15_global", "Codifica HEVC crf=15", "Globale"),
     ]
 
     out = []
@@ -328,9 +341,14 @@ def _plot_k_sensitivity(rows: List[Dict[str, str]], out_dir: str) -> None:
 
             ax.plot(xs, ys, marker="o", label=feature_set)
 
-        ax.set_title(f"k-sensitivity ({protocol})")
+        protocol_label = {
+            "leave_one_image_out": "LOIO",
+            "leave_one_dataset_out": "LODO",
+        }.get(protocol, protocol)
+
+        ax.set_title(f"Sensibilita rispetto a k ({protocol_label})")
         ax.set_xlabel("k")
-        ax.set_ylabel("Mean regret")
+        ax.set_ylabel("Regret medio")
         ax.legend()
         fig.tight_layout()
         fig.savefig(out / f"v09_k_sensitivity_{protocol}.png", dpi=200)
@@ -347,13 +365,19 @@ def _plot_oracle_distribution(oracle_summary_csv: str, out_path: str) -> None:
 
     selected = [row for row in rows if row.get("section") == "oracle_count"]
 
-    labels = [row["key"] for row in selected]
-    values = [int(float(row["value"])) for row in selected]
+    labels = [
+        row.get("key") or row.get("label") or row.get("codec") or "unknown"
+        for row in selected
+    ]
+    values = [
+        int(float(row.get("value") or row.get("count") or 0))
+        for row in selected
+    ]
 
     fig, ax = plt.subplots(figsize=(7.0, 4.5))
     ax.bar(labels, values)
-    ax.set_title("Per-image oracle distribution")
-    ax.set_ylabel("Images")
+    ax.set_title("Distribuzione dell'oracle per immagine")
+    ax.set_ylabel("Immagini")
     ax.tick_params(axis="x", rotation=20)
     fig.tight_layout()
 
@@ -409,16 +433,18 @@ def build_artifacts(
             "fallback_percent",
         ],
         headers=[
-            "Method",
-            "Protocol",
+            "Metodo",
+            "Protocollo",
             "Deployment",
-            "Mean regret",
-            "Reduction (\\%)",
-            "Oracle match (\\%)",
+            "Regret medio",
+            "Riduz. (\\%)",
+            "Match oracle (\\%)",
             "Fallback (\\%)",
         ],
-        caption="Content-aware R-D-E routing benchmark.",
+        caption="Benchmark del routing R-D-E content-aware.",
         label="tab:content-aware-rde",
+        resize_to_textwidth=True,
+        alignment="lllrrrr",
     )
 
     _write_latex_table(
@@ -433,15 +459,17 @@ def build_artifacts(
             "ratio_vs_hevc_global",
         ],
         headers=[
-            "Component",
-            "Scope",
-            "Mean ms",
+            "Componente",
+            "Ambito",
+            "Media ms",
             "P90 ms",
             "vs JPEG",
             "vs HEVC",
         ],
-        caption="Overhead and encoding-time references for content-aware routing.",
+        caption="Overhead e tempi di codifica di riferimento per il routing content-aware.",
         label="tab:content-aware-overhead",
+        resize_to_textwidth=True,
+        alignment="llrrrr",
     )
 
     _write_latex_table(
@@ -457,16 +485,18 @@ def build_artifacts(
             "fallback_percent",
         ],
         headers=[
-            "Protocol",
+            "Protocollo",
             "Feature set",
-            "$k$",
-            "Mean regret",
-            "Reduction (\\%)",
-            "Oracle match (\\%)",
+            r"\(k\)",
+            "Regret medio",
+            "Riduz. (\\%)",
+            "Match oracle (\\%)",
             "Fallback (\\%)",
         ],
-        caption="Best kNN settings under each evaluation protocol.",
+        caption="Migliori configurazioni kNN per ciascun protocollo di valutazione.",
         label="tab:content-aware-best-k",
+        resize_to_textwidth=True,
+        alignment="llrrrrr",
     )
 
     if make_plots:
@@ -489,8 +519,8 @@ def build_artifacts(
             rows=plot_rows,
             x_key="method",
             y_key="mean_regret_raw",
-            title="Mean regret by method",
-            ylabel="Mean regret",
+            title="Regret medio per metodo",
+            ylabel="Regret medio",
             out_path=str(fig_dir / "v09_mean_regret_methods.png"),
         )
 
@@ -498,8 +528,8 @@ def build_artifacts(
             rows=plot_rows,
             x_key="method",
             y_key="reduction_raw",
-            title="Relative regret reduction by method",
-            ylabel="Relative reduction",
+            title="Riduzione relativa del regret per metodo",
+            ylabel="Riduzione relativa",
             out_path=str(fig_dir / "v09_relative_regret_reduction_methods.png"),
         )
 
@@ -516,8 +546,8 @@ def build_artifacts(
             rows=overhead_plot_rows,
             x_key="component",
             y_key="mean_ms_raw",
-            title="Feature overhead and encoding-time references",
-            ylabel="Mean time (ms)",
+            title="Overhead delle feature e tempi di codifica",
+            ylabel="Tempo medio (ms)",
             out_path=str(fig_dir / "v09_overhead_vs_encoding.png"),
         )
 

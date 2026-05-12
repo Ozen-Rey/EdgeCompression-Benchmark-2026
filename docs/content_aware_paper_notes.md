@@ -56,7 +56,13 @@ Pixel features remain useful for offline analysis, cached-feature pipelines, and
 
 The content-aware layer is advisory, not authoritative.
 
-A content-aware prediction can only be selected if the predicted codec/configuration is inside the admissible pool after all active constraints have been applied. If it is not admissible, the router falls back to the standard R-D-E/system-aware decision.
+A content-aware prediction can only be selected if the predicted
+codec/configuration is inside the admissible pool after all active constraints
+have been applied and remains competitive under the active ranking score. If
+the system penalty is disabled, the ranking score is `J_RDE`; if the system
+penalty is applied, the ranking score is `J_total = J_RDE + lambda_sys P_sys`.
+If the prediction is not admissible or not competitive, the router falls back
+to the standard R-D-E/system-aware decision.
 
 The validation script checks both cases:
 
@@ -80,11 +86,11 @@ Tecnick source-filtered pool:
 
 ## Suggested Paper Figures
 
-- Mean regret by method.
-- Relative regret reduction by method.
-- k-sensitivity under LOIO and LODO.
+- Regret medio per metodo.
+- Riduzione relativa del regret per metodo.
+- Sensibilita rispetto a k sotto LOIO e LODO.
 - Oracle codec/configuration distribution.
-- Feature extraction overhead vs encoding time.
+- Overhead delle feature rispetto al tempo di codifica.
 
 ## Suggested Paper Tables
 
@@ -97,3 +103,8 @@ Tecnick source-filtered pool:
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.
 
 The strongest deployable result is not that pixel features solve the task, but that a cheap metadata-only classifier already captures much of the routing opportunity.
+
+The model ablation should be framed as a robustness check: it does not claim a
+definitive superiority of kNN over more complex supervised models, but shows
+that the content-aware gain is not an artifact of a single arbitrary
+classifier.
