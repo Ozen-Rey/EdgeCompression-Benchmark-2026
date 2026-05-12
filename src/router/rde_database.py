@@ -483,6 +483,7 @@ def select_best_rde(
 ) -> Dict[str, Any]:
     safe_pool: List[RDEPoint] = []
     near_pool: List[RDEPoint] = []
+    quality_guard_excluded: List[RDEPoint] = []
 
     excluded_by_base_constraints = 0
     excluded_by_quality_guard = 0
@@ -500,6 +501,7 @@ def select_best_rde(
             continue
 
         excluded_by_quality_guard += 1
+        quality_guard_excluded.append(p)
 
         if (
             allow_degraded_fallback
@@ -560,6 +562,7 @@ def select_best_rde(
         }
 
     scored = []
+    system_penalty_excluded: List[RDEPoint] = []
 
     for p in active_pool:
         if normalization_profile is not None:
@@ -598,6 +601,7 @@ def select_best_rde(
             and system_penalty.get("hard_excluded", False)
         ):
             excluded_by_system_penalty += 1
+            system_penalty_excluded.append(p)
             continue
 
         ranking_cost = j_total if system_penalty_apply else cost
@@ -656,6 +660,45 @@ def select_best_rde(
         )
 
     scored.sort(key=lambda x: x["ranking_cost"])
+
+    for i, item in enumerate(scored):
+        item["rank"] = i + 1
+        item["candidate_status"] = "router_scored"
+        item["cost_provenance"] = "router_scored"
+
+    active_pool_ids = frozenset(id(p) for p in active_pool)
+    unscored_candidate_pool: List[Dict[str, Any]] = []
+    for p in quality_guard_excluded:
+        if id(p) not in active_pool_ids:
+            q_v = _get_quality_stat(p, quality_constraint_stat)
+            unscored_candidate_pool.append({
+                "codec": p.codec,
+                "config": p.config,
+                "rate": p.rate,
+                "quality": p.quality,
+                "energy": p.energy,
+                "time_ms": p.time_ms,
+                "candidate_status": "infeasible_quality_guard",
+                "reason": "quality_guard_violation",
+                "cost_provenance": "unavailable_filtered",
+                "quality_constraint_stat": quality_constraint_stat,
+                "quality_constraint_value": q_v,
+            })
+    for p in system_penalty_excluded:
+        q_v = _get_quality_stat(p, quality_constraint_stat)
+        unscored_candidate_pool.append({
+            "codec": p.codec,
+            "config": p.config,
+            "rate": p.rate,
+            "quality": p.quality,
+            "energy": p.energy,
+            "time_ms": p.time_ms,
+            "candidate_status": "hard_excluded_system_penalty",
+            "reason": "hard_excluded_by_system_penalty",
+            "cost_provenance": "unavailable_filtered",
+            "quality_constraint_stat": quality_constraint_stat,
+            "quality_constraint_value": q_v,
+        })
 
     ranking_by_system_penalty = (
         system_penalty_apply and system_penalty_fn is not None
@@ -788,6 +831,8 @@ def select_best_rde(
             "cost_formula": "J_RDE = w_R*R_norm + w_E*E_norm + w_D*D_norm",
         },
         "top_k": scored[:top_k],
+        "scored_candidate_pool": scored,
+        "unscored_candidate_pool": unscored_candidate_pool,
         "num_points_total": len(points),
         "num_points_admissible": len(active_pool),
         "num_points_safe": len(safe_pool),

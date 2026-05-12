@@ -182,7 +182,7 @@ def build_decision_receipt(report: dict[str, Any]) -> dict[str, Any]:
         "artifact_type": "router_decision_receipt",
         "mode": "decision_receipt",
         "router_version": ROUTER_VERSION,
-        "receipt_schema_version": "0.25.0",
+        "receipt_schema_version": "0.29.0",
         "created_at_utc": _utc_now(),
         "replay": {
             "argv": sanitize_replay_argv(argv),
@@ -195,6 +195,7 @@ def build_decision_receipt(report: dict[str, Any]) -> dict[str, Any]:
         "weights": report.get("weights"),
         "constraints": report.get("constraints"),
         "normalization": report.get("normalization"),
+        "normalization_audit": report.get("normalization_audit"),
         "calibration_bundle": {
             key: value
             for key, value in (report.get("calibration_bundle", {}) or {}).items()

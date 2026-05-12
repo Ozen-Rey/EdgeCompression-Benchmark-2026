@@ -185,6 +185,57 @@ def _build_energy_provenance_report(
     }
 
 
+def _build_normalization_audit(
+    normalization_report: Dict[str, Any],
+    normalization_profile: Optional[Dict[str, Any]],
+    normalization_reference: Dict[str, Any],
+    quality_metric: Optional[str],
+) -> Dict[str, Any]:
+    mode = normalization_report.get("mode", "runtime")
+    source = normalization_report.get("source")
+    computed_at_runtime = not normalization_report.get("enabled", False)
+
+    audit: Dict[str, Any] = {
+        "mode": mode,
+        "scales_source": source or "computed_at_runtime",
+        "computed_at_runtime": computed_at_runtime,
+        "scope": normalization_report.get("scope"),
+        "comparability": normalization_report.get("comparability"),
+        "quality_metric": quality_metric,
+        "quality_direction": "higher_is_better",
+        "num_reference_points": normalization_reference.get("num_reference_points"),
+    }
+
+    if normalization_profile is not None:
+        scales = normalization_profile.get("scales", {})
+        transforms = normalization_profile.get("transforms", {})
+        audit.update({
+            "rate_scale": transforms.get("rate", "log10"),
+            "rate_min": (scales.get("rate") or {}).get("min"),
+            "rate_max": (scales.get("rate") or {}).get("max"),
+            "energy_scale": transforms.get("energy", "log10"),
+            "energy_min": (scales.get("energy") or {}).get("min"),
+            "energy_max": (scales.get("energy") or {}).get("max"),
+            "quality_scale": transforms.get("quality", "linear"),
+            "quality_min": (scales.get("quality") or {}).get("min"),
+            "quality_max": (scales.get("quality") or {}).get("max"),
+        })
+    else:
+        audit.update({
+            "rate_scale": normalization_reference.get("rate_scale", "log10"),
+            "rate_min": normalization_reference.get("rate_min"),
+            "rate_max": normalization_reference.get("rate_max"),
+            "energy_scale": normalization_reference.get("energy_scale", "log10"),
+            "energy_min": normalization_reference.get("energy_min"),
+            "energy_max": normalization_reference.get("energy_max"),
+            "quality_scale": normalization_reference.get("quality_scale", "linear"),
+            "quality_min": normalization_reference.get("quality_min"),
+            "quality_max": normalization_reference.get("quality_max"),
+        })
+
+    return audit
+
+
 def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
     total = w_e + w_r + w_d
 
@@ -618,6 +669,16 @@ def _make_report(
             "scope": normalization_scope,
             "num_reference_points": normalization_reference_count,
         },
+        "normalization_audit": _build_normalization_audit(
+            normalization_report=getattr(
+                args,
+                "_normalization_report",
+                {"mode": "runtime", "enabled": False},
+            ),
+            normalization_profile=getattr(args, "_normalization_profile", None),
+            normalization_reference=decision.get("normalization_reference", {}),
+            quality_metric=getattr(args, "quality_metric", None),
+        ),
         "normalization_profile": getattr(
             args,
             "_normalization_report",
