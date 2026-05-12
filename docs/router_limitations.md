@@ -95,6 +95,18 @@ normalization, calibration, or benchmark CSV files. Energy error metrics are
 computed only for rows with usable total energy; partial GPU-only telemetry is
 reported as provenance but excluded from total-energy error calculations.
 
+Router v0.14.0 adds feedback-derived calibration proposals, but only in shadow
+mode. The proposal JSON/CSV files can summarize observed rate, time and usable
+total-energy scale factors from online feedback, yet the router does not load
+or apply them automatically. This is not online learning: ranking,
+normalization, `J_RDE`, `calibration_apply`, benchmark CSVs and content-aware
+logic remain unchanged unless a future release explicitly wires proposal files
+as an opt-in input.
+
+Energy proposals follow the same provenance rule as the router. A GPU-only
+Windows NVML observation is useful telemetry, but it is partial and is not used
+to derive a total pipeline `energy_scale`.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

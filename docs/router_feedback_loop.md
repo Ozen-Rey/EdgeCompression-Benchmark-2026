@@ -18,6 +18,7 @@ offline benchmark -> router decision
 local calibration -> controlled local adaptation
 online feedback -> append-only deployment trace
 feedback analysis -> read-only prediction audit
+feedback calibration proposal -> shadow correction proposal
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -35,6 +36,30 @@ python -m src.router.feedback_analysis `
 The analyzer produces summary JSON/CSV files, per-codec aggregates and an error
 row extract. It audits prediction error for rate, time and energy, but it does
 not feed results back into the router. There is no online learning in v0.13.0.
+
+Router v0.14.0 adds shadow feedback-derived calibration proposals:
+
+```powershell
+python -m src.router.feedback_calibration_proposal `
+  --feedback results/routing_context/online_feedback.csv `
+  --out results/routing_context/feedback_calibration_proposal.json `
+  --summary-out results/routing_context/feedback_calibration_proposal.csv `
+  --min-samples 3
+```
+
+The distinction is explicit:
+
+```text
+feedback_analysis = audit read-only
+feedback_calibration_proposal = shadow correction proposal
+calibration_apply = explicit opt-in only
+router decision = unchanged unless a future release wires proposals explicitly
+```
+
+The proposal file estimates per-codec/config scale factors from observed
+feedback, but it is not loaded by the router and does not modify benchmark CSVs,
+normalization, ranking or `J_RDE`. It is a review artifact for future controlled
+calibration, not online learning.
 
 By default, executed router runs append to:
 
@@ -61,3 +86,8 @@ not total pipeline energy and must not be used to overwrite benchmark energy.
 The feedback analyzer follows the same rule: energy prediction errors are
 computed only when `energy_usable_for_total=true` and `local_energy_j` is
 numeric.
+
+The feedback calibration proposal follows the same energy rule. It computes
+`energy_scale` only from successful rows with numeric predicted energy, numeric
+`local_energy_j` and `energy_usable_for_total=true`. GPU-only readings are
+ignored for total-energy scale proposals.
