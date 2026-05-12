@@ -72,6 +72,23 @@ Windows Intel PCM detection is kept as a disabled skeleton until per-command
 package-energy parsing is implemented and validated. Windows `powercfg` is
 diagnostic-only and is not used as Joule telemetry for calibration or routing.
 
+## Online feedback loop
+
+Router v0.12.0 adds append-only online feedback logging for runs executed with
+`--execute`. This feedback is observational only. It records what the router
+predicted, what was observed during execution, and the energy provenance of the
+execution measurement.
+
+The feedback CSV does not update benchmark CSV files, does not update
+calibration JSON files, and is not used as an input to `J_RDE` in this release.
+Offline benchmark values, controlled local calibration, and online deployment
+traces remain separate data sources.
+
+Local execution energy in feedback can be total, partial, or unavailable. A
+Windows NVML GPU-only reading remains partial (`energy_scope=gpu`,
+`energy_usable_for_total=false`) and is not comparable with total pipeline
+energy for CPU-side codecs.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
