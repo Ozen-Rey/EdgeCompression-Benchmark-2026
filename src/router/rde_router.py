@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
+    from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from .calibration_apply import apply_local_calibration
     from .codec_capabilities import (
         build_execution_plan,
@@ -54,6 +55,7 @@ try:
     )
     from .system_probe import probe_system
 except ImportError:
+    from version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from calibration_apply import apply_local_calibration
     from codec_capabilities import (
         build_execution_plan,
@@ -98,6 +100,20 @@ except ImportError:
         parse_system_policy_simulation,
     )
     from system_probe import probe_system
+
+
+def _build_energy_provenance_report() -> Dict[str, Any]:
+    return {
+        "local_energy_measurement": "not_yet_hardware_measured",
+        "current_method": "benchmark_energy_or_time_scaled_estimate",
+        "hardware_backends": [],
+        "fallback": "benchmark_energy_scaled_by_time_ratio_when_calibration_is_used",
+        "warning": (
+            "Energy values are currently benchmark-derived or estimated unless "
+            "explicitly tagged otherwise. Hardware energy backends are introduced "
+            "in router v0.10."
+        ),
+    }
 
 
 def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
@@ -474,12 +490,15 @@ def _make_report(
         }
 
     return {
-        "router_version": "0.7-level0-static-csv-quality-guard",
+        "router_version": ROUTER_VERSION,
+        "feature_level": dict(FEATURE_LEVEL),
+        "domain_support": dict(DOMAIN_SUPPORT),
         "domain": args.domain,
         "profile": profile_name,
         "weight_source": weight_source,
         "context_policy": context_policy,
         "calibration": calibration_report,
+        "energy_provenance": _build_energy_provenance_report(),
         "codec_registry": getattr(
             args,
             "_codec_registry_report",
@@ -1694,7 +1713,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--content-policy-mode",
         default="report-only",
         choices=["report-only", "apply"],
-        help="Content policy mode. v0.9.4.2 supports report-only integration.",
+        help="Content policy mode: report-only or safe apply integration.",
     )
 
     parser.add_argument(
@@ -1743,7 +1762,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--content-classifier-mode",
         default="report-only",
         choices=["report-only", "apply"],
-        help="Content classifier mode. v0.9.7.2 supports report-only integration.",
+        help="Content classifier mode: report-only or safe apply integration.",
     )
 
     parser.add_argument(

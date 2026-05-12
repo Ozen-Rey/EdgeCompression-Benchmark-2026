@@ -28,3 +28,23 @@ The router reports this explicitly through:
   "not_calibrated": ["quality"]
 }
 ```
+
+## Energy measurement provenance
+
+In router v0.9.1, energy values used by the R-D-E decision layer are loaded
+from benchmark CSV files or obtained through local calibration by time-scaling
+benchmark energy. Therefore, locally calibrated energy should be interpreted as
+an estimate, not as a direct hardware telemetry measurement.
+
+Direct local hardware energy backends are planned for v0.10. The intended
+backend hierarchy is:
+
+1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
+2. Windows NVIDIA GPU: NVML/Zeus when available, with nvidia-smi sampling as fallback.
+3. Windows AMD CPU: AMD uProf CLI when available.
+4. Windows Intel CPU: Intel PCM when available.
+5. Fallback: calibrated time-scaling estimator.
+
+All future local energy values should be tagged with explicit provenance fields
+such as `energy_backend`, `energy_method`, `energy_is_measured`, and
+`energy_quality`.

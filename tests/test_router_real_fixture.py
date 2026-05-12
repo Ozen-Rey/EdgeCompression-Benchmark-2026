@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from src.router.rde_router import main
+from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
 
 
 def _tmp_path(name: str) -> Path:
@@ -52,3 +53,14 @@ def test_router_end_to_end_on_real_small_image_fixture():
     assert selected["codec"] == "HEVC"
     assert selected["config"] == "crf=15"
     assert report["decision"]["decision_mode"] == "safe"
+    assert report["router_version"] == ROUTER_VERSION
+    assert report["feature_level"] == FEATURE_LEVEL
+    assert report["domain_support"] == DOMAIN_SUPPORT
+    assert (
+        report["energy_provenance"]["local_energy_measurement"]
+        == "not_yet_hardware_measured"
+    )
+    assert (
+        report["energy_provenance"]["current_method"]
+        == "benchmark_energy_or_time_scaled_estimate"
+    )

@@ -7,6 +7,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+try:
+    from src.router.version import ROUTER_VERSION
+except ImportError:
+    from version import ROUTER_VERSION
+
 
 def load_experiment_suite(path: str) -> Dict[str, Any]:
     p = Path(path)
@@ -283,7 +288,8 @@ def run_experiment_suite(
         write_summary_csv(summary_rows, summary_csv)
 
     return {
-        "version": "0.7",
+        "version": ROUTER_VERSION,
+        "router_version": ROUTER_VERSION,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "suite_path": suite_path,
         "base_config": base_config,
