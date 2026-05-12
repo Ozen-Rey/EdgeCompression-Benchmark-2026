@@ -93,6 +93,7 @@ v0.19 rde_router --calibration-bundle-manifest: explicit verified bundle input
 v0.20 calibration_impact_audit: read-only decision impact audit
 v0.21 shadow_decision_comparison: offline baseline vs calibrated what-if
 v0.22 shadow_decision_validation: read-only shadow acceptance gate
+v0.23 rde_router --calibration-bundle-validation: explicit validated consumption
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -210,6 +211,22 @@ regressions, coarse rate/time/energy regressions and unsafe energy provenance.
 It produces an audit decision (`accepted=true/false`) for the shadow comparison
 artifact only. A rejected candidate has no effect on the router, and an
 accepted candidate is still not consumed automatically.
+
+Router v0.23.0 adds an optional validation requirement when consuming a bundle:
+
+```powershell
+python -m src.router.rde_router `
+  --csv results/routing_context/original.csv `
+  --calibration-bundle-manifest results/routing_context/calibrated_bundle_manifest.json `
+  --calibration-bundle-validation results/routing_context/shadow_decision_validation.json
+```
+
+Without `--calibration-bundle-validation`, bundle consumption behaves as in
+v0.19. With the flag, the named validation report must have
+`mode=shadow_decision_validation_only` and `accepted=true`; rejected, missing or
+malformed validation reports block bundle consumption. The router still performs
+no automatic discovery and does not read feedback, proposal, promotion,
+comparison or validation artifacts unless the user names the relevant file.
 
 By default, executed router runs append to:
 

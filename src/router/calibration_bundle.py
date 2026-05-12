@@ -39,6 +39,20 @@ def _load_manifest(path: str | Path) -> dict[str, Any]:
     return data
 
 
+def _load_json_object(path: str | Path, *, label: str) -> dict[str, Any]:
+    json_path = Path(path)
+    if not json_path.exists():
+        raise ValueError(f"{label} not found: {json_path}")
+
+    with json_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} must contain a JSON object.")
+
+    return data
+
+
 def validate_calibration_bundle_manifest(path: str | Path) -> dict[str, Any]:
     """Validate a promoted calibration bundle manifest and its output CSV hash."""
 
@@ -111,4 +125,64 @@ def validate_calibration_bundle_manifest(path: str | Path) -> dict[str, Any]:
         "router_version": manifest.get("router_version"),
         "created_at_utc": manifest.get("created_at_utc"),
         "manifest": manifest,
+    }
+
+
+def validate_calibration_bundle_validation(path: str | Path) -> dict[str, Any]:
+    """Validate an explicit shadow decision validation report for bundle use."""
+
+    validation_path = Path(path)
+    validation = _load_json_object(
+        validation_path,
+        label="Calibration bundle validation",
+    )
+
+    mode = _require_key(validation, "mode", label="validation mode")
+    if mode != "shadow_decision_validation_only":
+        raise ValueError(
+            "Unsupported calibration bundle validation mode: "
+            f"{mode!r}"
+        )
+
+    accepted = _require_key(
+        validation,
+        "accepted",
+        label="validation accepted flag",
+    )
+    if not isinstance(accepted, bool):
+        raise ValueError(
+            "Calibration bundle validation accepted must be a boolean."
+        )
+
+    rejection_reasons = _require_key(
+        validation,
+        "rejection_reasons",
+        label="validation rejection reasons",
+    )
+    if not isinstance(rejection_reasons, list):
+        raise ValueError(
+            "Calibration bundle validation rejection_reasons must be a list."
+        )
+
+    for key in (
+        "decision_count",
+        "changed_decision_count",
+        "decision_churn_rate",
+        "relative_cost_improvement",
+    ):
+        _require_key(validation, key, label="validation metadata")
+
+    return {
+        "enabled": True,
+        "validation_path": str(validation_path),
+        "accepted": accepted,
+        "mode": mode,
+        "rejection_reasons": list(rejection_reasons),
+        "decision_count": validation.get("decision_count"),
+        "changed_decision_count": validation.get("changed_decision_count"),
+        "decision_churn_rate": validation.get("decision_churn_rate"),
+        "relative_cost_improvement": validation.get(
+            "relative_cost_improvement"
+        ),
+        "source": "explicit_shadow_decision_validation",
     }

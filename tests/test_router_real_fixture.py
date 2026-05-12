@@ -53,6 +53,34 @@ def _write_bundle_manifest(path: Path, calibrated_csv: Path, *, hash_value: str 
     )
 
 
+def _write_bundle_validation(path: Path, *, accepted: bool = True) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "mode": "shadow_decision_validation_only",
+                "router_version": "0.22.0",
+                "comparison": "shadow_decision_comparison.json",
+                "accepted": accepted,
+                "decision_count": 3,
+                "changed_decision_count": 1,
+                "decision_churn_rate": 1 / 3,
+                "mean_baseline_cost": 1.0,
+                "mean_candidate_cost": 0.9,
+                "mean_delta_cost": -0.1,
+                "relative_cost_improvement": 0.1,
+                "rejection_reasons": []
+                if accepted
+                else ["candidate_cost_regression"],
+                "acceptance_reasons": ["candidate_cost_not_regressed"]
+                if accepted
+                else [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_router_end_to_end_on_real_small_image_fixture():
     fixture = (
         Path(__file__).resolve().parent
@@ -106,6 +134,7 @@ def test_router_end_to_end_on_real_small_image_fixture():
     assert report["energy_provenance"]["energy_backend"] == "benchmark_csv"
     assert report["energy_provenance"]["energy_is_measured"] is False
     assert report["calibration_bundle"] == {"enabled": False}
+    assert report["calibration_bundle_validation"] == {"enabled": False}
 
 
 def test_router_with_valid_bundle_reports_bundle_provenance():
@@ -162,6 +191,298 @@ def test_router_with_valid_bundle_reports_bundle_provenance():
     assert bundle["energy_policy"] == "usable_total_only"
     assert bundle["source"] == "explicit_calibration_bundle_manifest"
     assert report["csv"] == str(calibrated_csv)
+    assert report["calibration_bundle_validation"] == {"enabled": False}
+
+
+def test_router_with_validated_bundle_reports_validation_provenance():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("validated_bundle_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = _tmp_path("validated_bundle_manifest.json")
+    validation = _tmp_path("validated_bundle_validation.json")
+    _write_bundle_manifest(manifest, calibrated_csv)
+    _write_bundle_validation(validation, accepted=True)
+    out_path = _tmp_path("validated_bundle_report.json")
+
+    main(
+        [
+            "--csv",
+            str(fixture),
+            "--calibration-bundle-manifest",
+            str(manifest),
+            "--calibration-bundle-validation",
+            str(validation),
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--time-col",
+            "time_ms",
+            "--available-codecs",
+            "JPEG,JXL,HEVC",
+            "--quality-target",
+            "very-high",
+            "--quality-floor",
+            "90",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    report = json.loads(out_path.read_text(encoding="utf-8"))
+    validation_report = report["calibration_bundle_validation"]
+
+    assert validation_report["enabled"] is True
+    assert validation_report["accepted"] is True
+    assert validation_report["mode"] == "shadow_decision_validation_only"
+    assert validation_report["validation_path"] == str(validation)
+    assert validation_report["rejection_reasons"] == []
+    assert validation_report["decision_count"] == 3
+    assert validation_report["changed_decision_count"] == 1
+    assert validation_report["decision_churn_rate"] == 1 / 3
+    assert validation_report["relative_cost_improvement"] == 0.1
+    assert report["csv"] == str(calibrated_csv)
+
+
+def test_router_rejects_bundle_with_rejected_validation():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("rejected_validation_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = _tmp_path("rejected_validation_manifest.json")
+    validation = _tmp_path("rejected_validation.json")
+    _write_bundle_manifest(manifest, calibrated_csv)
+    _write_bundle_validation(validation, accepted=False)
+
+    with pytest.raises(ValueError, match="validation was not accepted"):
+        main(
+            [
+                "--csv",
+                str(fixture),
+                "--calibration-bundle-manifest",
+                str(manifest),
+                "--calibration-bundle-validation",
+                str(validation),
+                "--codec-col",
+                "codec",
+                "--config-col",
+                "param",
+                "--rate-col",
+                "bpp",
+                "--quality-col",
+                "ssimulacra2",
+                "--energy-col",
+                "energy_per_image_j",
+            ]
+        )
+
+
+def test_router_rejects_missing_or_malformed_bundle_validation():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("malformed_validation_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = _tmp_path("malformed_validation_manifest.json")
+    _write_bundle_manifest(manifest, calibrated_csv)
+
+    with pytest.raises(ValueError, match="validation not found"):
+        main(
+            [
+                "--csv",
+                str(fixture),
+                "--calibration-bundle-manifest",
+                str(manifest),
+                "--calibration-bundle-validation",
+                str(_tmp_path("missing_validation.json")),
+                "--codec-col",
+                "codec",
+                "--config-col",
+                "param",
+                "--rate-col",
+                "bpp",
+                "--quality-col",
+                "ssimulacra2",
+                "--energy-col",
+                "energy_per_image_j",
+            ]
+        )
+
+    malformed = _tmp_path("malformed_validation.json")
+    malformed.write_text(json.dumps({"accepted": True}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing"):
+        main(
+            [
+                "--csv",
+                str(fixture),
+                "--calibration-bundle-manifest",
+                str(manifest),
+                "--calibration-bundle-validation",
+                str(malformed),
+                "--codec-col",
+                "codec",
+                "--config-col",
+                "param",
+                "--rate-col",
+                "bpp",
+                "--quality-col",
+                "ssimulacra2",
+                "--energy-col",
+                "energy_per_image_j",
+            ]
+        )
+
+
+def test_router_rejects_validation_without_bundle_manifest():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    validation = _tmp_path("validation_without_bundle.json")
+    _write_bundle_validation(validation, accepted=True)
+
+    with pytest.raises(ValueError, match="requires --calibration-bundle-manifest"):
+        main(
+            [
+                "--csv",
+                str(fixture),
+                "--calibration-bundle-validation",
+                str(validation),
+                "--codec-col",
+                "codec",
+                "--config-col",
+                "param",
+                "--rate-col",
+                "bpp",
+                "--quality-col",
+                "ssimulacra2",
+                "--energy-col",
+                "energy_per_image_j",
+            ]
+        )
+
+
+def test_bundle_validation_flag_only_gates_and_does_not_change_ranking():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("ranking_gate_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = _tmp_path("ranking_gate_manifest.json")
+    validation = _tmp_path("ranking_gate_validation.json")
+    _write_bundle_manifest(manifest, calibrated_csv)
+    _write_bundle_validation(validation, accepted=True)
+    out_without_validation = _tmp_path("ranking_gate_without_validation.json")
+    out_with_validation = _tmp_path("ranking_gate_with_validation.json")
+
+    common_args = [
+        "--csv",
+        str(fixture),
+        "--calibration-bundle-manifest",
+        str(manifest),
+        "--codec-col",
+        "codec",
+        "--config-col",
+        "param",
+        "--rate-col",
+        "bpp",
+        "--quality-col",
+        "ssimulacra2",
+        "--energy-col",
+        "energy_per_image_j",
+        "--time-col",
+        "time_ms",
+        "--available-codecs",
+        "JPEG,JXL,HEVC",
+        "--quality-target",
+        "very-high",
+        "--quality-floor",
+        "90",
+    ]
+
+    main(common_args + ["--out", str(out_without_validation)])
+    main(
+        common_args
+        + [
+            "--calibration-bundle-validation",
+            str(validation),
+            "--out",
+            str(out_with_validation),
+        ]
+    )
+
+    without_validation = json.loads(
+        out_without_validation.read_text(encoding="utf-8")
+    )
+    with_validation = json.loads(
+        out_with_validation.read_text(encoding="utf-8")
+    )
+
+    assert without_validation["decision"]["selected"] == with_validation[
+        "decision"
+    ]["selected"]
+    assert without_validation["decision"]["decision_mode"] == with_validation[
+        "decision"
+    ]["decision_mode"]
+
+
+def test_router_does_not_auto_discover_bundle_validation():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("no_auto_validation_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    manifest = _tmp_path("no_auto_validation_manifest.json")
+    adjacent_rejected = manifest.with_name("shadow_decision_validation.json")
+    _write_bundle_manifest(manifest, calibrated_csv)
+    _write_bundle_validation(adjacent_rejected, accepted=False)
+    out_path = _tmp_path("no_auto_validation_report.json")
+
+    main(
+        [
+            "--csv",
+            str(fixture),
+            "--calibration-bundle-manifest",
+            str(manifest),
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    report = json.loads(out_path.read_text(encoding="utf-8"))
+    assert report["calibration_bundle"]["enabled"] is True
+    assert report["calibration_bundle_validation"] == {"enabled": False}
 
 
 def test_router_with_invalid_bundle_fails_controlled():

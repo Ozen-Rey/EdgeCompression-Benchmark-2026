@@ -184,6 +184,14 @@ violations, or unsafe energy provenance. It does not enable automatic learning,
 automatic bundle consumption, or operational decision changes. A rejected
 candidate has no effect on the router.
 
+Router v0.23.0 optionally lets `rde_router` require an accepted shadow decision
+validation report before consuming an explicitly named calibration bundle. This
+does not introduce automatic learning. It only allows an explicitly provided
+calibration bundle to be consumed together with an explicitly provided accepted
+shadow validation report. Rejected, missing or malformed validation blocks
+consumption when the validation flag is used; without that flag, v0.19 bundle
+behavior is preserved.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

@@ -8,6 +8,7 @@ import pytest
 from src.router.calibration_bundle import (
     sha256_file,
     validate_calibration_bundle_manifest,
+    validate_calibration_bundle_validation,
 )
 
 
@@ -48,6 +49,26 @@ def _write_manifest(path: Path, csv_path: Path, *, output_hash: str | None = Non
         "hashes": {
             "output_csv_sha256": output_hash or sha256_file(csv_path),
         },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_validation(
+    path: Path,
+    *,
+    accepted: bool = True,
+    mode: str = "shadow_decision_validation_only",
+) -> None:
+    payload = {
+        "mode": mode,
+        "router_version": "0.22.0",
+        "comparison": "shadow_decision_comparison.json",
+        "accepted": accepted,
+        "decision_count": 3,
+        "changed_decision_count": 1,
+        "decision_churn_rate": 1 / 3,
+        "relative_cost_improvement": 0.10,
+        "rejection_reasons": [] if accepted else ["candidate_cost_regression"],
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -111,3 +132,72 @@ def test_bundle_manifest_rejects_incomplete_manifest():
 
     with pytest.raises(ValueError, match="missing"):
         validate_calibration_bundle_manifest(manifest)
+
+
+def test_bundle_validation_accepts_shadow_decision_validation_report():
+    root = _tmp_dir("validation_accepted")
+    validation = root / "validation.json"
+    _write_validation(validation)
+
+    report = validate_calibration_bundle_validation(validation)
+
+    assert report["enabled"] is True
+    assert report["validation_path"] == str(validation)
+    assert report["mode"] == "shadow_decision_validation_only"
+    assert report["accepted"] is True
+    assert report["decision_count"] == 3
+    assert report["changed_decision_count"] == 1
+    assert report["decision_churn_rate"] == 1 / 3
+    assert report["relative_cost_improvement"] == 0.10
+    assert report["rejection_reasons"] == []
+    assert report["source"] == "explicit_shadow_decision_validation"
+
+
+def test_bundle_validation_preserves_rejected_report_for_router_gate():
+    root = _tmp_dir("validation_rejected")
+    validation = root / "validation.json"
+    _write_validation(validation, accepted=False)
+
+    report = validate_calibration_bundle_validation(validation)
+
+    assert report["accepted"] is False
+    assert report["rejection_reasons"] == ["candidate_cost_regression"]
+
+
+def test_bundle_validation_rejects_missing_or_malformed_report():
+    root = _tmp_dir("validation_missing")
+
+    with pytest.raises(ValueError, match="validation not found"):
+        validate_calibration_bundle_validation(root / "missing.json")
+
+    malformed = root / "malformed.json"
+    malformed.write_text(json.dumps([]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="JSON object"):
+        validate_calibration_bundle_validation(malformed)
+
+
+def test_bundle_validation_rejects_incomplete_report():
+    root = _tmp_dir("validation_incomplete")
+    validation = root / "validation.json"
+    validation.write_text(
+        json.dumps(
+            {
+                "mode": "shadow_decision_validation_only",
+                "accepted": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing"):
+        validate_calibration_bundle_validation(validation)
+
+
+def test_bundle_validation_rejects_wrong_mode():
+    root = _tmp_dir("validation_wrong_mode")
+    validation = root / "validation.json"
+    _write_validation(validation, mode="shadow_decision_comparison_only")
+
+    with pytest.raises(ValueError, match="Unsupported"):
+        validate_calibration_bundle_validation(validation)

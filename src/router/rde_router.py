@@ -11,7 +11,10 @@ try:
     from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from src.utils.energy_backends import CompositeEnergyMeter
     from .calibration_apply import apply_local_calibration
-    from .calibration_bundle import validate_calibration_bundle_manifest
+    from .calibration_bundle import (
+        validate_calibration_bundle_manifest,
+        validate_calibration_bundle_validation,
+    )
     from .codec_capabilities import (
         build_execution_plan,
         filter_points_by_capabilities,
@@ -61,7 +64,10 @@ except ImportError:
     sys.path.append(str(Path(__file__).resolve().parents[1] / "utils"))
     from energy_backends import CompositeEnergyMeter
     from calibration_apply import apply_local_calibration
-    from calibration_bundle import validate_calibration_bundle_manifest
+    from calibration_bundle import (
+        validate_calibration_bundle_manifest,
+        validate_calibration_bundle_validation,
+    )
     from codec_capabilities import (
         build_execution_plan,
         filter_points_by_capabilities,
@@ -562,6 +568,13 @@ def _make_report(
         "calibration_bundle": getattr(
             args,
             "_calibration_bundle_report",
+            {
+                "enabled": False,
+            },
+        ),
+        "calibration_bundle_validation": getattr(
+            args,
+            "_calibration_bundle_validation_report",
             {
                 "enabled": False,
             },
@@ -1216,6 +1229,20 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
         print(f"Bundle manifest: {calibration_bundle.get('manifest_path')}")
         print(f"Bundle CSV: {calibration_bundle.get('calibrated_csv_path')}")
         print(f"Bundle validated: {calibration_bundle.get('validated')}")
+    calibration_bundle_validation = report.get("calibration_bundle_validation", {})
+    print(
+        "Calibration bundle validation: "
+        f"{calibration_bundle_validation.get('enabled', False)}"
+    )
+    if calibration_bundle_validation.get("enabled", False):
+        print(
+            "Bundle validation accepted: "
+            f"{calibration_bundle_validation.get('accepted')}"
+        )
+        print(
+            "Bundle validation file: "
+            f"{calibration_bundle_validation.get('validation_path')}"
+        )
     normalization_profile = report.get("normalization_profile", {})
     if normalization_profile.get("enabled", False):
         print(
@@ -1641,6 +1668,15 @@ def main(argv: Optional[List[str]] = None) -> None:
         help=(
             "Explicit calibration bundle manifest. When provided, the router "
             "validates the manifest and uses its calibrated CSV as the R-D-E input."
+        ),
+    )
+
+    parser.add_argument(
+        "--calibration-bundle-validation",
+        default=None,
+        help=(
+            "Optional explicit shadow decision validation report. When provided, "
+            "it must be accepted before the calibration bundle can be used."
         ),
     )
 
@@ -2179,6 +2215,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     args._quality_threshold_report = quality_threshold_report
 
     effective_csv_path = args.csv
+    if args.calibration_bundle_validation and not args.calibration_bundle_manifest:
+        raise ValueError(
+            "--calibration-bundle-validation requires "
+            "--calibration-bundle-manifest. No automatic bundle discovery is "
+            "performed."
+        )
+
     if args.calibration_bundle_manifest:
         if args.calibration_file:
             raise ValueError(
@@ -2190,13 +2233,38 @@ def main(argv: Optional[List[str]] = None) -> None:
         calibration_bundle_report = validate_calibration_bundle_manifest(
             args.calibration_bundle_manifest
         )
+
+        if args.calibration_bundle_validation:
+            calibration_bundle_validation_report = (
+                validate_calibration_bundle_validation(
+                    args.calibration_bundle_validation
+                )
+            )
+            if calibration_bundle_validation_report.get("accepted") is not True:
+                reasons = calibration_bundle_validation_report.get(
+                    "rejection_reasons",
+                    [],
+                )
+                raise ValueError(
+                    "Calibration bundle validation was not accepted: "
+                    + ", ".join(str(reason) for reason in reasons)
+                )
+        else:
+            calibration_bundle_validation_report = {
+                "enabled": False,
+            }
+
         effective_csv_path = calibration_bundle_report["calibrated_csv_path"]
     else:
         calibration_bundle_report = {
             "enabled": False,
         }
+        calibration_bundle_validation_report = {
+            "enabled": False,
+        }
 
     args._calibration_bundle_report = calibration_bundle_report
+    args._calibration_bundle_validation_report = calibration_bundle_validation_report
 
     points = load_rde_points(
         csv_path=effective_csv_path,
