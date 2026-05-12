@@ -62,6 +62,16 @@ Router v0.10.1 adds an explicit local energy policy, stored as
 - `benchmark-only`: ignore local hardware energy even if present, and use only
   benchmark energy scaled by the local/benchmark time ratio.
 
+Router v0.11.0 adds conservative Windows backend detection and provenance.
+On Windows, NVIDIA NVML total-energy counters and NVML sampled-power integrals
+are recorded as hardware GPU energy when available, with
+`energy_scope=gpu` and `energy_usable_for_total=false`. This is intentionally
+not treated as total pipeline energy for the current CPU-side codecs.
+
+Windows Intel PCM detection is kept as a disabled skeleton until per-command
+package-energy parsing is implemented and validated. Windows `powercfg` is
+diagnostic-only and is not used as Joule telemetry for calibration or routing.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

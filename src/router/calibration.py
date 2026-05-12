@@ -10,13 +10,16 @@ from typing import Any, Dict, List, Optional
 
 try:
     from src.router.version import ROUTER_VERSION
-    from src.utils.energy_backends import CompositeEnergyMeter
+    from src.utils.energy_backends import (
+        CompositeEnergyMeter,
+        collect_energy_backend_diagnostics,
+    )
     from .codec_capabilities import build_execution_plan
     from .system_probe import probe_system
 except ImportError:
     sys.path.append(str(Path(__file__).resolve().parents[1] / "utils"))
     from version import ROUTER_VERSION
-    from energy_backends import CompositeEnergyMeter
+    from energy_backends import CompositeEnergyMeter, collect_energy_backend_diagnostics
     from codec_capabilities import build_execution_plan
     from system_probe import probe_system
 
@@ -114,14 +117,6 @@ def _run_command(command: List[str]) -> Dict[str, Any]:
         )
 
     result, energy = meter.measure_callable(run_once)
-    energy_scope = []
-    if energy.cpu_j is not None:
-        energy_scope.append("cpu")
-    if energy.gpu_j is not None:
-        energy_scope.append("gpu")
-
-    energy_scope_str = "+".join(energy_scope) if energy_scope else "none"
-
     return {
         "success": result.returncode == 0,
         "returncode": result.returncode,
@@ -133,8 +128,8 @@ def _run_command(command: List[str]) -> Dict[str, Any]:
         "energy_method": energy.energy_method,
         "energy_is_measured": energy.energy_is_measured,
         "energy_quality": energy.energy_quality,
-        "energy_scope": energy_scope_str,
-        "energy_usable_for_total": energy.cpu_j is not None,
+        "energy_scope": energy.energy_scope,
+        "energy_usable_for_total": energy.energy_usable_for_total,
         "energy_warnings": ";".join(energy.warnings),
         "stdout": result.stdout,
         "stderr": result.stderr,
@@ -427,6 +422,7 @@ def run_calibration(
                 "raise_when_no_usable_total_energy_in_require_measured_total_mode"
             ),
         },
+        "energy_backend_diagnostics": collect_energy_backend_diagnostics(),
         "system_state": system_state,
         "summary": summary,
         "summary_csv": summary_csv,

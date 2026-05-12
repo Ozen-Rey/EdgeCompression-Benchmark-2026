@@ -283,3 +283,58 @@ def test_require_measured_total_rejects_partial_gpu_only_energy():
     assert report["skipped_preview"][0]["reason"] == "strict_energy_missing_usable_total"
     assert report["skipped_preview"][0]["energy_scope"] == "gpu"
     assert report["skipped_preview"][0]["energy_usable_for_total"] is False
+
+
+def test_strict_energy_mode_rejects_windows_gpu_only():
+    calibration = {
+        "version": "0.11.0",
+        "level": "quick",
+        "energy_mode": "require-measured-total",
+        "created_at": "test",
+        "measured": [
+            "time_ms",
+            "output_bytes",
+            "local_bpp",
+            "local_energy_j_if_backend_available",
+        ],
+        "summary": {
+            "JPEG": {
+                "q=60": {
+                    "success_rate": 1.0,
+                    "time_ms": {"mean": 200.0},
+                    "local_bpp": {"mean": 0.7},
+                    "local_energy_j": {"mean": 1.5},
+                    "energy_is_measured": True,
+                    "energy_scope": "gpu",
+                    "energy_usable_for_total": False,
+                    "energy_backend": "cpu=none;gpu=nvml_total_counter",
+                    "energy_method": (
+                        "cpu=unavailable;"
+                        "gpu=nvml_total_energy_counter_delta"
+                    ),
+                    "energy_quality": "cpu=not_measured;gpu=hardware_counter",
+                }
+            }
+        },
+    }
+
+    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir.mkdir(exist_ok=True)
+    path = tmp_dir / "calibration_strict_windows_gpu_only_energy.json"
+    path.write_text(json.dumps(calibration), encoding="utf-8")
+
+    points = [
+        Point("JPEG", "q=60", rate=1.1, quality=80.0, energy=3.0, time_ms=100.0),
+    ]
+
+    calibrated, report = apply_local_calibration(points, str(path))
+
+    assert calibrated[0].rate == 1.1
+    assert calibrated[0].time_ms == 100.0
+    assert calibrated[0].energy == 3.0
+    assert report["num_applied"] == 0
+    assert report["num_skipped"] == 1
+    assert report["skipped_preview"][0]["reason"] == "strict_energy_missing_usable_total"
+    assert report["skipped_preview"][0]["energy_backend"] == (
+        "cpu=none;gpu=nvml_total_counter"
+    )
