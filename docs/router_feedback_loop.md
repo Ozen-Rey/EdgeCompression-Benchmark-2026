@@ -95,6 +95,7 @@ v0.21 shadow_decision_comparison: offline baseline vs calibrated what-if
 v0.22 shadow_decision_validation: read-only shadow acceptance gate
 v0.23 rde_router --calibration-bundle-validation: explicit validated consumption
 v0.24 cross-artifact integrity: validation bound to exact bundle hash
+v0.25 decision receipt/replay: auditable decision reproducibility check
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -237,6 +238,21 @@ comparison hash and candidate bundle hashes. When `rde_router` is given both
 requires the validation report to refer to exactly that bundle manifest hash.
 Legacy validation reports without v0.24 hash fields are rejected when the
 validation flag is used.
+
+Router v0.25.0 adds decision receipts and offline replay:
+
+```powershell
+python -m src.router.decision_replay `
+  --receipt results/routing/router_decision_report.json `
+  --out results/routing/decision_replay_validation.json
+```
+
+Every single-profile router report includes `decision_receipt`, which records
+the selected decision, replay-safe router argv and SHA256 hashes of relevant
+input artifacts. The replay validator checks those hashes, reruns the router
+without execution/output side effects, and verifies that the same decision is
+reproduced. This is audit only: it does not alter ranking, policy,
+normalization, calibration, feedback, or execution behavior.
 
 By default, executed router runs append to:
 

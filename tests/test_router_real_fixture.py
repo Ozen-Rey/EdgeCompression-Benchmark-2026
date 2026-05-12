@@ -150,6 +150,13 @@ def test_router_end_to_end_on_real_small_image_fixture():
     assert report["energy_provenance"]["energy_is_measured"] is False
     assert report["calibration_bundle"] == {"enabled": False}
     assert report["calibration_bundle_validation"] == {"enabled": False}
+    receipt = report["decision_receipt"]
+    assert receipt["artifact_type"] == "router_decision_receipt"
+    assert receipt["router_version"] == ROUTER_VERSION
+    assert receipt["decision"]["selected_codec"] == selected["codec"]
+    assert receipt["decision"]["selected_config"] == selected["config"]
+    assert receipt["decision"]["cost"] == selected["cost"]
+    assert "--out" not in receipt["replay"]["argv"]
 
 
 def test_router_with_valid_bundle_reports_bundle_provenance():

@@ -200,6 +200,13 @@ This prevents accidentally pairing a validation report for Bundle A with Bundle
 B. No automatic discovery, online learning, ranking change or decision-policy
 change is introduced.
 
+Router v0.25.0 adds a decision receipt and offline replay validator. The
+receipt is an audit artifact embedded in router reports; replay verifies that
+the same inputs still hash to the recorded values and that rerunning the router
+reproduces the same selected decision. Replay is not a policy gate and does not
+prove the selected codec is better; it only checks reproducibility of the
+recorded decision under the same inputs.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

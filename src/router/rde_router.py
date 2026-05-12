@@ -25,6 +25,7 @@ try:
         build_content_policy_report,
         get_content_policy_preferred_candidate,
     )
+    from .decision_receipt import build_decision_receipt
     from .content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -78,6 +79,7 @@ except ImportError:
         build_content_policy_report,
         get_content_policy_preferred_candidate,
     )
+    from decision_receipt import build_decision_receipt
     from content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -2511,6 +2513,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
             safe_name = _safe_profile_filename(profile_name)
             json_path = out_dir / f"router_decision_report_{safe_name}.json"
+            report["decision_receipt"] = build_decision_receipt(report)
             _write_json_report(report, json_path)
 
             summary_rows.append(_summary_row_from_report(report))
@@ -2581,6 +2584,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "reason": "execution_not_requested",
             }
 
+        report["decision_receipt"] = build_decision_receipt(report)
         _write_json_report(report, out_path)
 
         if args.execute and args.feedback_out:
