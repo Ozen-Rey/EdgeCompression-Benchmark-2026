@@ -1,3 +1,4 @@
+import threading
 import time
 
 from src.utils.energy_backends import (
@@ -8,6 +9,24 @@ from src.utils.energy_backends import (
     WindowsNvidiaNvmlTotalEnergyBackend,
     WindowsPowercfgDiagnosticBackend,
 )
+
+_HANG_TIMEOUT = 0.1  # 100 ms — fast for tests, large enough to be deterministic
+
+
+class _HangingNvml:
+    """Simulates an NVML driver that never returns from any init call."""
+
+    def nvmlInit(self) -> None:
+        threading.Event().wait()
+
+    def nvmlDeviceGetHandleByIndex(self, gpu_index: int) -> None:
+        threading.Event().wait()
+
+    def nvmlDeviceGetTotalEnergyConsumption(self, handle: object) -> None:
+        threading.Event().wait()
+
+    def nvmlDeviceGetPowerUsage(self, handle: object) -> None:
+        threading.Event().wait()
 
 
 class FakeNvmlTotalEnergy:
@@ -145,5 +164,62 @@ def test_windows_no_backend_falls_back_cleanly():
     assert reading.energy_is_measured is False
     assert reading.energy_quality == "cpu=not_measured;gpu=not_measured"
     assert reading.energy_scope == "none"
+    assert reading.energy_usable_for_total is False
+    assert reading.total_j is None
+
+
+def test_windows_nvml_total_energy_hanging_init_is_unavailable():
+    t0 = time.perf_counter()
+    backend = WindowsNvidiaNvmlTotalEnergyBackend(
+        nvml=_HangingNvml(),
+        system_name="Windows",
+        nvml_init_timeout_s=_HANG_TIMEOUT,
+    )
+    elapsed = time.perf_counter() - t0
+
+    assert not backend.available()
+    assert "timeout" in (backend._init_error or "").lower()
+    assert elapsed < _HANG_TIMEOUT * 4
+
+
+def test_windows_nvml_power_sampler_hanging_init_is_unavailable():
+    t0 = time.perf_counter()
+    backend = WindowsNvidiaNvmlPowerSamplerBackend(
+        nvml=_HangingNvml(),
+        system_name="Windows",
+        nvml_init_timeout_s=_HANG_TIMEOUT,
+    )
+    elapsed = time.perf_counter() - t0
+
+    assert not backend.available()
+    assert "timeout" in (backend._init_error or "").lower()
+    assert elapsed < _HANG_TIMEOUT * 4
+
+
+def test_composite_energy_meter_does_not_block_when_both_nvml_backends_hang():
+    """When both Windows NVML backends time out, _select_gpu_backend falls through to NoEnergyBackend."""
+    t0 = time.perf_counter()
+
+    backends = [
+        WindowsNvidiaNvmlTotalEnergyBackend(
+            nvml=_HangingNvml(),
+            system_name="Windows",
+            nvml_init_timeout_s=_HANG_TIMEOUT,
+        ),
+        WindowsNvidiaNvmlPowerSamplerBackend(
+            nvml=_HangingNvml(),
+            system_name="Windows",
+            nvml_init_timeout_s=_HANG_TIMEOUT,
+        ),
+    ]
+    gpu_backend = next((b for b in backends if b.available()), NoEnergyBackend())
+    elapsed = time.perf_counter() - t0
+
+    assert isinstance(gpu_backend, NoEnergyBackend)
+    assert elapsed < _HANG_TIMEOUT * 6
+
+    meter = CompositeEnergyMeter(cpu_backend=NoEnergyBackend(), gpu_backend=gpu_backend)
+    result, reading = meter.measure_callable(lambda: 7)
+    assert result == 7
     assert reading.energy_usable_for_total is False
     assert reading.total_j is None

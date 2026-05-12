@@ -21,6 +21,33 @@ import time
 from typing import Any, Callable, Optional
 
 
+NVML_INIT_TIMEOUT_S: float = 3.0
+
+
+def _call_with_timeout(fn: Callable[[], Any], timeout_s: float) -> Any:
+    """Call fn() in a daemon thread; raise TimeoutError if it exceeds timeout_s."""
+    result: list[Any] = []
+    exc_holder: list[BaseException] = []
+
+    def _target() -> None:
+        try:
+            result.append(fn())
+        except Exception as e:
+            exc_holder.append(e)
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout_s)
+
+    if thread.is_alive():
+        raise TimeoutError(f"nvml call timed out after {timeout_s}s")
+
+    if exc_holder:
+        raise exc_holder[0]
+
+    return result[0] if result else None
+
+
 @dataclass
 class EnergyReading:
     cpu_j: Optional[float]
@@ -296,6 +323,7 @@ class WindowsNvidiaNvmlTotalEnergyBackend(EnergyBackend):
         gpu_index: int = 0,
         nvml: Any = None,
         system_name: Optional[str] = None,
+        nvml_init_timeout_s: float = NVML_INIT_TIMEOUT_S,
     ) -> None:
         self.gpu_index = gpu_index
         self.nvml = None
@@ -314,9 +342,15 @@ class WindowsNvidiaNvmlTotalEnergyBackend(EnergyBackend):
                 nvml = pynvml
 
             self.nvml = nvml
-            self.nvml.nvmlInit()
-            self.handle = self.nvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            self.nvml.nvmlDeviceGetTotalEnergyConsumption(self.handle)
+            _call_with_timeout(self.nvml.nvmlInit, nvml_init_timeout_s)
+            self.handle = _call_with_timeout(
+                lambda: self.nvml.nvmlDeviceGetHandleByIndex(gpu_index),
+                nvml_init_timeout_s,
+            )
+            _call_with_timeout(
+                lambda: self.nvml.nvmlDeviceGetTotalEnergyConsumption(self.handle),
+                nvml_init_timeout_s,
+            )
         except Exception as exc:
             self._init_error = repr(exc)
             self.nvml = None
@@ -366,6 +400,7 @@ class WindowsNvidiaNvmlPowerSamplerBackend(EnergyBackend):
         interval_s: float = 0.05,
         nvml: Any = None,
         system_name: Optional[str] = None,
+        nvml_init_timeout_s: float = NVML_INIT_TIMEOUT_S,
     ) -> None:
         self.gpu_index = gpu_index
         self.interval_s = interval_s
@@ -385,9 +420,15 @@ class WindowsNvidiaNvmlPowerSamplerBackend(EnergyBackend):
                 nvml = pynvml
 
             self.nvml = nvml
-            self.nvml.nvmlInit()
-            self.handle = self.nvml.nvmlDeviceGetHandleByIndex(gpu_index)
-            self.nvml.nvmlDeviceGetPowerUsage(self.handle)
+            _call_with_timeout(self.nvml.nvmlInit, nvml_init_timeout_s)
+            self.handle = _call_with_timeout(
+                lambda: self.nvml.nvmlDeviceGetHandleByIndex(gpu_index),
+                nvml_init_timeout_s,
+            )
+            _call_with_timeout(
+                lambda: self.nvml.nvmlDeviceGetPowerUsage(self.handle),
+                nvml_init_timeout_s,
+            )
         except Exception as exc:
             self._init_error = repr(exc)
             self.nvml = None
@@ -577,9 +618,12 @@ class CompositeEnergyMeter:
         self,
         cpu_backend: Optional[EnergyBackend] = None,
         gpu_backend: Optional[EnergyBackend] = None,
+        nvml_init_timeout_s: float = NVML_INIT_TIMEOUT_S,
     ) -> None:
         self.cpu_backend: EnergyBackend = cpu_backend or self._select_cpu_backend()
-        self.gpu_backend: EnergyBackend = gpu_backend or self._select_gpu_backend()
+        self.gpu_backend: EnergyBackend = (
+            gpu_backend or self._select_gpu_backend(nvml_init_timeout_s=nvml_init_timeout_s)
+        )
 
     @staticmethod
     def _select_cpu_backend() -> EnergyBackend:
@@ -594,13 +638,15 @@ class CompositeEnergyMeter:
         return NoEnergyBackend()
 
     @staticmethod
-    def _select_gpu_backend() -> EnergyBackend:
+    def _select_gpu_backend(
+        nvml_init_timeout_s: float = NVML_INIT_TIMEOUT_S,
+    ) -> EnergyBackend:
         if platform.system().lower() == "windows":
             for factory in (
                 WindowsNvidiaNvmlTotalEnergyBackend,
                 WindowsNvidiaNvmlPowerSamplerBackend,
             ):
-                backend = factory()
+                backend = factory(nvml_init_timeout_s=nvml_init_timeout_s)
                 if backend.available():
                     return backend
 
