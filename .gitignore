@@ -164,6 +164,12 @@ calibration_images/
 test_images/
 plots/
 
+# Local legacy image benchmarking/oracle scripts kept outside version control
+src/utils/energy_monitor.py
+src/benchmark/benchmark_images.py
+src/selector/oracle_telemetry.py
+src/selector/oracle_images_jxl.py
+
 # Python cache
 __pycache__/
 *.pyc
