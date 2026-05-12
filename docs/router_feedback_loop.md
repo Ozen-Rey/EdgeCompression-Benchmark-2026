@@ -22,6 +22,7 @@ feedback calibration proposal -> shadow correction proposal
 feedback proposal validation -> offline scale validation
 feedback calibration promotion -> audit-only candidate profile
 promoted calibration apply -> explicit opt-in calibration input
+calibration bundle manifest -> audit provenance for calibrated CSVs
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -83,6 +84,7 @@ v0.14 feedback_calibration_proposal: shadow correction candidates
 v0.15 feedback_proposal_validation: offline validation of candidate scales
 v0.16 feedback_calibration_promotion: audit-only candidate calibration profile
 v0.17 calibration_apply --promotion-profile: explicit opt-in application
+v0.18 calibration_apply --manifest-out: auditable calibration bundle manifest
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -122,6 +124,22 @@ Without `--promotion-profile`, `calibration_apply` behaves as before. With the
 flag, only promoted/accepted/usable scales are applied; rejected scales are
 ignored and reported. This remains an explicit offline transformation. The
 router does not auto-load promoted profiles in v0.17.0.
+
+Router v0.18.0 adds an optional provenance manifest for calibrated CSV bundles:
+
+```powershell
+python -m src.router.calibration_apply `
+  --benchmark data/rde_points.csv `
+  --calibration results/routing_calibration/quick.json `
+  --promotion-profile results/routing_context/feedback_calibration_profile_candidate.json `
+  --out results/routing_context/rde_points_calibrated_with_feedback.csv `
+  --manifest-out results/routing_calibration/calibrated_manifest.json
+```
+
+The manifest records source paths, output path, router version, UTC creation
+time, applied promoted scales, rejected/non-applied scale count, energy policy
+and SHA256 hashes for the source and output artifacts. It is provenance only:
+the router does not read calibration manifests automatically in v0.18.0.
 
 By default, executed router runs append to:
 

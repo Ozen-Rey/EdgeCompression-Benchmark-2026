@@ -141,6 +141,16 @@ is applied only when the promoted profile marks it as accepted/promoted/usable
 and the profile carries usable total-energy evidence; GPU-only or otherwise
 partial energy remains excluded.
 
+Router v0.18.0 adds an optional calibration bundle manifest produced by
+`calibration_apply --manifest-out`. The manifest is an audit artifact: it
+records source files, output CSV, applied promoted scales, rejected/non-applied
+scale count, energy policy and SHA256 hashes. It is not a decision input. The
+router still does not read `online_feedback.csv`, proposal files, validation
+files, promotion profiles or calibration manifests automatically.
+
+This release prepares a future explicit `--calibrated-database` /
+`--calibration-manifest` workflow, but does not introduce that router mode yet.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

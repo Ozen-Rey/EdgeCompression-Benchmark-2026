@@ -1,11 +1,18 @@
 import argparse
 import copy
 import csv
+from datetime import datetime, timezone
+import hashlib
 import json
 import math
 from dataclasses import is_dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+try:
+    from .version import ROUTER_VERSION
+except ImportError:
+    from version import ROUTER_VERSION
 
 
 ENERGY_MODES = {"auto", "require-measured-total", "benchmark-only"}
@@ -655,6 +662,138 @@ def _write_points_csv(points: List[Any], out_path: str | Path) -> None:
             )
 
 
+def _sha256_file(path: str | Path | None) -> str | None:
+    if path is None:
+        return None
+
+    p = Path(path)
+    if not p.exists():
+        return None
+
+    digest = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
+def _accepted_scales_from_report(report: Dict[str, Any]) -> list[Dict[str, Any]]:
+    accepted: list[Dict[str, Any]] = []
+
+    for item in report.get("applied", []):
+        codec = item.get("codec")
+        config = item.get("config")
+
+        for scale in item.get("feedback_promotion", []):
+            if not isinstance(scale, dict):
+                continue
+
+            out = {
+                "codec": codec,
+                "config": config,
+                "axis": scale.get("axis"),
+                "scale": scale.get("scale"),
+                "method": scale.get("method"),
+                "status": scale.get("status"),
+                "num_eval_rows": scale.get("num_eval_rows"),
+                "mean_abs_log_error_before": scale.get(
+                    "mean_abs_log_error_before"
+                ),
+                "mean_abs_log_error_after": scale.get(
+                    "mean_abs_log_error_after"
+                ),
+                "improvement_ratio": scale.get("improvement_ratio"),
+                "warnings": scale.get("warnings", []),
+            }
+
+            if scale.get("axis") == "energy":
+                out["energy_usable_for_total"] = True
+
+            accepted.append(out)
+
+    return accepted
+
+
+def _count_unapplied_promotion_scales(report: Dict[str, Any]) -> int:
+    promotion = report.get("promotion_profile", {})
+    loaded = int(promotion.get("num_loaded_scales", 0) or 0)
+    ignored = int(promotion.get("num_ignored_scales", 0) or 0)
+    applied = int(promotion.get("num_applied_scales", 0) or 0)
+    return max(ignored + loaded - applied, 0)
+
+
+def build_calibration_bundle_manifest(
+    *,
+    report: Dict[str, Any],
+    source_benchmark: str | Path,
+    source_calibration: str | Path,
+    promotion_profile: str | Path | None,
+    output_csv: str | Path,
+) -> Dict[str, Any]:
+    return {
+        "artifact_type": "promoted_calibration_bundle",
+        "router_version": ROUTER_VERSION,
+        "mode": "explicit_opt_in_calibration_apply",
+        "source_benchmark": str(Path(source_benchmark)),
+        "source_calibration": str(Path(source_calibration)),
+        "promotion_profile": (
+            str(Path(promotion_profile)) if promotion_profile is not None else None
+        ),
+        "output_csv": str(Path(output_csv)),
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "accepted_scales": _accepted_scales_from_report(report),
+        "rejected_scales_count": _count_unapplied_promotion_scales(report),
+        "energy_policy": {
+            "requires_energy_usable_for_total": True,
+            "gpu_only_energy_excluded": True,
+        },
+        "hashes": {
+            "source_benchmark_sha256": _sha256_file(source_benchmark),
+            "source_calibration_sha256": _sha256_file(source_calibration),
+            "promotion_profile_sha256": _sha256_file(promotion_profile),
+            "output_csv_sha256": _sha256_file(output_csv),
+        },
+        "calibration_report_summary": {
+            "num_points_before": report.get("num_points_before"),
+            "num_points_after": report.get("num_points_after"),
+            "num_applied": report.get("num_applied"),
+            "num_skipped": report.get("num_skipped"),
+            "promotion_profile": report.get("promotion_profile", {}),
+        },
+        "semantics": {
+            "router_decision_impact": "none",
+            "online_learning": False,
+            "requires_explicit_opt_in": True,
+        },
+    }
+
+
+def write_calibration_bundle_manifest(
+    *,
+    path: str | Path,
+    report: Dict[str, Any],
+    source_benchmark: str | Path,
+    source_calibration: str | Path,
+    promotion_profile: str | Path | None,
+    output_csv: str | Path,
+) -> Dict[str, Any]:
+    manifest = build_calibration_bundle_manifest(
+        report=report,
+        source_benchmark=source_benchmark,
+        source_calibration=source_calibration,
+        promotion_profile=promotion_profile,
+        output_csv=output_csv,
+    )
+
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+    return manifest
+
+
 def main(argv: list[str] | None = None) -> None:
     try:
         from .rde_database import load_rde_points
@@ -672,6 +811,11 @@ def main(argv: list[str] | None = None) -> None:
         help="Optional promoted feedback calibration profile JSON.",
     )
     parser.add_argument("--out", required=True, help="Output calibrated CSV.")
+    parser.add_argument(
+        "--manifest-out",
+        default=None,
+        help="Optional provenance manifest for the calibrated CSV bundle.",
+    )
     parser.add_argument("--codec-col", default=None)
     parser.add_argument("--config-col", default=None)
     parser.add_argument("--rate-col", default=None)
@@ -697,6 +841,17 @@ def main(argv: list[str] | None = None) -> None:
     )
     _write_points_csv(calibrated_points, args.out)
 
+    manifest = None
+    if args.manifest_out:
+        manifest = write_calibration_bundle_manifest(
+            path=args.manifest_out,
+            report=report,
+            source_benchmark=args.benchmark,
+            source_calibration=args.calibration,
+            promotion_profile=args.promotion_profile,
+            output_csv=args.out,
+        )
+
     print("\n=== R-D-E Calibration Apply ===")
     print(f"Benchmark:          {args.benchmark}")
     print(f"Calibration:        {args.calibration}")
@@ -709,6 +864,8 @@ def main(argv: list[str] | None = None) -> None:
             "Promoted scales:    "
             f"{report['promotion_profile'].get('num_applied_scales')} applied"
         )
+    if manifest is not None:
+        print(f"Manifest:           {args.manifest_out}")
 
 
 if __name__ == "__main__":
