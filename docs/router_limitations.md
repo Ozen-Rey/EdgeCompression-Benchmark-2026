@@ -162,6 +162,13 @@ No automatic discovery is performed in v0.19.0. The router still does not read
 `online_feedback.csv`, proposal files, validation files, or promotion profiles
 directly, and it does not use the latest available manifest implicitly.
 
+Router v0.20.0 adds `calibration_impact_audit`, a read-only tool for comparing
+the baseline router decision with the decision obtained from an explicitly
+validated calibration bundle manifest. This measures the impact of a bundle on
+selected codec/config and R-D-E terms, but it does not introduce automatic
+bundle discovery, online learning, backend execution, or changes to router
+defaults.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

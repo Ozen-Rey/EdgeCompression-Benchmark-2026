@@ -24,6 +24,7 @@ feedback calibration promotion -> audit-only candidate profile
 promoted calibration apply -> explicit opt-in calibration input
 calibration bundle manifest -> audit provenance for calibrated CSVs
 calibration bundle consumption -> explicit manifest-validated router input
+calibration impact audit -> read-only baseline vs bundle decision comparison
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -87,6 +88,7 @@ v0.16 feedback_calibration_promotion: audit-only candidate calibration profile
 v0.17 calibration_apply --promotion-profile: explicit opt-in application
 v0.18 calibration_apply --manifest-out: auditable calibration bundle manifest
 v0.19 rde_router --calibration-bundle-manifest: explicit verified bundle input
+v0.20 calibration_impact_audit: read-only decision impact audit
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -157,6 +159,22 @@ calibrated CSV exists, verifies its SHA256 hash, and then uses the manifest's
 CSV as the R-D-E input. Without the flag, behavior is unchanged. The router
 still does not read `online_feedback.csv`, proposal, validation, promotion or
 manifest files automatically.
+
+Router v0.20.0 adds a read-only impact audit for explicit calibration bundles:
+
+```powershell
+python -m src.router.calibration_impact_audit `
+  --config configs/router_image_v08.json `
+  --csv results/routing_context/image_rde_points.csv `
+  --calibration-bundle-manifest results/routing_context/calibration_bundle_manifest.json `
+  --out results/routing_context/calibration_impact_audit.json `
+  --summary-out results/routing_context/calibration_impact_audit.csv
+```
+
+The audit runs the same router decision once on the baseline CSV and once with
+the validated bundle manifest, then reports whether the selected codec/config
+and R-D-E terms changed. It does not modify benchmark files, feedback files,
+calibration bundles or router defaults, and it does not execute codec backends.
 
 By default, executed router runs append to:
 
