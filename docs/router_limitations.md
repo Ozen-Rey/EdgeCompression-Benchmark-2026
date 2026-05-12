@@ -118,6 +118,17 @@ Energy validation is restricted to rows with `energy_usable_for_total=true`.
 GPU-only telemetry remains excluded from total pipeline energy validation, even
 when a GPU energy number is present in feedback.
 
+Router v0.16.0 adds a promotion gate for validated feedback-derived scales.
+Promotion only creates an offline candidate calibration profile after explicit
+threshold checks for sample count, improvement and residual log error. Even
+after v0.16.0, feedback-derived calibration is not online learning: the router
+does not consume the candidate profile automatically, and deployment requires a
+future explicit opt-in mechanism.
+
+Energy scale promotion remains restricted to validation rows backed by usable
+total-energy evidence. GPU-only telemetry is not promotable as total pipeline
+energy.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

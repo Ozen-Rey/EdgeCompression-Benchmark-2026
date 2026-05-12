@@ -1,6 +1,6 @@
 """Centralized router version metadata."""
 
-ROUTER_VERSION = "0.15.0"
+ROUTER_VERSION = "0.16.0"
 
 FEATURE_LEVEL = {
     "rde_selection": "stable",
@@ -13,6 +13,7 @@ FEATURE_LEVEL = {
     "feedback_analysis": "read_only_prediction_audit",
     "feedback_calibration_proposal": "shadow_proposal_only",
     "feedback_proposal_validation": "offline_validation_only",
+    "feedback_calibration_promotion": "candidate_profile_only",
     "system_aware": "experimental",
     "content_aware": "offline_validated",
     "content_classifier": "experimental",

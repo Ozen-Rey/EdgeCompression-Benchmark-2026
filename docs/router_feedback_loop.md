@@ -20,6 +20,7 @@ online feedback -> append-only deployment trace
 feedback analysis -> read-only prediction audit
 feedback calibration proposal -> shadow correction proposal
 feedback proposal validation -> offline scale validation
+feedback calibration promotion -> audit-only candidate profile
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -79,12 +80,30 @@ v0.12 feedback_logger: append-only observations
 v0.13 feedback_analysis: audit/read-only analysis
 v0.14 feedback_calibration_proposal: shadow correction candidates
 v0.15 feedback_proposal_validation: offline validation of candidate scales
+v0.16 feedback_calibration_promotion: audit-only candidate calibration profile
 ```
 
 The validator compares prediction error before and after a proposed scale using
 absolute log error. It is still read-only: it writes validation reports, but it
 does not change router decisions, calibration files, benchmark CSVs or
 normalization.
+
+Router v0.16.0 adds a promotion gate:
+
+```powershell
+python -m src.router.feedback_calibration_promotion `
+  --proposal results/routing_context/feedback_calibration_proposal.json `
+  --validation results/routing_context/feedback_proposal_validation.json `
+  --out results/routing_context/feedback_calibration_profile_candidate.json `
+  --summary-out results/routing_context/feedback_calibration_profile_candidate.csv `
+  --min-samples 3 `
+  --min-improvement 0.10 `
+  --max-after-error 0.25
+```
+
+`feedback_calibration_promotion` turns validated shadow proposals into an
+audit-only candidate calibration profile. The router does not consume this
+profile automatically, and no router flag is added in v0.16.0.
 
 By default, executed router runs append to:
 
