@@ -25,6 +25,7 @@ promoted calibration apply -> explicit opt-in calibration input
 calibration bundle manifest -> audit provenance for calibrated CSVs
 calibration bundle consumption -> explicit manifest-validated router input
 calibration impact audit -> read-only baseline vs bundle decision comparison
+shadow decision comparison -> offline what-if comparison only
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -89,6 +90,7 @@ v0.17 calibration_apply --promotion-profile: explicit opt-in application
 v0.18 calibration_apply --manifest-out: auditable calibration bundle manifest
 v0.19 rde_router --calibration-bundle-manifest: explicit verified bundle input
 v0.20 calibration_impact_audit: read-only decision impact audit
+v0.21 shadow_decision_comparison: offline baseline vs calibrated what-if
 ```
 
 The validator compares prediction error before and after a proposed scale using
@@ -175,6 +177,22 @@ The audit runs the same router decision once on the baseline CSV and once with
 the validated bundle manifest, then reports whether the selected codec/config
 and R-D-E terms changed. It does not modify benchmark files, feedback files,
 calibration bundles or router defaults, and it does not execute codec backends.
+
+Router v0.21.0 adds a stricter shadow decision comparison report:
+
+```powershell
+python -m src.router.shadow_decision_comparison `
+  --baseline-csv results/routing_context/image_rde_points.csv `
+  --bundle-manifest results/routing_context/calibration_bundle_manifest.json `
+  --config configs/router_image_v08.json `
+  --out results/routing_context/shadow_decision_comparison.json `
+  --summary-out results/routing_context/shadow_decision_comparison.csv
+```
+
+This module answers only a what-if question: if this verified calibration
+bundle were used as the R-D-E source, would the router choice change? It does
+not prove the calibrated decision is better; utility still requires separate
+offline regret, oracle or ablation validation.
 
 By default, executed router runs append to:
 

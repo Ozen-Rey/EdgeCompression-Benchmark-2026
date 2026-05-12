@@ -169,6 +169,14 @@ selected codec/config and R-D-E terms, but it does not introduce automatic
 bundle discovery, online learning, backend execution, or changes to router
 defaults.
 
+Router v0.21.0 adds `shadow_decision_comparison`, another offline/read-only
+what-if layer. It validates a named bundle manifest, compares the baseline CSV
+decision against the calibrated CSV decision under the same router config, and
+reports changed/unchanged selections plus aggregate deltas. This still does not
+show that the calibrated choice is better; it only measures potential decision
+impact. Utility validation remains a future offline regret/oracle/ablation
+step.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
