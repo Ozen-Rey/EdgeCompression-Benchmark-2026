@@ -409,6 +409,13 @@ version command with `shell=False` and a timeout. It does not run encode/decode,
 does not benchmark, does not read datasets, does not write codec outputs and
 does not add the codec to the router decision path.
 
+Router v0.38.0 adds `external_codec_dry_run`, a controlled one-input contract
+validation step for external specs. It may run encode and optional decode
+commands in a confined output directory to verify I/O behavior, timeouts and
+safety flags. It still does not read benchmark datasets, compute quality or
+energy metrics, generate R-D-E points, register codecs, or change router
+ranking and decisions.
+
 By default, executed router runs append to:
 
 ```text

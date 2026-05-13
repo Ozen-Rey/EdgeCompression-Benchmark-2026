@@ -41,6 +41,28 @@ external codec spec -> schema validation -> executable/version/fingerprint probe
 It does not benchmark the codec, read datasets, write codec outputs, register
 the codec with the router, or change any router candidate pool.
 
+Run a controlled one-input contract dry-run:
+
+```powershell
+python -m src.router.external_codec_dry_run `
+  --spec configs/external_codecs/example_image_codec.json `
+  --input test_images/input.png `
+  --out-dir results/external_codec_dry_runs/example_codec `
+  --param quality=50 `
+  --timeout-s 30 `
+  --out results/external_codec_dry_runs/example_codec_dry_run.json
+```
+
+The v0.38.0 dry-run performs only contract validation on one declared input:
+it validates the spec, checks the external executable, builds argv commands
+from `encode.command_template` and, only when `decode.available=true`,
+`decode.command_template`, confines generated outputs to `--out-dir`, enforces
+timeouts, and verifies that expected files exist with the declared extension
+and optional non-empty contract.
+
+It does not read benchmark datasets, compute quality metrics, compute energy,
+generate R-D-E CSV rows, register the codec, or affect router decisions.
+
 ## Required Fields
 
 An external codec spec is a JSON object with these top-level fields:
@@ -138,6 +160,28 @@ The probe report includes safety flags:
 
 The probe never executes `encode.command_template` or `decode.command_template`.
 
+Router v0.38.0 adds `external_codec_dry_run`, a single-input contract check.
+It may execute encode and optional decode commands, but only from argv
+templates, only with `shell=False`, only with a required timeout, and only with
+outputs generated inside the explicitly provided `--out-dir`. It rejects
+undeclared parameters, unresolved placeholders, unsafe output filenames,
+unsafe output extensions and missing input files.
+
+The dry-run report includes safety flags:
+
+```json
+{
+  "safety": {
+    "shell_used": false,
+    "benchmark_executed": false,
+    "router_candidate_registered": false,
+    "output_confined_to_out_dir": true
+  }
+}
+```
+
+This is still not a benchmark or a router integration path.
+
 ## Minimal Example
 
 ```json
@@ -167,6 +211,7 @@ The probe never executes `encode.command_template` or `decode.command_template`.
     ]
   },
   "decode": {
+    "available": false,
     "command_template": ["{binary}", "--decode", "{input}", "--output", "{output}"]
   },
   "parameters": [
@@ -177,7 +222,8 @@ The probe never executes `encode.command_template` or `decode.command_template`.
     }
   ],
   "output": {
-    "extension": ".exi"
+    "extension": ".exi",
+    "must_be_nonempty": true
   },
   "rate": {
     "metric": "bpp"
