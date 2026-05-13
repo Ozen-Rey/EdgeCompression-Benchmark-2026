@@ -320,6 +320,15 @@ rate-distortion-energy characteristics, determinism, sandbox safety or dataset
 performance. The probe does not register the codec, does not benchmark it, and
 does not affect router decisions or existing backend execution.
 
+Router v0.38.0 adds a one-input external codec dry-run contract check. It can
+execute encode and optional decode commands declared in an external spec, but
+only against one explicitly named input and only inside a controlled output
+directory. Passing this dry-run means the basic I/O contract worked once; it
+does not establish quality, rate, energy, dataset robustness, deterministic
+behavior, security of black-box code, or suitability for router ranking. The
+dry-run still does not add the codec to the registry, candidate pool, `J_RDE`,
+normalization, content-aware/system-aware paths or existing backend execution.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
