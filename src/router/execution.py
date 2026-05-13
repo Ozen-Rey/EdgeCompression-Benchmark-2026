@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 try:
     from src.utils.energy_backends import CompositeEnergyMeter
     from .execution_validation import validate_execution_output
-    from .feedback_logger import append_feedback_row
+    from .observability.feedback_logger import append_feedback_row
 except ImportError:  # pragma: no cover - direct script fallback
     sys.path.append(str(Path(__file__).resolve().parents[1] / "utils"))
     from energy_backends import CompositeEnergyMeter
