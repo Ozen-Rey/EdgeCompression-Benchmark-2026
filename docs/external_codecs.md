@@ -249,6 +249,43 @@ the raw benchmark CSV to a future-router-compatible R-D-E-shaped CSV. It never
 executes subprocesses, encode, decode or probes; it only reads declared files
 and writes export artifacts.
 
+Router v0.41.0 adds explicit router consumption through an external codec
+manifest:
+
+```json
+{
+  "schema_version": "external_codec_router_manifest_v1",
+  "codec_id": "example_codec",
+  "spec_path": "example_codec.json",
+  "probe_report": "example_codec_probe.json",
+  "rde_export_report": "example_codec_rde_report.json",
+  "rde_csv": "example_codec_rde.csv",
+  "created_at_utc": "2026-05-13T00:00:00+00:00",
+  "hashes": {
+    "spec_sha256": "...",
+    "probe_report_sha256": "...",
+    "rde_export_report_sha256": "...",
+    "rde_csv_sha256": "..."
+  }
+}
+```
+
+The router consumes this only when named explicitly:
+
+```powershell
+python -m src.router.rde_router `
+  --csv data/original_rde.csv `
+  --external-codec-manifest results/external_codec/example_manifest.json
+```
+
+The manifest is accepted only if all referenced files exist, all hashes match,
+`external_codec_rde_export.router_ready=true`, and `codec_id` is consistent
+across the spec, probe report, export report and R-D-E CSV. The external rows
+are then appended to the normal R-D-E pool and annotated with
+`source=external_codec_manifest`. There is still no automatic discovery, no
+automatic benchmark/probe/dry-run/export, and no registry mutation outside the
+explicit manifest.
+
 ## Minimal Example
 
 ```json

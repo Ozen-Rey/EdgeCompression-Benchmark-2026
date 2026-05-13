@@ -31,6 +31,7 @@ try:
     )
     from .energy_provenance import build_energy_provenance_summary
     from .energy_tier_policy import build_energy_tier_policy_shadow
+    from .external_codec_registry import load_external_codec_points
     from .content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -95,6 +96,7 @@ except ImportError:
     )
     from energy_provenance import build_energy_provenance_summary
     from energy_tier_policy import build_energy_tier_policy_shadow
+    from external_codec_registry import load_external_codec_points
     from content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -730,6 +732,13 @@ def _make_report(
         "codec_registry": getattr(
             args,
             "_codec_registry_report",
+            {
+                "enabled": False,
+            },
+        ),
+        "external_codecs": getattr(
+            args,
+            "_external_codecs_report",
             {
                 "enabled": False,
             },
@@ -1988,6 +1997,16 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
 
     parser.add_argument(
+        "--external-codec-manifest",
+        action="append",
+        default=[],
+        help=(
+            "Explicit external codec router manifest. Repeat to load multiple "
+            "validated external R-D-E exports. No automatic discovery is performed."
+        ),
+    )
+
+    parser.add_argument(
         "--system-load",
         choices=["normal", "high", "very-high"],
         default="normal",
@@ -2463,6 +2482,18 @@ def main(argv: Optional[List[str]] = None) -> None:
         energy_col=args.energy_col,
         time_col=args.time_col,
     )
+
+    if args.external_codec_manifest:
+        external_points, external_codecs_report = load_external_codec_points(
+            args.external_codec_manifest
+        )
+        points.extend(external_points)
+    else:
+        external_codecs_report = {
+            "enabled": False,
+        }
+
+    args._external_codecs_report = external_codecs_report
 
     content_filter_report = {
         "enabled": bool(getattr(args, "content_source_filter", False)),
