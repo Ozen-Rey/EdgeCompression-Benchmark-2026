@@ -36,6 +36,11 @@ try:
     from .context_policy import compute_context_policy
     from .execution_validation import validate_execution_output
     from .feedback_logger import append_feedback_row
+    from .normalization_consistency import (
+        NormalizationAuditLoadError,
+        compare_normalization_audits,
+        load_previous_normalization_audit,
+    )
     from .normalization_profile import load_normalization_profile
     from .profiles import available_profiles, get_profile
     from .quality_thresholds import resolve_quality_floor
@@ -90,6 +95,11 @@ except ImportError:
     from context_policy import compute_context_policy
     from execution_validation import validate_execution_output
     from feedback_logger import append_feedback_row
+    from normalization_consistency import (
+        NormalizationAuditLoadError,
+        compare_normalization_audits,
+        load_previous_normalization_audit,
+    )
     from normalization_profile import load_normalization_profile
     from profiles import available_profiles, get_profile
     from quality_thresholds import resolve_quality_floor
@@ -234,6 +244,43 @@ def _build_normalization_audit(
         })
 
     return audit
+
+
+def _build_normalization_consistency_report(
+    previous_receipt_path: Optional[str],
+    current_audit: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not previous_receipt_path:
+        return {
+            "enabled": False,
+        }
+
+    base: Dict[str, Any] = {
+        "enabled": True,
+        "previous_receipt_path": str(previous_receipt_path),
+        "previous_receipt_loaded": False,
+        "comparable": False,
+        "warnings": [],
+        "differences": compare_normalization_audits(
+            current_audit,
+            None,
+        )["differences"],
+    }
+
+    try:
+        previous_audit = load_previous_normalization_audit(previous_receipt_path)
+    except NormalizationAuditLoadError as exc:
+        base["warnings"] = [f"previous_receipt_load_failed: {exc}"]
+        base["error"] = str(exc)
+        return base
+
+    base["previous_receipt_loaded"] = True
+    comparison = compare_normalization_audits(
+        current=current_audit,
+        previous=previous_audit,
+    )
+    base.update(comparison)
+    return base
 
 
 def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
@@ -609,6 +656,21 @@ def _make_report(
             "reason": "system_features_disabled",
         }
 
+    normalization_audit = _build_normalization_audit(
+        normalization_report=getattr(
+            args,
+            "_normalization_report",
+            {"mode": "runtime", "enabled": False},
+        ),
+        normalization_profile=getattr(args, "_normalization_profile", None),
+        normalization_reference=decision.get("normalization_reference", {}),
+        quality_metric=getattr(args, "quality_metric", None),
+    )
+    normalization_consistency = _build_normalization_consistency_report(
+        previous_receipt_path=getattr(args, "previous_decision_receipt", None),
+        current_audit=normalization_audit,
+    )
+
     return {
         "router_version": ROUTER_VERSION,
         "feature_level": dict(FEATURE_LEVEL),
@@ -669,16 +731,8 @@ def _make_report(
             "scope": normalization_scope,
             "num_reference_points": normalization_reference_count,
         },
-        "normalization_audit": _build_normalization_audit(
-            normalization_report=getattr(
-                args,
-                "_normalization_report",
-                {"mode": "runtime", "enabled": False},
-            ),
-            normalization_profile=getattr(args, "_normalization_profile", None),
-            normalization_reference=decision.get("normalization_reference", {}),
-            quality_metric=getattr(args, "quality_metric", None),
-        ),
+        "normalization_audit": normalization_audit,
+        "normalization_consistency": normalization_consistency,
         "normalization_profile": getattr(
             args,
             "_normalization_report",
@@ -1763,6 +1817,15 @@ def main(argv: Optional[List[str]] = None) -> None:
             "Politica di normalizzazione: auto, runtime, global, dataset, local. "
             "runtime usa la normalizzazione calcolata al volo; global/dataset/local "
             "richiedono --normalization-file."
+        ),
+    )
+
+    parser.add_argument(
+        "--previous-decision-receipt",
+        default=None,
+        help=(
+            "Optional explicit previous decision receipt/router report used only "
+            "to audit normalization comparability in the output report."
         ),
     )
 
