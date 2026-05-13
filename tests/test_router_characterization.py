@@ -28,6 +28,31 @@ def test_thematic_subpackage_imports_keep_legacy_paths():
     assert new_validate_calibration_bundle is legacy_validate_calibration_bundle
 
 
+def test_observability_subpackage_imports_keep_legacy_paths():
+    from src.router.observability.decision_receipt import (
+        build_decision_receipt as new_build_decision_receipt,
+    )
+    from src.router.decision_receipt import (
+        build_decision_receipt as legacy_build_decision_receipt,
+    )
+    from src.router.observability.feedback_analysis import (
+        analyze_feedback as new_analyze_feedback,
+    )
+    from src.router.feedback_analysis import (
+        analyze_feedback as legacy_analyze_feedback,
+    )
+    from src.router.observability.shadow_decision_validation import (
+        run_shadow_decision_validation as new_run_shadow_decision_validation,
+    )
+    from src.router.shadow_decision_validation import (
+        run_shadow_decision_validation as legacy_run_shadow_decision_validation,
+    )
+
+    assert new_build_decision_receipt is legacy_build_decision_receipt
+    assert new_analyze_feedback is legacy_analyze_feedback
+    assert new_run_shadow_decision_validation is legacy_run_shadow_decision_validation
+
+
 def _tmp_path(name: str) -> Path:
     tmp_dir = Path(__file__).with_name("_tmp") / "router_characterization"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -297,6 +322,24 @@ def test_external_codec_disabled_by_default_characterization():
         "src.router.codecs.external_codec_benchmark",
         "src.router.codecs.external_codec_rde_exporter",
         "src.router.calibration.calibration_apply",
+        "src.router.decision_replay",
+        "src.router.router_overhead_audit",
+        "src.router.router_effectiveness_audit",
+        "src.router.shadow_decision_comparison",
+        "src.router.shadow_decision_validation",
+        "src.router.feedback_analysis",
+        "src.router.feedback_calibration_proposal",
+        "src.router.feedback_proposal_validation",
+        "src.router.feedback_calibration_promotion",
+        "src.router.observability.decision_replay",
+        "src.router.observability.router_overhead_audit",
+        "src.router.observability.router_effectiveness_audit",
+        "src.router.observability.shadow_decision_comparison",
+        "src.router.observability.shadow_decision_validation",
+        "src.router.observability.feedback_analysis",
+        "src.router.observability.feedback_calibration_proposal",
+        "src.router.observability.feedback_proposal_validation",
+        "src.router.observability.feedback_calibration_promotion",
     ],
 )
 def test_cli_help_smoke(module_name: str):

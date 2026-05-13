@@ -23,7 +23,7 @@ try:
         build_content_policy_report,
         get_content_policy_preferred_candidate,
     )
-    from .decision_receipt import build_decision_receipt
+    from .observability.decision_receipt import build_decision_receipt
     from .codecs.external_codec_registry import load_external_codec_points
     from .content_classifier_model import (
         build_metadata_no_source_features,
@@ -50,7 +50,7 @@ try:
     )
     from .report import build_router_report
     from .router_config import expand_argv_with_config
-    from .run_manifest import build_run_manifest
+    from .observability.run_manifest import build_run_manifest
     from .system_features import build_system_features
     from .system_penalty import (
         build_system_penalty_context,

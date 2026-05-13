@@ -10,7 +10,7 @@ try:
         build_energy_provenance_compatibility_audit,
     )
     from .energy_tier_policy import build_energy_tier_policy_shadow
-    from .normalization_consistency import (
+    from .observability.normalization_consistency import (
         NormalizationAuditLoadError,
         compare_normalization_audits,
         load_previous_normalization_audit,
