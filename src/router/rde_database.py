@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 try:
-    from .energy_provenance import classify_energy_provenance
+    from .adaptation.energy_provenance import classify_energy_provenance
     from .normalization_profile import normalize_with_profile
 except ImportError:
     from energy_provenance import classify_energy_provenance

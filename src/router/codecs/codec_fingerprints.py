@@ -10,7 +10,7 @@ from typing import Any
 
 try:
     from .codec_capabilities import get_codec_capability
-    from ..system_probe import _find_executable
+    from ..adaptation.system_probe import _find_executable
 except ImportError:  # pragma: no cover - direct script fallback
     from codec_capabilities import get_codec_capability
     from system_probe import _find_executable

@@ -5,17 +5,17 @@ try:
     from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from .codecs.codec_capabilities import build_execution_plan
     from .context import RouterContext
-    from .energy_provenance import build_energy_provenance_summary
-    from .energy_provenance_compatibility import (
+    from .adaptation.energy_provenance import build_energy_provenance_summary
+    from .adaptation.energy_provenance_compatibility import (
         build_energy_provenance_compatibility_audit,
     )
-    from .energy_tier_policy import build_energy_tier_policy_shadow
+    from .adaptation.energy_tier_policy import build_energy_tier_policy_shadow
     from .observability.normalization_consistency import (
         NormalizationAuditLoadError,
         compare_normalization_audits,
         load_previous_normalization_audit,
     )
-    from .system_features import estimate_probe_efficiency
+    from .adaptation.system_features import estimate_probe_efficiency
 except ImportError:  # pragma: no cover - direct script fallback
     from version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from codec_capabilities import build_execution_plan

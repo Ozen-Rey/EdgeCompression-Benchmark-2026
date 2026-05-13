@@ -15,7 +15,7 @@ try:
         collect_energy_backend_diagnostics,
     )
     from src.router.codecs.codec_capabilities import build_execution_plan
-    from src.router.system_probe import probe_system
+    from src.router.adaptation.system_probe import probe_system
 except ImportError:
     sys.path.append(str(Path(__file__).resolve().parents[1] / "utils"))
     from version import ROUTER_VERSION
