@@ -424,6 +424,13 @@ artifacts. These artifacts are not router inputs and do not modify the registry,
 candidate pool, `J_RDE`, ranking, normalization, content-aware or system-aware
 logic.
 
+Router v0.40.0 adds `external_codec_rde_exporter`, an offline exporter from the
+raw benchmark CSV to an R-D-E-shaped CSV plus a completeness/provenance report.
+The exporter does not execute codecs or probes, does not discover artifacts,
+does not register candidates, and does not feed the router. It marks missing
+quality or energy explicitly and sets `router_ready=false` when the export is
+not complete enough for future router consumption.
+
 By default, executed router runs append to:
 
 ```text

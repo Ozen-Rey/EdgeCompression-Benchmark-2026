@@ -89,6 +89,35 @@ does not compute quality metrics, does not require real energy measurement,
 does not score candidates, does not register codecs and does not change router
 ranking.
 
+Export raw measurements to an R-D-E-shaped CSV:
+
+```powershell
+python -m src.router.external_codec_rde_exporter `
+  --spec configs/external_codecs/example_image_codec.json `
+  --raw-csv results/external_codec_benchmarks/example_codec_measurements.csv `
+  --out results/external_codec_benchmarks/example_codec_rde.csv `
+  --report-out results/external_codec_benchmarks/example_codec_rde_report.json `
+  --quality-csv results/external_codec_benchmarks/example_codec_quality.csv `
+  --quality-column ssimulacra2 `
+  --rate-mode image_bpp
+```
+
+Router v0.40.0's exporter is offline only. It does not execute codecs. It reads
+the v0.39 raw CSV, excludes failed raw rows from valid R-D-E output while
+counting them in the report, optionally joins quality values by
+`input_id,param_set_id`, and writes a standardized CSV with:
+
+```text
+codec,param,input_id,input_path,rate,quality,energy,time_ms,
+energy_provenance_tier,measurement_provenance,success,error,source_raw_csv
+```
+
+If quality is missing, the exporter leaves `quality` empty and reports
+`quality_available=false`. If energy is missing, it leaves `energy` empty,
+uses `energy_provenance_tier=unknown`, and reports `energy_available=false`.
+`router_ready` is true only when the exported CSV is structurally valid and
+has the needed quality and energy fields populated.
+
 ## Required Fields
 
 An external codec spec is a JSON object with these top-level fields:
@@ -214,6 +243,11 @@ execution model as the dry-run. Inputs must be named explicitly with repeated
 `--input`; there is no automatic dataset or codec discovery. Parameters must
 either come from the spec's declared values or be passed as repeated
 `--param-set` JSON objects containing only declared parameter names.
+
+Router v0.40.0 adds `external_codec_rde_exporter`, an offline transformer from
+the raw benchmark CSV to a future-router-compatible R-D-E-shaped CSV. It never
+executes subprocesses, encode, decode or probes; it only reads declared files
+and writes export artifacts.
 
 ## Minimal Example
 

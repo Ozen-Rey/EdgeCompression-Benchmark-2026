@@ -337,6 +337,15 @@ empty with `energy_provenance_tier=unknown`; rate is a simple output-size style
 raw value. Failed runs are retained as rows for auditability, not treated as
 filtered router candidates.
 
+Router v0.40.0 adds an offline R-D-E exporter for external codec raw
+measurements. The output CSV has a future-compatible shape, but it is still not
+loaded by the router and is not proof of methodological comparability. Missing
+quality is not invented, missing energy is not invented, failed raw rows are
+counted but not exported as valid points, and the report sets `router_ready`
+false unless required fields are available. A true router-ready integration
+still requires separate quality measurement, energy methodology, normalization,
+calibration and review.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
