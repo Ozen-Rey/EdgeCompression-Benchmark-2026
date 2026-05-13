@@ -233,6 +233,23 @@ but absent from the exported scored pool. Regret is computed only for the first
 case. If cost is unavailable, the audit reports `cost_status` and
 `cost_reason_detail` instead of inventing `J_RDE` outside the router.
 
+Router v0.31.0 adds a normalization consistency audit for router reports, but
+only when a previous receipt/report is passed explicitly with
+`--previous-decision-receipt`. This is a provenance check, not a decision gate:
+it reports whether the previous and current `normalization_audit` fields appear
+comparable and emits warnings for changed modes, quality metrics, quality
+directions, scale sources, runtime-computation status or numeric ranges.
+
+No automatic discovery is performed. The router does not look for prior
+receipts, latest reports or nearby artifacts. Missing, malformed or
+normalization-audit-free previous files are reported as controlled
+`normalization_consistency` warnings/errors in the current report.
+
+The audit does not change `J_RDE`, ranking, normalization logic, calibration
+bundle logic, energy backends, content-aware behavior, system-aware behavior or
+the selected codec/config. It only helps decide whether two reported runs can
+be compared methodologically.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

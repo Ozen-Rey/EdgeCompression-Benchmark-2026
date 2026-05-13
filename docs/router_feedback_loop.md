@@ -27,6 +27,7 @@ calibration bundle consumption -> explicit manifest-validated router input
 calibration impact audit -> read-only baseline vs bundle decision comparison
 shadow decision comparison -> offline what-if comparison only
 shadow decision validation -> offline methodological gate
+normalization consistency audit -> explicit previous receipt comparability check
 ```
 
 The feedback CSV records predicted router values, observed execution values and
@@ -301,6 +302,29 @@ unscored when it appears in the raw candidate pool but not in the router's
 exported scored pool; in that case regret is left empty and the reason is
 reported as `feasible_but_unscored` rather than a generic missing-cost label.
 Filtered candidates remain separate from feasible-but-unscored candidates.
+
+Router v0.31.0 adds an optional normalization consistency audit to normal
+router reports:
+
+```powershell
+python -m src.router.rde_router `
+  --csv results/routing_context/original.csv `
+  --previous-decision-receipt results/routing_context/old_router_report.json `
+  --out results/routing_context/router_decision_report.json
+```
+
+The previous artifact must be named explicitly with
+`--previous-decision-receipt`; the router never searches for the latest or
+nearest receipt automatically. The artifact may be a decision receipt, a router
+report with `decision_receipt.normalization_audit`, or a router report with a
+top-level `normalization_audit`.
+
+The check is report-only. It compares the current `normalization_audit` with
+the previous one and writes `normalization_consistency` with comparability,
+warnings and field-level difference flags. It does not change `J_RDE`, ranking,
+normalization, calibration bundle handling, energy backends, content-aware
+logic, system-aware logic or the selected codec/config. Its purpose is only to
+make clear whether two runs are methodologically comparable.
 
 By default, executed router runs append to:
 
