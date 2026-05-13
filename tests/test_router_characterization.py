@@ -1,7 +1,9 @@
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -49,6 +51,37 @@ def _real_fixture_args() -> list[str]:
     ]
 
 
+_VOLATILE_REPORT_KEYS = {
+    "run_manifest",
+    "system_state",
+}
+
+
+def _normalize_report_for_semantic_comparison(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _normalize_report_for_semantic_comparison(item)
+            for key, item in value.items()
+            if key not in _VOLATILE_REPORT_KEYS
+            and not key.endswith("_at_utc")
+            and not key.endswith("_timestamp")
+            and key not in {"overhead_ms", "duration_ms", "elapsed_ms"}
+        }
+
+    if isinstance(value, list):
+        return [_normalize_report_for_semantic_comparison(item) for item in value]
+
+    if isinstance(value, str):
+        text = value.replace(str(Path.cwd()), "<repo>")
+        return re.sub(
+            r"tests[\\/]+_tmp[\\/]+router_characterization[\\/]+[^\\/]+",
+            "tests/_tmp/router_characterization/<tmp-file>",
+            text,
+        )
+
+    return value
+
+
 def test_base_router_characterization_without_external_codec():
     report = _run_router(_real_fixture_args(), "base_report.json")
     selected = report["decision"]["selected"]
@@ -57,6 +90,15 @@ def test_base_router_characterization_without_external_codec():
     assert selected["codec"] == "HEVC"
     assert selected["config"] == "crf=15"
     assert selected["cost"] == pytest.approx(0.66)
+
+
+def test_base_router_report_semantic_repeatability():
+    first = _run_router(_real_fixture_args(), "base_semantic_first.json")
+    second = _run_router(_real_fixture_args(), "base_semantic_second.json")
+
+    assert _normalize_report_for_semantic_comparison(
+        first
+    ) == _normalize_report_for_semantic_comparison(second)
 
 
 def test_content_policy_apply_characterization():
