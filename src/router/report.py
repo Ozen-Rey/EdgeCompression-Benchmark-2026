@@ -268,14 +268,22 @@ def build_router_report(
         requested=args.generate_command or args.input is not None or args.execute,
     )
 
-    calibration_report = getattr(args, "_calibration_report", {"enabled": False})
+    calibration_report = _context_or_args(
+        args,
+        router_context,
+        "calibration_report",
+        "_calibration_report",
+        {"enabled": False},
+    )
     selected_calibration = _find_selected_calibration(
         calibration_report=calibration_report,
         decision=decision,
     )
 
-    system_features_report = getattr(
+    system_features_report = _context_or_args(
         args,
+        router_context,
+        "system_features_report",
         "_system_features_report",
         {
             "enabled": False,
@@ -297,12 +305,20 @@ def build_router_report(
         }
 
     normalization_audit = _build_normalization_audit(
-        normalization_report=getattr(
+        normalization_report=_context_or_args(
             args,
+            router_context,
+            "normalization_report",
             "_normalization_report",
             {"mode": "runtime", "enabled": False},
         ),
-        normalization_profile=getattr(args, "_normalization_profile", None),
+        normalization_profile=_context_or_args(
+            args,
+            router_context,
+            "normalization_profile",
+            "_normalization_profile",
+            None,
+        ),
         normalization_reference=decision.get("normalization_reference", {}),
         quality_metric=getattr(args, "quality_metric", None),
     )
@@ -402,8 +418,10 @@ def build_router_report(
         "energy_provenance_summary": energy_provenance_summary,
         "energy_provenance_compatibility": energy_provenance_compatibility,
         "energy_tier_policy": energy_tier_policy,
-        "codec_registry": getattr(
+        "codec_registry": _context_or_args(
             args,
+            router_context,
+            "codec_registry_report",
             "_codec_registry_report",
             {
                 "enabled": False,
@@ -418,8 +436,10 @@ def build_router_report(
                 "enabled": False,
             },
         ),
-        "router_config": getattr(
+        "router_config": _context_or_args(
             args,
+            router_context,
+            "router_config_report",
             "_router_config_report",
             {
                 "enabled": False,
@@ -448,23 +468,29 @@ def build_router_report(
         },
         "normalization_audit": normalization_audit,
         "normalization_consistency": normalization_consistency,
-        "normalization_profile": getattr(
+        "normalization_profile": _context_or_args(
             args,
+            router_context,
+            "normalization_report",
             "_normalization_report",
             {
                 "enabled": False,
                 "mode": "runtime",
             },
         ),
-        "quality_thresholds": getattr(
+        "quality_thresholds": _context_or_args(
             args,
+            router_context,
+            "quality_threshold_report",
             "_quality_threshold_report",
             {
                 "enabled": False,
             },
         ),
-        "time_guard": getattr(
+        "time_guard": _context_or_args(
             args,
+            router_context,
+            "time_guard_report",
             "_time_guard_report",
             {
                 "enabled": False,
@@ -488,15 +514,19 @@ def build_router_report(
         "system_state": system_state,
         "system_features": system_features_report,
         "system_probe_efficiency": system_probe_efficiency,
-        "system_policy": getattr(
+        "system_policy": _context_or_args(
             args,
+            router_context,
+            "system_policy_report",
             "_system_policy_report",
             {
                 "enabled": False,
             },
         ),
-        "content_policy": getattr(
+        "content_policy": _context_or_args(
             args,
+            router_context,
+            "content_policy_report",
             "_content_policy_report",
             {
                 "enabled": False,
@@ -504,8 +534,10 @@ def build_router_report(
                 "suggestion": None,
             },
         ),
-        "content_classifier": getattr(
+        "content_classifier": _context_or_args(
             args,
+            router_context,
+            "content_classifier_report",
             "_content_classifier_report",
             {
                 "enabled": False,
@@ -513,31 +545,39 @@ def build_router_report(
                 "prediction": None,
             },
         ),
-        "content_filter": getattr(
+        "content_filter": _context_or_args(
             args,
+            router_context,
+            "content_filter_report",
             "_content_filter_report",
             {
                 "enabled": False,
                 "applied": False,
             },
         ),
-        "system_policy_simulation": getattr(
+        "system_policy_simulation": _context_or_args(
             args,
+            router_context,
+            "system_policy_simulation",
             "_system_policy_simulation",
             {
                 "enabled": False,
                 "classes": {},
             },
         ),
-        "system_penalty": getattr(
+        "system_penalty": _context_or_args(
             args,
+            router_context,
+            "system_penalty_report",
             "_system_penalty_report",
             {
                 "enabled": False,
             },
         ),
-        "system_penalty_weights": getattr(
+        "system_penalty_weights": _context_or_args(
             args,
+            router_context,
+            "system_penalty_weights_report",
             "_system_penalty_weights_report",
             {
                 "source": None,
