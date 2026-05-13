@@ -26,6 +26,7 @@ try:
         get_content_policy_preferred_candidate,
     )
     from .decision_receipt import build_decision_receipt
+    from .energy_provenance import build_energy_provenance_summary
     from .content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -85,6 +86,7 @@ except ImportError:
         get_content_policy_preferred_candidate,
     )
     from decision_receipt import build_decision_receipt
+    from energy_provenance import build_energy_provenance_summary
     from content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -670,6 +672,11 @@ def _make_report(
         previous_receipt_path=getattr(args, "previous_decision_receipt", None),
         current_audit=normalization_audit,
     )
+    energy_provenance_summary = build_energy_provenance_summary(
+        selected=decision.get("selected", {}),
+        scored_candidate_pool=decision.get("scored_candidate_pool", []),
+        unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
+    )
 
     return {
         "router_version": ROUTER_VERSION,
@@ -698,6 +705,7 @@ def _make_report(
             calibration_report=calibration_report,
             selected_calibration=selected_calibration,
         ),
+        "energy_provenance_summary": energy_provenance_summary,
         "codec_registry": getattr(
             args,
             "_codec_registry_report",
@@ -1015,6 +1023,38 @@ def _find_selected_calibration(calibration_report: Dict[str, Any], decision: Dic
         "codec": selected_codec,
         "config": selected_config,
     }
+
+
+def _annotate_points_with_calibration_provenance(
+    points: List[RDEPoint],
+    calibration_report: Dict[str, Any],
+) -> None:
+    applied_by_key = {
+        (str(item.get("codec")), str(item.get("config"))): item
+        for item in calibration_report.get("applied", [])
+        if item.get("codec") is not None and item.get("config") is not None
+    }
+
+    for point in points:
+        calibration = applied_by_key.get((str(point.codec), str(point.config)))
+        if calibration is None:
+            continue
+
+        raw = dict(getattr(point, "raw", {}) or {})
+        for key in (
+            "energy_is_measured",
+            "energy_usable_for_total",
+            "energy_scope",
+            "energy_backend",
+            "energy_method",
+            "energy_quality",
+            "energy_scaling_method",
+            "current_method",
+        ):
+            if key in calibration:
+                raw[key] = calibration.get(key)
+
+        point.raw = raw
 
 
 def _summary_row_from_report(report: Dict[str, Any]) -> Dict[str, Any]:
@@ -2460,6 +2500,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         points, calibration_report = apply_local_calibration(
             points=points,
             calibration_file=args.calibration_file,
+        )
+        _annotate_points_with_calibration_provenance(
+            points=points,
+            calibration_report=calibration_report,
         )
     else:
         calibration_report = {

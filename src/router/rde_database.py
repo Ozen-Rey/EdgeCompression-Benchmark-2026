@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 try:
+    from .energy_provenance import classify_energy_provenance
     from .normalization_profile import normalize_with_profile
 except ImportError:
+    from energy_provenance import classify_energy_provenance
     from normalization_profile import normalize_with_profile
 
 
@@ -360,6 +362,14 @@ def aggregate_points_by_config(points: List[RDEPoint]) -> List[RDEPoint]:
             "time_max_ms": max(times) if times else None,
         }
 
+        group_tiers = {
+            classify_energy_provenance(p)
+            for p in group
+        }
+        raw["energy_provenance_tier"] = (
+            next(iter(group_tiers)) if len(group_tiers) == 1 else "unknown"
+        )
+
         aggregated.append(
             RDEPoint(
                 codec=codec,
@@ -615,6 +625,7 @@ def select_best_rde(
                 "rate": p.rate,
                 "quality": p.quality,
                 "energy": p.energy,
+                "energy_provenance_tier": classify_energy_provenance(p),
                 "time_ms": p.time_ms,
                 "quality_constraint_stat": quality_constraint_stat,
                 "quality_constraint_value": q_guard,
@@ -677,6 +688,7 @@ def select_best_rde(
                 "rate": p.rate,
                 "quality": p.quality,
                 "energy": p.energy,
+                "energy_provenance_tier": classify_energy_provenance(p),
                 "time_ms": p.time_ms,
                 "candidate_status": "infeasible_quality_guard",
                 "reason": "quality_guard_violation",
@@ -692,6 +704,7 @@ def select_best_rde(
             "rate": p.rate,
             "quality": p.quality,
             "energy": p.energy,
+            "energy_provenance_tier": classify_energy_provenance(p),
             "time_ms": p.time_ms,
             "candidate_status": "hard_excluded_system_penalty",
             "reason": "hard_excluded_by_system_penalty",

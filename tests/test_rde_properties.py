@@ -49,6 +49,7 @@ def test_scored_candidate_pool_has_cost_provenance_and_status():
     for item in decision["scored_candidate_pool"]:
         assert item["cost_provenance"] == "router_scored"
         assert item["candidate_status"] == "router_scored"
+        assert item["energy_provenance_tier"] == "benchmark_reference"
 
 
 def test_scored_candidate_pool_ranks_are_unique_and_sequential():
@@ -70,6 +71,7 @@ def test_unscored_candidate_pool_contains_quality_guard_violations():
     assert hevc_unscored[0]["reason"] == "quality_guard_violation"
     assert hevc_unscored[0]["candidate_status"] == "infeasible_quality_guard"
     assert hevc_unscored[0]["cost_provenance"] == "unavailable_filtered"
+    assert hevc_unscored[0]["energy_provenance_tier"] == "benchmark_reference"
     assert "feasible" not in hevc_unscored[0]
 
 
@@ -92,6 +94,8 @@ def test_scored_pool_supersedes_top_k_no_decision_change():
     assert len(decision["top_k"]) == 1
     assert len(decision["scored_candidate_pool"]) >= 1
     assert decision["scored_candidate_pool"][0]["codec"] == decision["selected"]["codec"]
+    assert "energy_provenance_tier" in decision["top_k"][0]
+    assert "energy_provenance_tier" in decision["selected"]
 
 
 def test_energy_monotonicity_when_rate_and_quality_are_equal():

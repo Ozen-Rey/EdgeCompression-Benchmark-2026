@@ -353,6 +353,24 @@ change `J_RDE`, ranking, normalization, calibration application without a
 manifest, feedback, content-aware logic, system-aware logic or backend
 execution. The router still performs no automatic bundle discovery.
 
+Router v0.33.0 adds report-only energy provenance tiers. Candidate entries now
+include `energy_provenance_tier` in the selected candidate, scored candidate
+pool, unscored candidate pool and legacy `top_k` view. Reports also include
+`energy_provenance_summary` with counts by tier. The tiers are:
+
+- `measured_hw_total`: hardware-measured energy usable as total pipeline energy.
+- `measured_hw_partial`: hardware energy is present but not usable as total
+  pipeline energy, such as GPU-only telemetry.
+- `derived_time_scaled`: energy derived from benchmark/local time scaling.
+- `benchmark_reference`: benchmark CSV energy without local measurement
+  metadata.
+- `unknown`: missing or unclassifiable provenance.
+
+This is observability only. Tiers do not add penalties, change `J_RDE`, change
+ranking, change normalization, filter candidates, change bundle consumption,
+alter feedback, alter content-aware or system-aware logic, or affect backend
+execution.
+
 By default, executed router runs append to:
 
 ```text
