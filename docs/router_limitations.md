@@ -268,6 +268,19 @@ a successful validation. It is reported as disabled with
 `reason=empty_codec_fingerprints`, while manifests that apply local calibration
 without a promotion profile still attempt to fingerprint the affected codecs.
 
+Router v0.33.0 adds energy provenance tier reporting. The selected candidate,
+scored pool, unscored pool and `top_k` entries expose
+`energy_provenance_tier`, and the report includes an
+`energy_provenance_summary`. The tiers distinguish usable total hardware
+energy, partial hardware telemetry, time-scaled estimates, benchmark reference
+energy and unknown provenance.
+
+These tiers are not policy inputs. GPU-only or otherwise partial hardware
+telemetry is never promoted to total pipeline energy by the tier reporter, and
+the tier does not change `J_RDE`, ranking, normalization, filtering, bundle
+consumption, calibration application, content-aware behavior, system-aware
+behavior or backend execution.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

@@ -143,6 +143,18 @@ def test_router_end_to_end_on_real_small_image_fixture():
 
     assert selected["codec"] == "HEVC"
     assert selected["config"] == "crf=15"
+    assert selected["energy_provenance_tier"] == "benchmark_reference"
+    assert all(
+        item["energy_provenance_tier"] == "benchmark_reference"
+        for item in report["decision"]["scored_candidate_pool"]
+    )
+    assert report["energy_provenance_summary"]["selected_tier"] == (
+        "benchmark_reference"
+    )
+    assert report["energy_provenance_summary"]["counts"]["benchmark_reference"] == (
+        len(report["decision"]["scored_candidate_pool"])
+        + len(report["decision"]["unscored_candidate_pool"])
+    )
     assert report["decision"]["decision_mode"] == "safe"
     assert report["router_version"] == ROUTER_VERSION
     assert report["feature_level"] == FEATURE_LEVEL
@@ -163,6 +175,57 @@ def test_router_end_to_end_on_real_small_image_fixture():
     assert receipt["decision"]["selected_config"] == selected["config"]
     assert receipt["decision"]["cost"] == selected["cost"]
     assert "--out" not in receipt["replay"]["argv"]
+
+
+def test_energy_tier_reporting_does_not_change_fixture_decision_or_ranking():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    first_out = _tmp_path("energy_tier_invariance_first.json")
+    second_out = _tmp_path("energy_tier_invariance_second.json")
+    args = [
+        "--csv",
+        str(fixture),
+        "--codec-col",
+        "codec",
+        "--config-col",
+        "param",
+        "--rate-col",
+        "bpp",
+        "--quality-col",
+        "ssimulacra2",
+        "--energy-col",
+        "energy_per_image_j",
+        "--time-col",
+        "time_ms",
+        "--available-codecs",
+        "JPEG,JXL,HEVC",
+        "--quality-target",
+        "very-high",
+        "--quality-floor",
+        "90",
+    ]
+
+    main([*args, "--out", str(first_out)])
+    main([*args, "--out", str(second_out)])
+
+    first = json.loads(first_out.read_text(encoding="utf-8"))
+    second = json.loads(second_out.read_text(encoding="utf-8"))
+    first_selected = first["decision"]["selected"]
+    second_selected = second["decision"]["selected"]
+
+    assert second_selected["codec"] == first_selected["codec"]
+    assert second_selected["config"] == first_selected["config"]
+    assert second_selected["cost"] == first_selected["cost"]
+    assert [
+        (item["rank"], item["codec"], item["config"], item["cost"])
+        for item in second["decision"]["scored_candidate_pool"]
+    ] == [
+        (item["rank"], item["codec"], item["config"], item["cost"])
+        for item in first["decision"]["scored_candidate_pool"]
+    ]
 
 
 def test_router_with_valid_bundle_reports_bundle_provenance():
