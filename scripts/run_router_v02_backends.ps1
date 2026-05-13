@@ -4,11 +4,148 @@ $ErrorActionPreference = "Stop"
 $Csv = "results\images\image_4dataset_RDE_paper_ready.csv"
 $OutDir = "results\routing_context"
 $Input = "test_images\input.png"
+$WinGetPackageRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
 if (!(Test-Path $Input)) {
     throw "Input image not found: $Input"
+}
+
+function Get-ExecutableFromPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+
+    try {
+        $found = & where.exe $Name 2>$null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -eq 0 -and $null -ne $found) {
+        return [string]($found | Select-Object -First 1)
+    }
+
+    return $null
+}
+
+function Find-ExecutableInWinGetPackages {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    if (!(Test-Path $WinGetPackageRoot)) {
+        return $null
+    }
+
+    $exeName = if ($Name.EndsWith(".exe")) { $Name } else { "$Name.exe" }
+    $found = Get-ChildItem `
+        -Path $WinGetPackageRoot `
+        -Recurse `
+        -Filter $exeName `
+        -File `
+        -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+
+    if ($null -eq $found) {
+        return $null
+    }
+
+    return $found.FullName
+}
+
+function Add-SessionPathDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Directory
+    )
+
+    $pathEntries = $env:PATH -split [IO.Path]::PathSeparator
+
+    if ($pathEntries -notcontains $Directory) {
+        $env:PATH = $Directory + [IO.Path]::PathSeparator + $env:PATH
+    }
+}
+
+function Resolve-SmokeExecutable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $pathHit = Get-ExecutableFromPath -Name $Name
+
+    if ($null -ne $pathHit -and $pathHit.Trim() -ne "") {
+        return $pathHit
+    }
+
+    $winGetHit = Find-ExecutableInWinGetPackages -Name $Name
+
+    if ($null -eq $winGetHit -or $winGetHit.Trim() -eq "") {
+        return $null
+    }
+
+    Add-SessionPathDirectory -Directory (Split-Path -Parent $winGetHit)
+
+    $pathHit = Get-ExecutableFromPath -Name $Name
+
+    if ($null -ne $pathHit -and $pathHit.Trim() -ne "") {
+        return $pathHit
+    }
+
+    return $winGetHit
+}
+
+Write-Host ""
+Write-Host "============================================================"
+Write-Host "Backend smoke executable diagnostics"
+Write-Host "============================================================"
+
+$ExecutableDiagnostics = @{}
+
+foreach ($exe in @("cjxl", "ffmpeg", "vvencapp")) {
+    $ExecutableDiagnostics[$exe] = Resolve-SmokeExecutable -Name $exe
+    $status = if ($null -ne $ExecutableDiagnostics[$exe]) {
+        $ExecutableDiagnostics[$exe]
+    } else {
+        "missing"
+    }
+
+    Write-Host "${exe} found: $status"
+}
+
+$RequiredBackendExecutables = @(
+    [pscustomobject]@{ Backend = "jxl_execute"; Executable = "cjxl" },
+    [pscustomobject]@{ Backend = "hevc_execute"; Executable = "ffmpeg" }
+)
+$MissingBackendExecutables = @()
+
+foreach ($requirement in $RequiredBackendExecutables) {
+    $exePath = $ExecutableDiagnostics[$requirement.Executable]
+
+    if ($null -eq $exePath -or [string]::IsNullOrWhiteSpace([string]$exePath)) {
+        $MissingBackendExecutables += (
+            "$($requirement.Backend) requires $($requirement.Executable)"
+        )
+    }
+}
+
+if ($MissingBackendExecutables.Count -gt 0) {
+    throw (
+        "Backend smoke prerequisites missing: " +
+        ($MissingBackendExecutables -join "; ") +
+        ". Checked PATH with where.exe and session-local WinGet package paths under " +
+        "$WinGetPackageRoot. Install or expose the missing executables before " +
+        "running this smoke script. The router runtime remains strict and does " +
+        "not auto-install or implicitly discover codecs."
+    )
 }
 
 $CommonArgs = @(
