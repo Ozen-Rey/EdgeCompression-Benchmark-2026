@@ -312,6 +312,14 @@ Command templates must be argv lists and `security.allow_shell=true` is
 rejected, but black-box codec behavior still requires separate review before
 any future integration.
 
+Router v0.37.0 adds a controlled external codec probe, but its scope remains
+narrow. It can confirm that a declared executable path exists, compute a binary
+SHA256, and run a declared version command with `shell=False` under a timeout.
+This still does not validate encode/decode behavior, output correctness,
+rate-distortion-energy characteristics, determinism, sandbox safety or dataset
+performance. The probe does not register the codec, does not benchmark it, and
+does not affect router decisions or existing backend execution.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
