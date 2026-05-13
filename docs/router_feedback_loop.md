@@ -395,6 +395,13 @@ This remains report-only. There is no apply flag, no candidate is actually
 filtered, no cost is changed, and the selected codec/config in `decision` is
 unchanged.
 
+Router v0.36.0 adds an offline [external codec specification schema](external_codecs.md)
+and validator. External codec specs are declaration artifacts only: validation
+does not execute `version_probe`, does not check binary existence, does not
+register the codec with the router, and does not change ranking, `J_RDE`,
+normalization, energy policy, content-aware logic, system-aware logic or
+backend execution.
+
 By default, executed router runs append to:
 
 ```text
