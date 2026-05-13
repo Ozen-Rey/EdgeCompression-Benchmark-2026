@@ -748,7 +748,8 @@ def build_calibration_bundle_manifest(
         "accepted_scales": accepted_scales,
         "rejected_scales_count": _count_unapplied_promotion_scales(report),
         "codec_fingerprints": build_codec_fingerprints_for_manifest(
-            accepted_scales
+            accepted_scales,
+            applied_items=report.get("applied", []),
         ),
         "energy_policy": {
             "requires_energy_usable_for_total": True,

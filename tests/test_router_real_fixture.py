@@ -6,6 +6,7 @@ import pytest
 
 from src.router.rde_router import main
 from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
+from src.router.codec_fingerprints import fingerprint_codec
 
 
 def _tmp_path(name: str) -> Path:
@@ -18,39 +19,44 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_bundle_manifest(path: Path, calibrated_csv: Path, *, hash_value: str | None = None) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
+def _write_bundle_manifest(
+    path: Path,
+    calibrated_csv: Path,
+    *,
+    hash_value: str | None = None,
+    codec_fingerprints: dict | None = None,
+) -> None:
+    payload = {
+        "artifact_type": "promoted_calibration_bundle",
+        "router_version": "0.18.0",
+        "mode": "explicit_opt_in_calibration_apply",
+        "source_benchmark": "benchmark.csv",
+        "source_calibration": "calibration.json",
+        "promotion_profile": "promotion.json",
+        "output_csv": str(calibrated_csv),
+        "created_at_utc": "2026-05-12T00:00:00+00:00",
+        "accepted_scales": [
             {
-                "artifact_type": "promoted_calibration_bundle",
-                "router_version": "0.18.0",
-                "mode": "explicit_opt_in_calibration_apply",
-                "source_benchmark": "benchmark.csv",
-                "source_calibration": "calibration.json",
-                "promotion_profile": "promotion.json",
-                "output_csv": str(calibrated_csv),
-                "created_at_utc": "2026-05-12T00:00:00+00:00",
-                "accepted_scales": [
-                    {
-                        "codec": "HEVC",
-                        "config": "crf=15",
-                        "axis": "rate",
-                        "scale": 1.0,
-                    }
-                ],
-                "rejected_scales_count": 2,
-                "energy_policy": {
-                    "requires_energy_usable_for_total": True,
-                    "gpu_only_energy_excluded": True,
-                },
-                "hashes": {
-                    "output_csv_sha256": hash_value or _sha256(calibrated_csv),
-                },
+                "codec": "HEVC",
+                "config": "crf=15",
+                "axis": "rate",
+                "scale": 1.0,
             }
-        ),
-        encoding="utf-8",
-    )
+        ],
+        "rejected_scales_count": 2,
+        "energy_policy": {
+            "requires_energy_usable_for_total": True,
+            "gpu_only_energy_excluded": True,
+        },
+        "hashes": {
+            "output_csv_sha256": hash_value or _sha256(calibrated_csv),
+        },
+    }
+    if codec_fingerprints is not None:
+        payload["codec_fingerprints"] = codec_fingerprints
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _write_bundle_validation(
@@ -214,10 +220,90 @@ def test_router_with_valid_bundle_reports_bundle_provenance():
     assert bundle["source"] == "explicit_calibration_bundle_manifest"
     assert bundle["codec_fingerprint_validation"] == {
         "enabled": False,
+        "validated": False,
         "reason": "manifest_without_codec_fingerprints",
+        "validated_codecs": [],
+        "mismatches": [],
     }
     assert report["csv"] == str(calibrated_csv)
     assert report["calibration_bundle_validation"] == {"enabled": False}
+
+
+def test_router_with_modern_bundle_reports_nonempty_fingerprint_validation():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    calibrated_csv = _tmp_path("fingerprint_bundle_calibrated.csv")
+    calibrated_csv.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    legacy_manifest = _tmp_path("fingerprint_legacy_manifest.json")
+    modern_manifest = _tmp_path("fingerprint_modern_manifest.json")
+    legacy_out = _tmp_path("fingerprint_legacy_report.json")
+    modern_out = _tmp_path("fingerprint_modern_report.json")
+    _write_bundle_manifest(legacy_manifest, calibrated_csv)
+    _write_bundle_manifest(
+        modern_manifest,
+        calibrated_csv,
+        codec_fingerprints={"JPEG": fingerprint_codec("JPEG")},
+    )
+
+    base_args = [
+        "--csv",
+        str(fixture),
+        "--codec-col",
+        "codec",
+        "--config-col",
+        "param",
+        "--rate-col",
+        "bpp",
+        "--quality-col",
+        "ssimulacra2",
+        "--energy-col",
+        "energy_per_image_j",
+        "--time-col",
+        "time_ms",
+        "--available-codecs",
+        "JPEG,JXL,HEVC",
+        "--quality-target",
+        "very-high",
+        "--quality-floor",
+        "90",
+    ]
+
+    main(
+        [
+            *base_args,
+            "--calibration-bundle-manifest",
+            str(legacy_manifest),
+            "--out",
+            str(legacy_out),
+        ]
+    )
+    main(
+        [
+            *base_args,
+            "--calibration-bundle-manifest",
+            str(modern_manifest),
+            "--out",
+            str(modern_out),
+        ]
+    )
+
+    legacy_report = json.loads(legacy_out.read_text(encoding="utf-8"))
+    modern_report = json.loads(modern_out.read_text(encoding="utf-8"))
+    validation = modern_report["calibration_bundle"][
+        "codec_fingerprint_validation"
+    ]
+
+    assert validation["enabled"] is True
+    assert validation["validated"] is True
+    assert validation["validated_codecs"] == ["JPEG"]
+    assert validation["mismatches"] == []
+    assert (
+        modern_report["decision"]["selected"]
+        == legacy_report["decision"]["selected"]
+    )
 
 
 def test_router_with_validated_bundle_reports_validation_provenance():

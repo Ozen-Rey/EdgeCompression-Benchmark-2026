@@ -87,23 +87,29 @@ def fingerprint_codec(codec: str) -> dict[str, Any]:
 
     if backend == "python_pillow":
         version = _version_from_python_pillow()
-        return {
+        fingerprint = {
             "backend": backend,
             "version": version,
             "binary_path": None,
             "binary_sha256": None,
             "available": version is not None,
         }
+        if version is None:
+            fingerprint["reason"] = "python_pillow_unavailable"
+        return fingerprint
 
     executable = _required_executable_for_codec(canonical, backend)
     if executable is None:
-        return {
+        fingerprint = {
             "backend": backend,
             "version": None,
             "binary_path": None,
             "binary_sha256": None,
             "available": bool(capability.get("execution_supported", False)),
         }
+        if not fingerprint["available"]:
+            fingerprint["reason"] = "codec_execution_not_supported"
+        return fingerprint
 
     executable_info = _find_executable(executable)
     binary_path = executable_info.get("path")
@@ -116,6 +122,7 @@ def fingerprint_codec(codec: str) -> dict[str, Any]:
             "binary_path": binary_path,
             "binary_sha256": None,
             "available": False,
+            "reason": f"missing_executable:{executable}",
         }
 
     return _fingerprint_binary_path(
@@ -150,12 +157,17 @@ def _fingerprint_binary_path(
 
 def build_codec_fingerprints_for_manifest(
     accepted_scales: list[dict[str, Any]],
+    applied_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Fingerprint codecs represented by accepted bundle scales."""
+    """Fingerprint codecs represented by applied calibration or accepted scales."""
 
     codecs = sorted({
         str(item.get("codec"))
         for item in accepted_scales
+        if item.get("codec") is not None
+    } | {
+        str(item.get("codec"))
+        for item in (applied_items or [])
         if item.get("codec") is not None
     })
 
@@ -173,13 +185,25 @@ def validate_codec_fingerprints(
     if expected_fingerprints is None:
         return {
             "enabled": False,
+            "validated": False,
             "reason": "manifest_without_codec_fingerprints",
+            "validated_codecs": [],
+            "mismatches": [],
         }
 
     if not isinstance(expected_fingerprints, dict):
         raise CodecFingerprintError(
             "Calibration bundle codec_fingerprints must be an object."
         )
+
+    if not expected_fingerprints:
+        return {
+            "enabled": False,
+            "validated": False,
+            "reason": "empty_codec_fingerprints",
+            "validated_codecs": [],
+            "mismatches": [],
+        }
 
     mismatches: list[dict[str, Any]] = []
     validated_codecs: list[str] = []
