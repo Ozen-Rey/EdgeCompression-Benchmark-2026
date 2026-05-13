@@ -7,6 +7,7 @@ import csv
 import itertools
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +18,9 @@ try:
         validate_external_codec_spec,
     )
 except ImportError:  # pragma: no cover - direct script fallback
-    from external_codec_dry_run import dry_run_external_codec_spec
-    from external_codec_spec import (
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.codecs.external_codec_dry_run import dry_run_external_codec_spec
+    from src.router.codecs.external_codec_spec import (
         load_external_codec_spec,
         validate_external_codec_spec,
     )

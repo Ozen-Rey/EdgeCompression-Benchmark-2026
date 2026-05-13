@@ -1,4 +1,6 @@
 import argparse
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -23,8 +25,12 @@ try:
         write_csv,
     )
 except ImportError:
-    from content_metadata_policy import build_candidate_lookup, resolve_global_baseline
-    from content_oracle_classifier import (
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.adaptation.content_metadata_policy import (
+        build_candidate_lookup,
+        resolve_global_baseline,
+    )
+    from src.router.analysis.content_oracle_classifier import (
         FEATURE_SETS,
         _candidate_is_feasible,
         _encode_row,

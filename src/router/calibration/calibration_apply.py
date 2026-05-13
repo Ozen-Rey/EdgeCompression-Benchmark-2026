@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import sys
 from dataclasses import is_dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -13,8 +14,9 @@ try:
     from ..codecs.codec_fingerprints import build_codec_fingerprints_for_manifest
     from ..version import ROUTER_VERSION
 except ImportError:
-    from codec_fingerprints import build_codec_fingerprints_for_manifest
-    from version import ROUTER_VERSION
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.codecs.codec_fingerprints import build_codec_fingerprints_for_manifest
+    from src.router.version import ROUTER_VERSION
 
 
 ENERGY_MODES = {"auto", "require-measured-total", "benchmark-only"}
@@ -805,7 +807,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         from ..core.rde_database import load_rde_points
     except ImportError:
-        from rde_database import load_rde_points
+        from src.router.core.rde_database import load_rde_points
 
     parser = argparse.ArgumentParser(
         description="Apply local calibration and optional promoted feedback scales."

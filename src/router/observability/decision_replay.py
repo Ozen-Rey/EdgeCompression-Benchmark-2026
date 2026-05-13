@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import io
 import json
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -15,9 +16,10 @@ try:
     from src.router.rde_router import main as router_main
     from src.router.version import ROUTER_VERSION
 except ImportError:  # pragma: no cover - direct script fallback
-    from calibration_bundle import sha256_file
-    from rde_router import main as router_main
-    from version import ROUTER_VERSION
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.calibration.calibration_bundle import sha256_file
+    from src.router.rde_router import main as router_main
+    from src.router.version import ROUTER_VERSION
 
 
 DECISION_FIELDS = [

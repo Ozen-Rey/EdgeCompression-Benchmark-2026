@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -13,8 +14,13 @@ try:
     from .feedback_calibration_proposal import _codec_config, _parse_bool, _parse_float
     from ..version import ROUTER_VERSION
 except ImportError:
-    from feedback_calibration_proposal import _codec_config, _parse_bool, _parse_float
-    from version import ROUTER_VERSION
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.observability.feedback_calibration_proposal import (
+        _codec_config,
+        _parse_bool,
+        _parse_float,
+    )
+    from src.router.version import ROUTER_VERSION
 
 
 SUMMARY_FIELDS = [
