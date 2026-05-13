@@ -162,6 +162,15 @@ def test_router_end_to_end_on_real_small_image_fixture():
     assert compatibility["mixed_tiers"] is False
     assert compatibility["severity"] == "ok"
     assert compatibility["warnings"] == []
+    policy = report["energy_tier_policy"]
+    assert policy["enabled"] is True
+    assert policy["mode"] == "report-only"
+    assert policy["policy"] == "strict-compatible"
+    assert policy["status"] == "no_action_single_tier_pool"
+    assert policy["would_change_decision"] is False
+    assert policy["shadow_selected"]["codec"] == selected["codec"]
+    assert policy["shadow_selected"]["config"] == selected["config"]
+    assert policy["shadow_selected"]["cost"] == selected["cost"]
     assert report["decision"]["decision_mode"] == "safe"
     assert report["router_version"] == ROUTER_VERSION
     assert report["feature_level"] == FEATURE_LEVEL
@@ -228,6 +237,8 @@ def test_energy_tier_reporting_does_not_change_fixture_decision_or_ranking():
     assert second_selected["cost"] == first_selected["cost"]
     assert second["energy_provenance_compatibility"]["compatible"] is True
     assert second["energy_provenance_compatibility"]["severity"] == "ok"
+    assert second["energy_tier_policy"]["mode"] == "report-only"
+    assert second["energy_tier_policy"]["would_change_decision"] is False
     assert [
         (item["rank"], item["codec"], item["config"], item["cost"])
         for item in second["decision"]["scored_candidate_pool"]

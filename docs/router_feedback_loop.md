@@ -383,6 +383,18 @@ tiers are reported as `warning`; a selected `measured_hw_partial` candidate is
 costs, ordering, normalization, candidate inclusion, bundle handling, feedback,
 content-aware logic, system-aware logic or backend execution.
 
+Router v0.35.0 adds `energy_tier_policy`, a shadow report for a future
+strict-compatible energy tier policy. It simulates what would happen if the
+router preferred a compatible pool using this reliability order:
+`measured_hw_total`, `derived_time_scaled`, `benchmark_reference`,
+`measured_hw_partial`, `unknown`. The shadow policy reports the current
+selection, a shadow selection, candidates that would be rejected by the policy,
+and whether the decision would change.
+
+This remains report-only. There is no apply flag, no candidate is actually
+filtered, no cost is changed, and the selected codec/config in `decision` is
+unchanged.
+
 By default, executed router runs append to:
 
 ```text

@@ -30,6 +30,7 @@ try:
         build_energy_provenance_compatibility_audit,
     )
     from .energy_provenance import build_energy_provenance_summary
+    from .energy_tier_policy import build_energy_tier_policy_shadow
     from .content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -93,6 +94,7 @@ except ImportError:
         build_energy_provenance_compatibility_audit,
     )
     from energy_provenance import build_energy_provenance_summary
+    from energy_tier_policy import build_energy_tier_policy_shadow
     from content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
@@ -690,6 +692,10 @@ def _make_report(
             unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
         )
     )
+    energy_tier_policy = build_energy_tier_policy_shadow(
+        selected=decision.get("selected", {}),
+        scored_candidate_pool=decision.get("scored_candidate_pool", []),
+    )
 
     return {
         "router_version": ROUTER_VERSION,
@@ -720,6 +726,7 @@ def _make_report(
         ),
         "energy_provenance_summary": energy_provenance_summary,
         "energy_provenance_compatibility": energy_provenance_compatibility,
+        "energy_tier_policy": energy_tier_policy,
         "codec_registry": getattr(
             args,
             "_codec_registry_report",

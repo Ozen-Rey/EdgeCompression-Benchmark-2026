@@ -292,6 +292,17 @@ rerank, penalize or normalize differently. It only tells readers when an R-D-E
 decision compared candidates whose energy values came from different provenance
 classes.
 
+Router v0.35.0 adds an `energy_tier_policy` shadow audit. It simulates a
+future strict-compatible tier policy using a conservative reliability order,
+but it does not apply that policy. In particular, `measured_hw_partial` is never
+preferred over measured-total, time-scaled or benchmark-reference energy, and
+`unknown` remains the weakest tier.
+
+The shadow audit can say that a future policy would choose a different
+candidate, but v0.35.0 still keeps the real router decision, ranking, `J_RDE`,
+normalization, bundle consumption, calibration application, feedback,
+content-aware behavior, system-aware behavior and backend execution unchanged.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
