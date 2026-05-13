@@ -281,6 +281,17 @@ the tier does not change `J_RDE`, ranking, normalization, filtering, bundle
 consumption, calibration application, content-aware behavior, system-aware
 behavior or backend execution.
 
+Router v0.34.0 adds an energy provenance compatibility audit over those tiers.
+It reports whether scored candidates share one provenance tier or mix benchmark
+reference, time-scaled, measured-total, measured-partial or unknown energy
+sources. Mixed scored pools are warnings; a selected partial hardware tier is
+critical; a selected unknown tier is a warning.
+
+This is still not a router policy. The compatibility audit does not filter,
+rerank, penalize or normalize differently. It only tells readers when an R-D-E
+decision compared candidates whose energy values came from different provenance
+classes.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

@@ -26,6 +26,9 @@ try:
         get_content_policy_preferred_candidate,
     )
     from .decision_receipt import build_decision_receipt
+    from .energy_provenance_compatibility import (
+        build_energy_provenance_compatibility_audit,
+    )
     from .energy_provenance import build_energy_provenance_summary
     from .content_classifier_model import (
         build_metadata_no_source_features,
@@ -86,6 +89,9 @@ except ImportError:
         get_content_policy_preferred_candidate,
     )
     from decision_receipt import build_decision_receipt
+    from energy_provenance_compatibility import (
+        build_energy_provenance_compatibility_audit,
+    )
     from energy_provenance import build_energy_provenance_summary
     from content_classifier_model import (
         build_metadata_no_source_features,
@@ -677,6 +683,13 @@ def _make_report(
         scored_candidate_pool=decision.get("scored_candidate_pool", []),
         unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
     )
+    energy_provenance_compatibility = (
+        build_energy_provenance_compatibility_audit(
+            selected=decision.get("selected", {}),
+            scored_candidate_pool=decision.get("scored_candidate_pool", []),
+            unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
+        )
+    )
 
     return {
         "router_version": ROUTER_VERSION,
@@ -706,6 +719,7 @@ def _make_report(
             selected_calibration=selected_calibration,
         ),
         "energy_provenance_summary": energy_provenance_summary,
+        "energy_provenance_compatibility": energy_provenance_compatibility,
         "codec_registry": getattr(
             args,
             "_codec_registry_report",

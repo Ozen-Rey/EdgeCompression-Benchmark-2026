@@ -371,6 +371,18 @@ ranking, change normalization, filter candidates, change bundle consumption,
 alter feedback, alter content-aware or system-aware logic, or affect backend
 execution.
 
+Router v0.34.0 adds a read-only energy provenance compatibility audit. The
+router report now includes `energy_provenance_compatibility`, which records the
+selected tier, tier counts for scored and unscored pools, whether the scored
+pool mixes tiers, warnings and a severity of `ok`, `warning` or `critical`.
+
+The audit marks a scored pool with one tier as compatible. Mixed scored-pool
+tiers are reported as `warning`; a selected `measured_hw_partial` candidate is
+`critical` because partial telemetry is not total pipeline energy; a selected
+`unknown` tier is a warning. This audit is report-only and does not change
+costs, ordering, normalization, candidate inclusion, bundle handling, feedback,
+content-aware logic, system-aware logic or backend execution.
+
 By default, executed router runs append to:
 
 ```text
