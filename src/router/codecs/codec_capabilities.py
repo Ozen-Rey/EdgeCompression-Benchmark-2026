@@ -637,7 +637,7 @@ def build_execution_plan(
         plan["command"] = [
             sys.executable,
             "-m",
-            "src.router.simple_image_encoder",
+            "src.router.codecs.simple_image_encoder",
             "--codec",
             "jpeg",
             "--input",

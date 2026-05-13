@@ -439,6 +439,7 @@ def test_external_codec_disabled_by_default_characterization():
         "src.router.analysis.content_aware_benchmark_table",
         "src.router.analysis.content_aware_overhead_analysis",
         "src.router.analysis.content_aware_paper_artifacts",
+        "src.router.observability.legacy_import_audit",
     ],
 )
 def test_cli_help_smoke(module_name: str):
