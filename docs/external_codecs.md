@@ -24,6 +24,23 @@ The validator returns:
 }
 ```
 
+Probe a valid spec without running encode/decode:
+
+```powershell
+python -m src.router.external_codec_probe `
+  --spec configs/external_codecs/example_image_codec.json `
+  --out results/routing_context/external_codec_probe.json
+```
+
+The v0.37.0 probe performs only this sequence:
+
+```text
+external codec spec -> schema validation -> executable/version/fingerprint probe -> report
+```
+
+It does not benchmark the codec, read datasets, write codec outputs, register
+the codec with the router, or change any router candidate pool.
+
 ## Required Fields
 
 An external codec spec is a JSON object with these top-level fields:
@@ -94,6 +111,33 @@ Both templates must include `{input}` and `{output}` placeholders.
 `security.allow_shell` must be `false` or absent. v0.36.0 intentionally rejects
 shell-string command templates and does not check whether binaries exist.
 
+Router v0.37.0 adds `external_codec_probe`, a controlled availability probe for
+specs that have already passed schema validation. For `runtime.type =
+external_command`, the probe checks the explicitly declared
+`runtime.executable`, computes its SHA256 when present, and may run only the
+declared `version_probe.command` or `version_probe.command_template` with
+`shell=False` and a timeout. Use `--no-version-probe` to restrict the probe to
+existence plus fingerprinting.
+
+For `runtime.type = python_module`, the probe does not import the module by
+default. It reports availability as `unknown` with a provenance warning until a
+future release introduces an explicit import/probe mode.
+
+The probe report includes safety flags:
+
+```json
+{
+  "safety": {
+    "shell_used": false,
+    "encode_executed": false,
+    "decode_executed": false,
+    "benchmark_executed": false
+  }
+}
+```
+
+The probe never executes `encode.command_template` or `decode.command_template`.
+
 ## Minimal Example
 
 ```json
@@ -105,10 +149,11 @@ shell-string command templates and does not check whether binaries exist.
   "family": "classical",
   "runtime": {
     "type": "external_command",
+    "executable": "example-codec",
     "max_runtime_seconds": 30
   },
   "version_probe": {
-    "command_template": ["{binary}", "--version"]
+    "command": ["{executable}", "--version"]
   },
   "encode": {
     "command_template": [

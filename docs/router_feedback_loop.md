@@ -402,6 +402,13 @@ register the codec with the router, and does not change ranking, `J_RDE`,
 normalization, energy policy, content-aware logic, system-aware logic or
 backend execution.
 
+Router v0.37.0 adds `external_codec_probe`, a controlled report-only probe for
+those specs. The probe validates the schema, checks the explicitly declared
+external executable, fingerprints it, and optionally runs only the declared
+version command with `shell=False` and a timeout. It does not run encode/decode,
+does not benchmark, does not read datasets, does not write codec outputs and
+does not add the codec to the router decision path.
+
 By default, executed router runs append to:
 
 ```text
