@@ -35,6 +35,14 @@ def _write_benchmark(path: Path) -> None:
     )
 
 
+def _write_jpeg_benchmark(path: Path) -> None:
+    path.write_text(
+        "codec,config,rate,quality,energy,time_ms\n"
+        "JPEG,q=85,1.2,85,2.0,100\n",
+        encoding="utf-8",
+    )
+
+
 def _write_calibration(path: Path) -> None:
     _write_json(
         path,
@@ -47,6 +55,28 @@ def _write_calibration(path: Path) -> None:
             "summary": {
                 "JXL": {
                     "d=1.0": {
+                        "success_rate": 1.0,
+                        "time_ms": {"mean": 300.0},
+                        "local_bpp": {"mean": 0.8},
+                    }
+                }
+            },
+        },
+    )
+
+
+def _write_jpeg_calibration(path: Path) -> None:
+    _write_json(
+        path,
+        {
+            "version": "0.18.0",
+            "level": "quick",
+            "energy_mode": "auto",
+            "created_at": "test",
+            "measured": ["time_ms", "output_bytes", "local_bpp"],
+            "summary": {
+                "JPEG": {
+                    "q=85": {
                         "success_rate": 1.0,
                         "time_ms": {"mean": 300.0},
                         "local_bpp": {"mean": 0.8},
@@ -167,6 +197,36 @@ def test_manifest_output_csv_sha256_is_correct():
     data = json.loads(manifest.read_text(encoding="utf-8"))
 
     assert data["hashes"]["output_csv_sha256"] == _sha256(out)
+
+
+def test_manifest_without_promotion_profile_fingerprints_applied_codec():
+    root = _tmp_dir("no_promotion_fingerprint")
+    benchmark = root / "benchmark.csv"
+    calibration = root / "calibration.json"
+    out = root / "calibrated.csv"
+    manifest = root / "manifest.json"
+    _write_jpeg_benchmark(benchmark)
+    _write_jpeg_calibration(calibration)
+
+    main(
+        [
+            "--benchmark",
+            str(benchmark),
+            "--calibration",
+            str(calibration),
+            "--out",
+            str(out),
+            "--manifest-out",
+            str(manifest),
+        ]
+    )
+
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+
+    assert data["accepted_scales"] == []
+    assert "JPEG" in data["codec_fingerprints"]
+    assert data["codec_fingerprints"]["JPEG"]["backend"] == "python_pillow"
+    assert data["codec_fingerprints"]["JPEG"]["available"] is True
 
 
 def test_manifest_accepted_scales_contains_only_applied_accepted_scales():

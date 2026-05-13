@@ -263,6 +263,11 @@ normalization, feedback, content-aware behavior, system-aware behavior or
 backend execution. Legacy manifests without fingerprints are still accepted and
 reported with `codec_fingerprint_validation.enabled=false`.
 
+Router v0.32.1 clarifies that an empty `codec_fingerprints` object is also not
+a successful validation. It is reported as disabled with
+`reason=empty_codec_fingerprints`, while manifests that apply local calibration
+without a promotion profile still attempt to fingerprint the affected codecs.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

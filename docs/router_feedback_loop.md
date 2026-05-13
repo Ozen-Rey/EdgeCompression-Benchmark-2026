@@ -340,6 +340,14 @@ manifests without `codec_fingerprints` remain compatible; the bundle report
 marks `codec_fingerprint_validation.enabled=false` with
 `reason=manifest_without_codec_fingerprints`.
 
+Router v0.32.1 tightens the empty-manifest edge case. A manifest that contains
+`codec_fingerprints={}` is not considered successfully validated; it is
+reported with `codec_fingerprint_validation.enabled=false`,
+`validated=false`, `reason=empty_codec_fingerprints`, empty
+`validated_codecs`, and empty `mismatches`. Newly written manifests also
+fingerprint codecs with applied local calibration even when no promotion
+profile is provided.
+
 This is a staleness/provenance gate for explicit bundles only. It does not
 change `J_RDE`, ranking, normalization, calibration application without a
 manifest, feedback, content-aware logic, system-aware logic or backend

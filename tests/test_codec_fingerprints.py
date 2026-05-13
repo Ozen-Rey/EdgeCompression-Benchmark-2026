@@ -175,7 +175,27 @@ def test_legacy_manifest_without_fingerprints_reports_disabled(tmp_path: Path):
 
     assert report["codec_fingerprint_validation"] == {
         "enabled": False,
+        "validated": False,
         "reason": "manifest_without_codec_fingerprints",
+        "validated_codecs": [],
+        "mismatches": [],
+    }
+
+
+def test_empty_codec_fingerprints_report_disabled_not_validated(tmp_path: Path):
+    csv_path = tmp_path / "calibrated.csv"
+    manifest = tmp_path / "manifest.json"
+    _write_csv(csv_path)
+    _write_manifest(manifest, csv_path, fingerprints={})
+
+    report = validate_calibration_bundle_manifest(manifest)
+
+    assert report["codec_fingerprint_validation"] == {
+        "enabled": False,
+        "validated": False,
+        "reason": "empty_codec_fingerprints",
+        "validated_codecs": [],
+        "mismatches": [],
     }
 
 
