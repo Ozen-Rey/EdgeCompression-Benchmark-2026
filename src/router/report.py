@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 try:
     from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
-    from .codec_capabilities import build_execution_plan
+    from .codecs.codec_capabilities import build_execution_plan
     from .context import RouterContext
     from .energy_provenance import build_energy_provenance_summary
     from .energy_provenance_compatibility import (

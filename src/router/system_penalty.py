@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 try:
-    from .codec_capabilities import get_codec_capability
+    from .codecs.codec_capabilities import get_codec_capability
 except ImportError:
     from codec_capabilities import get_codec_capability
 
