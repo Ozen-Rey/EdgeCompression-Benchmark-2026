@@ -303,6 +303,15 @@ candidate, but v0.35.0 still keeps the real router decision, ranking, `J_RDE`,
 normalization, bundle consumption, calibration application, feedback,
 content-aware behavior, system-aware behavior and backend execution unchanged.
 
+Router v0.36.0 adds an offline external codec specification validator. A valid
+spec is only a well-formed declaration; it is not proof that a codec is safe,
+deterministic, accurate, comparable or locally installed. The validator does
+not execute `version_probe`, does not run encode/decode commands, does not
+check binary existence, and does not add the codec to the router registry.
+Command templates must be argv lists and `security.allow_shell=true` is
+rejected, but black-box codec behavior still requires separate review before
+any future integration.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
