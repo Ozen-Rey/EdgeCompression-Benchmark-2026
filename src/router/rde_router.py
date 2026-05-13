@@ -18,6 +18,7 @@ try:
         load_external_codec_registry,
     )
     from .cli import build_router_arg_parser
+    from .context import RouterContext
     from .content_policy import (
         build_content_policy_report,
         get_content_policy_preferred_candidate,
@@ -74,6 +75,7 @@ except ImportError:
         load_external_codec_registry,
     )
     from cli import build_router_arg_parser
+    from context import RouterContext
     from content_policy import (
         build_content_policy_report,
         get_content_policy_preferred_candidate,
@@ -1231,6 +1233,8 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     parser = build_router_arg_parser()
     args = parser.parse_args(argv)
+    router_context = RouterContext()
+    args._router_context = router_context
     args._router_config_report = router_config_report
     if args.system_features:
         args._system_features_report = build_system_features(
@@ -1258,7 +1262,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             simulated_classes=simulated_system_classes,
         )
 
-    args._run_manifest = build_run_manifest(
+    router_context.run_manifest = build_run_manifest(
         original_argv=original_argv,
         expanded_argv=expanded_argv,
         args=args,
@@ -1361,8 +1365,10 @@ def main(argv: Optional[List[str]] = None) -> None:
             "enabled": False,
         }
 
-    args._calibration_bundle_report = calibration_bundle_report
-    args._calibration_bundle_validation_report = calibration_bundle_validation_report
+    router_context.calibration_bundle_report = calibration_bundle_report
+    router_context.calibration_bundle_validation_report = (
+        calibration_bundle_validation_report
+    )
 
     points = load_rde_points(
         csv_path=effective_csv_path,
@@ -1384,7 +1390,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             "enabled": False,
         }
 
-    args._external_codecs_report = external_codecs_report
+    router_context.external_codecs_report = external_codecs_report
 
     content_filter_report = {
         "enabled": bool(getattr(args, "content_source_filter", False)),
