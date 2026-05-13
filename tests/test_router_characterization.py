@@ -78,6 +78,31 @@ def test_adaptation_subpackage_imports_keep_legacy_paths():
     assert new_build_system_policy is legacy_build_system_policy
 
 
+def test_analysis_subpackage_imports_keep_legacy_paths():
+    from src.router.analysis.content_oracle_analysis import (
+        analyze_content_oracle as new_analyze_content_oracle,
+    )
+    from src.router.content_oracle_analysis import (
+        analyze_content_oracle as legacy_analyze_content_oracle,
+    )
+    from src.router.analysis.content_oracle_classifier import (
+        evaluate_oracle_classifier as new_evaluate_oracle_classifier,
+    )
+    from src.router.content_oracle_classifier import (
+        evaluate_oracle_classifier as legacy_evaluate_oracle_classifier,
+    )
+    from src.router.analysis.content_aware_paper_artifacts import (
+        build_artifacts as new_build_artifacts,
+    )
+    from src.router.content_aware_paper_artifacts import (
+        build_artifacts as legacy_build_artifacts,
+    )
+
+    assert new_analyze_content_oracle is legacy_analyze_content_oracle
+    assert new_evaluate_oracle_classifier is legacy_evaluate_oracle_classifier
+    assert new_build_artifacts is legacy_build_artifacts
+
+
 def test_core_subpackage_imports_keep_legacy_paths():
     from src.router.core.normalization_profile import (
         build_normalization_profile as new_build_normalization_profile,
@@ -400,6 +425,20 @@ def test_external_codec_disabled_by_default_characterization():
         "src.router.adaptation.system_features",
         "src.router.build_normalization_profile",
         "src.router.core.build_normalization_profile",
+        "src.router.content_oracle_analysis",
+        "src.router.content_oracle_classifier",
+        "src.router.content_oracle_classifier_sweep",
+        "src.router.content_oracle_classifier_sklearn_ablation",
+        "src.router.content_aware_benchmark_table",
+        "src.router.content_aware_overhead_analysis",
+        "src.router.content_aware_paper_artifacts",
+        "src.router.analysis.content_oracle_analysis",
+        "src.router.analysis.content_oracle_classifier",
+        "src.router.analysis.content_oracle_classifier_sweep",
+        "src.router.analysis.content_oracle_classifier_sklearn_ablation",
+        "src.router.analysis.content_aware_benchmark_table",
+        "src.router.analysis.content_aware_overhead_analysis",
+        "src.router.analysis.content_aware_paper_artifacts",
     ],
 )
 def test_cli_help_smoke(module_name: str):
