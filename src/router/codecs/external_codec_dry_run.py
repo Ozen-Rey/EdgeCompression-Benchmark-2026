@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,8 @@ try:
         validate_external_codec_spec,
     )
 except ImportError:  # pragma: no cover - direct script fallback
-    from external_codec_spec import (
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.codecs.external_codec_spec import (
         load_external_codec_spec,
         validate_external_codec_spec,
     )

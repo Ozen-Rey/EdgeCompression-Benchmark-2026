@@ -17,11 +17,14 @@ try:
     from src.router.codecs.codec_capabilities import build_execution_plan
     from src.router.adaptation.system_probe import probe_system
 except ImportError:
-    sys.path.append(str(Path(__file__).resolve().parents[1] / "utils"))
-    from version import ROUTER_VERSION
-    from energy_backends import CompositeEnergyMeter, collect_energy_backend_diagnostics
-    from codec_capabilities import build_execution_plan
-    from system_probe import probe_system
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.version import ROUTER_VERSION
+    from src.utils.energy_backends import (
+        CompositeEnergyMeter,
+        collect_energy_backend_diagnostics,
+    )
+    from src.router.codecs.codec_capabilities import build_execution_plan
+    from src.router.adaptation.system_probe import probe_system
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}

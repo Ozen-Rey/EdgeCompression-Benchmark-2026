@@ -1,17 +1,19 @@
 import argparse
 import csv
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from ..content_oracle_analysis import (
+    from ..analysis.content_oracle_analysis import (
         add_global_normalized_costs,
         load_oracle_rows,
     )
 except ImportError:
-    from content_oracle_analysis import (
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.analysis.content_oracle_analysis import (
         add_global_normalized_costs,
         load_oracle_rows,
     )

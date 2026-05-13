@@ -1,13 +1,19 @@
 import argparse
+import sys
+from pathlib import Path
 
 try:
     from ..calibration.calibration_apply import apply_local_calibration
     from .rde_database import aggregate_points_by_config, load_rde_points
     from .normalization_profile import build_normalization_profile, save_normalization_profile
 except ImportError:
-    from calibration_apply import apply_local_calibration
-    from rde_database import aggregate_points_by_config, load_rde_points
-    from normalization_profile import build_normalization_profile, save_normalization_profile
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.calibration.calibration_apply import apply_local_calibration
+    from src.router.core.rde_database import aggregate_points_by_config, load_rde_points
+    from src.router.core.normalization_profile import (
+        build_normalization_profile,
+        save_normalization_profile,
+    )
 
 
 def main() -> None:

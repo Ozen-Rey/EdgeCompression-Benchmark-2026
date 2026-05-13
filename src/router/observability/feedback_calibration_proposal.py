@@ -6,13 +6,15 @@ import argparse
 import csv
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
 try:
     from ..version import ROUTER_VERSION
 except ImportError:
-    from version import ROUTER_VERSION
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.version import ROUTER_VERSION
 
 
 SUMMARY_FIELDS = [

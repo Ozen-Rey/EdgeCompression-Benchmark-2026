@@ -1,6 +1,7 @@
 import argparse
 import csv
 import math
+import sys
 from collections import Counter
 from pathlib import Path
 from statistics import mean, median
@@ -13,7 +14,8 @@ try:
         resolve_global_baseline,
     )
 except ImportError:
-    from content_metadata_policy import (
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.adaptation.content_metadata_policy import (
         build_candidate_lookup,
         load_metadata_oracle_rows,
         resolve_global_baseline,

@@ -5,13 +5,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
 try:
     from .feedback_logger import FEEDBACK_FIELDS
 except ImportError:
-    from feedback_logger import FEEDBACK_FIELDS
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.observability.feedback_logger import FEEDBACK_FIELDS
 
 
 SUMMARY_FIELDS = [

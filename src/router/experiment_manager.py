@@ -10,7 +10,8 @@ from typing import Any, Dict, List, Optional
 try:
     from src.router.version import ROUTER_VERSION
 except ImportError:
-    from version import ROUTER_VERSION
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from src.router.version import ROUTER_VERSION
 
 
 def load_experiment_suite(path: str) -> Dict[str, Any]:

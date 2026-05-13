@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -11,19 +12,20 @@ try:
         _resolution_class,
     )
     from .content_metadata_policy import load_metadata_oracle_rows
-    from ..content_oracle_classifier import (
+    from ..analysis.content_oracle_classifier import (
         FEATURE_SETS,
         _predict_knn_label,
         _split_label,
         load_classifier_rows,
     )
 except ImportError:
-    from content_metadata_features import (
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from src.router.adaptation.content_metadata_features import (
         _orientation_class,
         _resolution_class,
     )
-    from content_metadata_policy import load_metadata_oracle_rows
-    from content_oracle_classifier import (
+    from src.router.adaptation.content_metadata_policy import load_metadata_oracle_rows
+    from src.router.analysis.content_oracle_classifier import (
         FEATURE_SETS,
         _predict_knn_label,
         _split_label,
