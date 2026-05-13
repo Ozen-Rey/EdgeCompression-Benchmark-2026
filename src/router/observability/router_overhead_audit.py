@@ -17,7 +17,7 @@ from typing import Any, Iterable, Optional
 try:
     from src.router.observability.decision_replay import replay_decision_receipt
     from src.router.rde_router import main as router_main
-    from src.router.router_config import load_router_config
+    from src.router.core.router_config import load_router_config
     from src.router.version import ROUTER_VERSION
 except ImportError:  # pragma: no cover - direct script fallback
     from decision_replay import replay_decision_receipt

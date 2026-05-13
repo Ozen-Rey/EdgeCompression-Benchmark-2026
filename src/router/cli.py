@@ -1,7 +1,7 @@
 import argparse
 
 try:
-    from .profiles import available_profiles
+    from .core.profiles import available_profiles
 except ImportError:  # pragma: no cover - direct script fallback
     from profiles import available_profiles
 

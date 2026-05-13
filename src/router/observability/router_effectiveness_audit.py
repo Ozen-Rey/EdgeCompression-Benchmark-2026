@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 try:
-    from src.router.rde_database import RDEPoint, load_rde_points
+    from src.router.core.rde_database import RDEPoint, load_rde_points
     from src.router.rde_router import main as router_main
-    from src.router.router_config import load_router_config
+    from src.router.core.router_config import load_router_config
     from src.router.version import ROUTER_VERSION
 except ImportError:  # pragma: no cover - direct script fallback
     from rde_database import RDEPoint, load_rde_points

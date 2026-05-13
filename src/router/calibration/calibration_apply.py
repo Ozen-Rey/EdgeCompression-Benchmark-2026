@@ -803,7 +803,7 @@ def write_calibration_bundle_manifest(
 
 def main(argv: list[str] | None = None) -> None:
     try:
-        from ..rde_database import load_rde_points
+        from ..core.rde_database import load_rde_points
     except ImportError:
         from rde_database import load_rde_points
 
