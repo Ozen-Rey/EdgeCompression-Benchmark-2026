@@ -63,6 +63,32 @@ and optional non-empty contract.
 It does not read benchmark datasets, compute quality metrics, compute energy,
 generate R-D-E CSV rows, register the codec, or affect router decisions.
 
+Run a small raw benchmark over explicitly named inputs:
+
+```powershell
+python -m src.router.external_codec_benchmark `
+  --spec configs/external_codecs/example_image_codec.json `
+  --input test_images/input_a.png `
+  --input test_images/input_b.png `
+  --out-dir results/external_codec_benchmarks/example_codec `
+  --param-set '{"quality":"50"}' `
+  --param-set '{"quality":"75"}' `
+  --timeout-s 30 `
+  --out results/external_codec_benchmarks/example_codec_benchmark.json `
+  --csv results/external_codec_benchmarks/example_codec_measurements.csv
+```
+
+Router v0.39.0's benchmark runner repeats the dry-run contract over a small,
+explicit input list and a declared parameter grid. It writes a JSON report and
+a raw CSV with encode/decode success, output paths, output byte size, wall-time
+measurements and a simple rate value. Failed runs produce failed rows instead
+of disappearing.
+
+This CSV is not an R-D-E database and is not consumed by the router. The runner
+does not compute quality metrics, does not require real energy measurement,
+does not score candidates, does not register codecs and does not change router
+ranking.
+
 ## Required Fields
 
 An external codec spec is a JSON object with these top-level fields:
@@ -181,6 +207,13 @@ The dry-run report includes safety flags:
 ```
 
 This is still not a benchmark or a router integration path.
+
+Router v0.39.0 adds `external_codec_benchmark`, a small raw-measurement runner.
+It uses the same argv-only, `shell=False`, timeout-bound and output-confined
+execution model as the dry-run. Inputs must be named explicitly with repeated
+`--input`; there is no automatic dataset or codec discovery. Parameters must
+either come from the spec's declared values or be passed as repeated
+`--param-set` JSON objects containing only declared parameter names.
 
 ## Minimal Example
 

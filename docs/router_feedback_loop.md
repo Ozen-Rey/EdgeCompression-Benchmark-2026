@@ -416,6 +416,14 @@ safety flags. It still does not read benchmark datasets, compute quality or
 energy metrics, generate R-D-E points, register codecs, or change router
 ranking and decisions.
 
+Router v0.39.0 adds `external_codec_benchmark`, a small raw benchmark runner
+for validated and dry-run-compatible external specs. It runs only explicitly
+named inputs and declared parameter sets, records raw encode/decode success,
+output size, timing and placeholder energy provenance, and writes JSON/CSV
+artifacts. These artifacts are not router inputs and do not modify the registry,
+candidate pool, `J_RDE`, ranking, normalization, content-aware or system-aware
+logic.
+
 By default, executed router runs append to:
 
 ```text

@@ -1,6 +1,6 @@
 """Centralized router version metadata."""
 
-ROUTER_VERSION = "0.38.0"
+ROUTER_VERSION = "0.39.0"
 
 FEATURE_LEVEL = {
     "rde_selection": "stable",
@@ -36,6 +36,7 @@ FEATURE_LEVEL = {
     "external_codec_spec_schema": "offline_validation_only",
     "external_codec_probe": "schema_validated_version_fingerprint_report_only",
     "external_codec_dry_run": "single_input_contract_validation_only",
+    "external_codec_benchmark": "raw_measurement_report_only",
     "bounded_nvml_probe": "timeout_fallback",
     "system_aware": "experimental",
     "content_aware": "offline_validated",
