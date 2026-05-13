@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 try:
     from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from .codec_capabilities import build_execution_plan
+    from .context import RouterContext
     from .energy_provenance import build_energy_provenance_summary
     from .energy_provenance_compatibility import (
         build_energy_provenance_compatibility_audit,
@@ -18,6 +19,7 @@ try:
 except ImportError:  # pragma: no cover - direct script fallback
     from version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
     from codec_capabilities import build_execution_plan
+    from context import RouterContext
     from energy_provenance import build_energy_provenance_summary
     from energy_provenance_compatibility import (
         build_energy_provenance_compatibility_audit,
@@ -29,6 +31,27 @@ except ImportError:  # pragma: no cover - direct script fallback
         load_previous_normalization_audit,
     )
     from system_features import estimate_probe_efficiency
+
+
+def _router_context(args: Any) -> Optional[RouterContext]:
+    context = getattr(args, "_router_context", None)
+    if isinstance(context, RouterContext):
+        return context
+    return None
+
+
+def _context_or_args(
+    args: Any,
+    context: Optional[RouterContext],
+    context_field: str,
+    args_field: str,
+    default: Any,
+) -> Any:
+    if context is not None:
+        value = getattr(context, context_field)
+        if value is not None:
+            return value
+    return getattr(args, args_field, default)
 
 
 def _build_energy_provenance_report(
@@ -234,6 +257,8 @@ def build_router_report(
     weight_source: str,
     context_policy: Dict[str, Any] | None,
 ) -> Dict[str, Any]:
+    router_context = _router_context(args)
+
     execution_plan = build_execution_plan(
         codec_name=decision["selected"]["codec"],
         config=decision["selected"]["config"],
@@ -281,26 +306,70 @@ def build_router_report(
         normalization_reference=decision.get("normalization_reference", {}),
         quality_metric=getattr(args, "quality_metric", None),
     )
-    normalization_consistency = _build_normalization_consistency_report(
-        previous_receipt_path=getattr(args, "previous_decision_receipt", None),
-        current_audit=normalization_audit,
+    normalization_consistency = _context_or_args(
+        args,
+        router_context,
+        "normalization_consistency_report",
+        "_normalization_consistency_report",
+        None,
     )
-    energy_provenance_summary = build_energy_provenance_summary(
-        selected=decision.get("selected", {}),
-        scored_candidate_pool=decision.get("scored_candidate_pool", []),
-        unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
+    if normalization_consistency is None:
+        normalization_consistency = _build_normalization_consistency_report(
+            previous_receipt_path=getattr(args, "previous_decision_receipt", None),
+            current_audit=normalization_audit,
+        )
+    energy_provenance_report = _context_or_args(
+        args,
+        router_context,
+        "energy_provenance_report",
+        "_energy_provenance_report",
+        None,
     )
-    energy_provenance_compatibility = (
-        build_energy_provenance_compatibility_audit(
+    if energy_provenance_report is None:
+        energy_provenance_report = _build_energy_provenance_report(
+            calibration_report=calibration_report,
+            selected_calibration=selected_calibration,
+        )
+    energy_provenance_summary = _context_or_args(
+        args,
+        router_context,
+        "energy_provenance_summary",
+        "_energy_provenance_summary",
+        None,
+    )
+    if energy_provenance_summary is None:
+        energy_provenance_summary = build_energy_provenance_summary(
             selected=decision.get("selected", {}),
             scored_candidate_pool=decision.get("scored_candidate_pool", []),
             unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
         )
+    energy_provenance_compatibility = _context_or_args(
+        args,
+        router_context,
+        "energy_provenance_compatibility",
+        "_energy_provenance_compatibility",
+        None,
     )
-    energy_tier_policy = build_energy_tier_policy_shadow(
-        selected=decision.get("selected", {}),
-        scored_candidate_pool=decision.get("scored_candidate_pool", []),
+    if energy_provenance_compatibility is None:
+        energy_provenance_compatibility = (
+            build_energy_provenance_compatibility_audit(
+                selected=decision.get("selected", {}),
+                scored_candidate_pool=decision.get("scored_candidate_pool", []),
+                unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
+            )
+        )
+    energy_tier_policy = _context_or_args(
+        args,
+        router_context,
+        "energy_tier_policy",
+        "_energy_tier_policy",
+        None,
     )
+    if energy_tier_policy is None:
+        energy_tier_policy = build_energy_tier_policy_shadow(
+            selected=decision.get("selected", {}),
+            scored_candidate_pool=decision.get("scored_candidate_pool", []),
+        )
 
     return {
         "router_version": ROUTER_VERSION,
@@ -311,24 +380,25 @@ def build_router_report(
         "weight_source": weight_source,
         "context_policy": context_policy,
         "calibration": calibration_report,
-        "calibration_bundle": getattr(
+        "calibration_bundle": _context_or_args(
             args,
+            router_context,
+            "calibration_bundle_report",
             "_calibration_bundle_report",
             {
                 "enabled": False,
             },
         ),
-        "calibration_bundle_validation": getattr(
+        "calibration_bundle_validation": _context_or_args(
             args,
+            router_context,
+            "calibration_bundle_validation_report",
             "_calibration_bundle_validation_report",
             {
                 "enabled": False,
             },
         ),
-        "energy_provenance": _build_energy_provenance_report(
-            calibration_report=calibration_report,
-            selected_calibration=selected_calibration,
-        ),
+        "energy_provenance": energy_provenance_report,
         "energy_provenance_summary": energy_provenance_summary,
         "energy_provenance_compatibility": energy_provenance_compatibility,
         "energy_tier_policy": energy_tier_policy,
@@ -339,8 +409,10 @@ def build_router_report(
                 "enabled": False,
             },
         ),
-        "external_codecs": getattr(
+        "external_codecs": _context_or_args(
             args,
+            router_context,
+            "external_codecs_report",
             "_external_codecs_report",
             {
                 "enabled": False,
@@ -353,8 +425,10 @@ def build_router_report(
                 "enabled": False,
             },
         ),
-        "run_manifest": getattr(
+        "run_manifest": _context_or_args(
             args,
+            router_context,
+            "run_manifest",
             "_run_manifest",
             {
                 "enabled": False,
