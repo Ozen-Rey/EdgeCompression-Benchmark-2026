@@ -326,6 +326,25 @@ normalization, calibration bundle handling, energy backends, content-aware
 logic, system-aware logic or the selected codec/config. Its purpose is only to
 make clear whether two runs are methodologically comparable.
 
+Router v0.32.0 adds codec executable fingerprints to calibration bundle
+manifests written by `calibration_apply --manifest-out`. The manifest records
+the backend, version, binary path, binary SHA256 and availability for codecs
+represented by accepted calibration scales. For Python/Pillow JPEG, the binary
+fields are `null` and the version comes from the Python package.
+
+When a calibration bundle is consumed explicitly with
+`--calibration-bundle-manifest`, the router validates `codec_fingerprints` if
+the manifest contains them. A version mismatch, binary hash mismatch or missing
+declared binary fails with a controlled calibration staleness error. Legacy
+manifests without `codec_fingerprints` remain compatible; the bundle report
+marks `codec_fingerprint_validation.enabled=false` with
+`reason=manifest_without_codec_fingerprints`.
+
+This is a staleness/provenance gate for explicit bundles only. It does not
+change `J_RDE`, ranking, normalization, calibration application without a
+manifest, feedback, content-aware logic, system-aware logic or backend
+execution. The router still performs no automatic bundle discovery.
+
 By default, executed router runs append to:
 
 ```text

@@ -105,6 +105,10 @@ def test_bundle_manifest_validates_output_hash():
     assert report["applied_scales_count"] == 1
     assert report["rejected_scales_count"] == 2
     assert report["energy_policy"] == "usable_total_only"
+    assert report["codec_fingerprint_validation"] == {
+        "enabled": False,
+        "reason": "manifest_without_codec_fingerprints",
+    }
 
 
 def test_bundle_manifest_rejects_hash_mismatch():

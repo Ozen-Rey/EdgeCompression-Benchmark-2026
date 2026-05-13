@@ -7,6 +7,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+try:
+    from .codec_fingerprints import validate_codec_fingerprints
+except ImportError:  # pragma: no cover - direct script fallback
+    from codec_fingerprints import validate_codec_fingerprints
+
 
 def sha256_file(path: str | Path) -> str:
     file_path = Path(path)
@@ -115,6 +120,10 @@ def validate_calibration_bundle_manifest(path: str | Path) -> dict[str, Any]:
     if not isinstance(energy_policy, dict):
         raise ValueError("Calibration bundle energy_policy must be an object.")
 
+    codec_fingerprint_validation = validate_codec_fingerprints(
+        manifest.get("codec_fingerprints")
+    )
+
     return {
         "enabled": True,
         "manifest_path": str(manifest_path),
@@ -133,6 +142,7 @@ def validate_calibration_bundle_manifest(path: str | Path) -> dict[str, Any]:
         "source": "explicit_calibration_bundle_manifest",
         "router_version": manifest.get("router_version"),
         "created_at_utc": manifest.get("created_at_utc"),
+        "codec_fingerprint_validation": codec_fingerprint_validation,
         "manifest": manifest,
     }
 

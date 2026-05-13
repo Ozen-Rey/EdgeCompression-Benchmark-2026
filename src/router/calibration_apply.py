@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 try:
+    from .codec_fingerprints import build_codec_fingerprints_for_manifest
     from .version import ROUTER_VERSION
 except ImportError:
+    from codec_fingerprints import build_codec_fingerprints_for_manifest
     from version import ROUTER_VERSION
 
 
@@ -731,6 +733,7 @@ def build_calibration_bundle_manifest(
     promotion_profile: str | Path | None,
     output_csv: str | Path,
 ) -> Dict[str, Any]:
+    accepted_scales = _accepted_scales_from_report(report)
     return {
         "artifact_type": "promoted_calibration_bundle",
         "router_version": ROUTER_VERSION,
@@ -742,8 +745,11 @@ def build_calibration_bundle_manifest(
         ),
         "output_csv": str(Path(output_csv)),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "accepted_scales": _accepted_scales_from_report(report),
+        "accepted_scales": accepted_scales,
         "rejected_scales_count": _count_unapplied_promotion_scales(report),
+        "codec_fingerprints": build_codec_fingerprints_for_manifest(
+            accepted_scales
+        ),
         "energy_policy": {
             "requires_energy_usable_for_total": True,
             "gpu_only_energy_excluded": True,

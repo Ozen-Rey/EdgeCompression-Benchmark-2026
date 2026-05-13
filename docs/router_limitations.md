@@ -250,6 +250,19 @@ bundle logic, energy backends, content-aware behavior, system-aware behavior or
 the selected codec/config. It only helps decide whether two reported runs can
 be compared methodologically.
 
+Router v0.32.0 records codec executable fingerprints in newly written
+calibration bundle manifests and validates them when those bundles are consumed
+explicitly. This reduces the risk of applying a calibrated CSV produced with a
+different codec backend than the one currently declared by the bundle.
+
+The check is intentionally narrow. It verifies declared backend/version/hash
+provenance for codec executables and fails closed on version mismatch, binary
+hash mismatch or missing declared binary. It does not prove that the calibrated
+bundle improves decisions, and it does not alter scores, ranking,
+normalization, feedback, content-aware behavior, system-aware behavior or
+backend execution. Legacy manifests without fingerprints are still accepted and
+reported with `codec_fingerprint_validation.enabled=false`.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.

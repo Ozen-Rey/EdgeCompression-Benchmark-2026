@@ -156,6 +156,9 @@ def test_manifest_contains_version_mode_source_paths_and_output_path():
     assert data["output_csv"] == str(out)
     assert data["energy_policy"]["requires_energy_usable_for_total"] is True
     assert data["energy_policy"]["gpu_only_energy_excluded"] is True
+    assert data["codec_fingerprints"]["JXL"]["backend"] == "cjxl"
+    assert "available" in data["codec_fingerprints"]["JXL"]
+    assert "binary_sha256" in data["codec_fingerprints"]["JXL"]
 
 
 def test_manifest_output_csv_sha256_is_correct():

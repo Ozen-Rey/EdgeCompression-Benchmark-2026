@@ -212,6 +212,10 @@ def test_router_with_valid_bundle_reports_bundle_provenance():
     assert bundle["rejected_scales_count"] == 2
     assert bundle["energy_policy"] == "usable_total_only"
     assert bundle["source"] == "explicit_calibration_bundle_manifest"
+    assert bundle["codec_fingerprint_validation"] == {
+        "enabled": False,
+        "reason": "manifest_without_codec_fingerprints",
+    }
     assert report["csv"] == str(calibrated_csv)
     assert report["calibration_bundle_validation"] == {"enabled": False}
 
