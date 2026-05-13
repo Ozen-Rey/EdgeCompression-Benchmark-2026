@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -189,6 +190,7 @@ def _base_report(
             "command_redacted_or_argv": [],
             "returncode": None,
             "timeout": False,
+            "time_ms": None,
             "output_path": None,
             "output_exists": False,
             "output_size_bytes": None,
@@ -201,6 +203,7 @@ def _base_report(
             "command_redacted_or_argv": [],
             "returncode": None,
             "timeout": False,
+            "time_ms": None,
             "reconstruction_path": None,
             "reconstruction_exists": False,
             "reconstruction_size_bytes": None,
@@ -403,6 +406,7 @@ def _run_step(
 ) -> None:
     step_report = report[step]
     step_report["executed"] = True
+    started = time.perf_counter()
     try:
         result = subprocess.run(
             command,
@@ -414,13 +418,16 @@ def _run_step(
             cwd=str(working_dir) if working_dir is not None else None,
         )
     except subprocess.TimeoutExpired:
+        step_report["time_ms"] = (time.perf_counter() - started) * 1000.0
         step_report["timeout"] = True
         report["errors"].append(f"{step}_timeout")
         return
     except OSError as exc:
+        step_report["time_ms"] = (time.perf_counter() - started) * 1000.0
         report["errors"].append(f"{step}_os_error:{exc}")
         return
 
+    step_report["time_ms"] = (time.perf_counter() - started) * 1000.0
     step_report["returncode"] = result.returncode
     if result.returncode != 0:
         report["errors"].append(f"{step}_nonzero_returncode")

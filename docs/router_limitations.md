@@ -329,6 +329,14 @@ behavior, security of black-box code, or suitability for router ranking. The
 dry-run still does not add the codec to the registry, candidate pool, `J_RDE`,
 normalization, content-aware/system-aware paths or existing backend execution.
 
+Router v0.39.0 adds an external codec benchmark runner, but its output remains
+raw measurement telemetry. The CSV is not a calibrated R-D-E point set, is not
+loaded by the router, and is not comparable to existing benchmark CSVs without
+separate quality, energy, normalization and methodology work. Energy is left
+empty with `energy_provenance_tier=unknown`; rate is a simple output-size style
+raw value. Failed runs are retained as rows for auditability, not treated as
+filtered router candidates.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
