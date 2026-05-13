@@ -78,6 +78,27 @@ def test_adaptation_subpackage_imports_keep_legacy_paths():
     assert new_build_system_policy is legacy_build_system_policy
 
 
+def test_core_subpackage_imports_keep_legacy_paths():
+    from src.router.core.normalization_profile import (
+        build_normalization_profile as new_build_normalization_profile,
+    )
+    from src.router.core.quality_thresholds import (
+        resolve_quality_floor as new_resolve_quality_floor,
+    )
+    from src.router.core.rde_database import RDEPoint as NewRDEPoint
+    from src.router.normalization_profile import (
+        build_normalization_profile as legacy_build_normalization_profile,
+    )
+    from src.router.quality_thresholds import (
+        resolve_quality_floor as legacy_resolve_quality_floor,
+    )
+    from src.router.rde_database import RDEPoint as LegacyRDEPoint
+
+    assert NewRDEPoint is LegacyRDEPoint
+    assert new_build_normalization_profile is legacy_build_normalization_profile
+    assert new_resolve_quality_floor is legacy_resolve_quality_floor
+
+
 def _tmp_path(name: str) -> Path:
     tmp_dir = Path(__file__).with_name("_tmp") / "router_characterization"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -377,6 +398,8 @@ def test_external_codec_disabled_by_default_characterization():
         "src.router.adaptation.content_metadata_policy",
         "src.router.adaptation.content_classifier_model",
         "src.router.adaptation.system_features",
+        "src.router.build_normalization_profile",
+        "src.router.core.build_normalization_profile",
     ],
 )
 def test_cli_help_smoke(module_name: str):

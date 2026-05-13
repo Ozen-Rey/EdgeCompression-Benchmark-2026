@@ -10,7 +10,7 @@ from typing import Any
 
 try:
     from .external_codec_spec import load_external_codec_spec
-    from ..rde_database import RDEPoint, load_rde_points
+    from ..core.rde_database import RDEPoint, load_rde_points
 except ImportError:  # pragma: no cover - direct script fallback
     from external_codec_spec import load_external_codec_spec
     from rde_database import RDEPoint, load_rde_points

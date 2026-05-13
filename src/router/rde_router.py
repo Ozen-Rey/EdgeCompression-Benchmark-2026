@@ -38,10 +38,10 @@ try:
         build_feedback_row as _build_feedback_row,
         write_feedback_report,
     )
-    from .normalization_profile import load_normalization_profile
-    from .profiles import available_profiles, get_profile
-    from .quality_thresholds import resolve_quality_floor
-    from .rde_database import (
+    from .core.normalization_profile import load_normalization_profile
+    from .core.profiles import available_profiles, get_profile
+    from .core.quality_thresholds import resolve_quality_floor
+    from .core.rde_database import (
         RDEPoint,
         aggregate_points_by_config,
         filter_points_by_raw_column,
@@ -49,7 +49,7 @@ try:
         select_best_rde,
     )
     from .report import build_router_report
-    from .router_config import expand_argv_with_config
+    from .core.router_config import expand_argv_with_config
     from .observability.run_manifest import build_run_manifest
     from .adaptation.system_features import build_system_features
     from .adaptation.system_penalty import (

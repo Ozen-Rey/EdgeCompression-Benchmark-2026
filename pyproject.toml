@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edgecompression-benchmark-2026"
-version = "0.42.8.1"
+version = "0.42.9"
 description = "Edge compression benchmark and R-D-E router tooling."
 readme = "README.md"
 requires-python = ">=3.10"
