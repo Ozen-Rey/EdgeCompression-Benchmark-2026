@@ -431,6 +431,12 @@ does not register candidates, and does not feed the router. It marks missing
 quality or energy explicitly and sets `router_ready=false` when the export is
 not complete enough for future router consumption.
 
+Router v0.41.0 adds explicit router consumption of those external R-D-E exports
+through `--external-codec-manifest`. The manifest must name the spec, probe
+report, export report and R-D-E CSV with matching hashes, and the export report
+must declare `router_ready=true`. Without the flag, router behavior is
+unchanged and no manifest is searched for automatically.
+
 By default, executed router runs append to:
 
 ```text

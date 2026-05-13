@@ -346,6 +346,14 @@ false unless required fields are available. A true router-ready integration
 still requires separate quality measurement, energy methodology, normalization,
 calibration and review.
 
+Router v0.41.0 allows external R-D-E rows to be appended to the router pool,
+but only via an explicitly provided manifest whose hashes validate and whose
+export report says `router_ready=true`. This is not auto-discovery, not a codec
+registry crawler, not an automatic benchmark path and not a scoring change.
+The router still uses the same `J_RDE`, ranking, normalization, calibration,
+feedback, content-aware and system-aware logic; external rows simply become
+additional explicitly supplied R-D-E points when the manifest gate passes.
+
 The intended backend hierarchy is:
 
 1. Linux: RAPL for CPU package energy and Zeus/NVML for NVIDIA GPU energy.
