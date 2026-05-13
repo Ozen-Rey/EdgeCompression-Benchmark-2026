@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from .calibration_apply import apply_local_calibration
-    from .calibration_bundle import (
+    from .calibration.calibration_apply import apply_local_calibration
+    from .calibration.calibration_bundle import (
         validate_calibration_bundle_manifest,
         validate_calibration_bundle_validation,
     )
-    from .codec_capabilities import (
+    from .codecs.codec_capabilities import (
         filter_points_by_capabilities,
         is_neural_codec,
         load_external_codec_registry,
@@ -24,7 +24,7 @@ try:
         get_content_policy_preferred_candidate,
     )
     from .decision_receipt import build_decision_receipt
-    from .external_codec_registry import load_external_codec_points
+    from .codecs.external_codec_registry import load_external_codec_points
     from .content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,

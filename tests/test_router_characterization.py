@@ -10,6 +10,24 @@ import pytest
 from src.router.rde_router import main
 
 
+def test_thematic_subpackage_imports_keep_legacy_paths():
+    from src.router.codecs.external_codec_spec import (
+        validate_external_codec_spec as new_validate_external_codec_spec,
+    )
+    from src.router.external_codec_spec import (
+        validate_external_codec_spec as legacy_validate_external_codec_spec,
+    )
+    from src.router.calibration.calibration_bundle import (
+        validate_calibration_bundle_manifest as new_validate_calibration_bundle,
+    )
+    from src.router.calibration_bundle import (
+        validate_calibration_bundle_manifest as legacy_validate_calibration_bundle,
+    )
+
+    assert new_validate_external_codec_spec is legacy_validate_external_codec_spec
+    assert new_validate_calibration_bundle is legacy_validate_calibration_bundle
+
+
 def _tmp_path(name: str) -> Path:
     tmp_dir = Path(__file__).with_name("_tmp") / "router_characterization"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -272,6 +290,13 @@ def test_external_codec_disabled_by_default_characterization():
         "src.router.external_codec_dry_run",
         "src.router.external_codec_benchmark",
         "src.router.external_codec_rde_exporter",
+        "src.router.calibration_apply",
+        "src.router.codecs.external_codec_spec",
+        "src.router.codecs.external_codec_probe",
+        "src.router.codecs.external_codec_dry_run",
+        "src.router.codecs.external_codec_benchmark",
+        "src.router.codecs.external_codec_rde_exporter",
+        "src.router.calibration.calibration_apply",
     ],
 )
 def test_cli_help_smoke(module_name: str):

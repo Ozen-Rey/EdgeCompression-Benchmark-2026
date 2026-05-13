@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from src.router.calibration_bundle import sha256_file
+    from src.router.calibration.calibration_bundle import sha256_file
     from src.router.rde_router import main as router_main
     from src.router.version import ROUTER_VERSION
 except ImportError:  # pragma: no cover - direct script fallback

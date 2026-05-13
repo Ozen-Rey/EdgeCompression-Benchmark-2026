@@ -1,7 +1,7 @@
 import argparse
 
 try:
-    from .calibration_apply import apply_local_calibration
+    from .calibration.calibration_apply import apply_local_calibration
     from .rde_database import aggregate_points_by_config, load_rde_points
     from .normalization_profile import build_normalization_profile, save_normalization_profile
 except ImportError:

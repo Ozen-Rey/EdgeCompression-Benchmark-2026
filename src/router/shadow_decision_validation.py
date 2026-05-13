@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from src.router.calibration_bundle import sha256_file
+    from src.router.calibration.calibration_bundle import sha256_file
     from src.router.version import ROUTER_VERSION
 except ImportError:  # pragma: no cover - direct script fallback
     from calibration_bundle import sha256_file
