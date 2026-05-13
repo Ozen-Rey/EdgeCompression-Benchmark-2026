@@ -53,6 +53,31 @@ def test_observability_subpackage_imports_keep_legacy_paths():
     assert new_run_shadow_decision_validation is legacy_run_shadow_decision_validation
 
 
+def test_adaptation_subpackage_imports_keep_legacy_paths():
+    from src.router.adaptation.content_policy import (
+        build_content_policy_report as new_build_content_policy_report,
+    )
+    from src.router.adaptation.energy_provenance import (
+        classify_energy_provenance as new_classify_energy_provenance,
+    )
+    from src.router.adaptation.system_policy import (
+        build_system_policy as new_build_system_policy,
+    )
+    from src.router.content_policy import (
+        build_content_policy_report as legacy_build_content_policy_report,
+    )
+    from src.router.energy_provenance import (
+        classify_energy_provenance as legacy_classify_energy_provenance,
+    )
+    from src.router.system_policy import (
+        build_system_policy as legacy_build_system_policy,
+    )
+
+    assert new_classify_energy_provenance is legacy_classify_energy_provenance
+    assert new_build_content_policy_report is legacy_build_content_policy_report
+    assert new_build_system_policy is legacy_build_system_policy
+
+
 def _tmp_path(name: str) -> Path:
     tmp_dir = Path(__file__).with_name("_tmp") / "router_characterization"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -340,6 +365,18 @@ def test_external_codec_disabled_by_default_characterization():
         "src.router.observability.feedback_calibration_proposal",
         "src.router.observability.feedback_proposal_validation",
         "src.router.observability.feedback_calibration_promotion",
+        "src.router.content_image_features",
+        "src.router.content_image_manifest",
+        "src.router.content_metadata_features",
+        "src.router.content_metadata_policy",
+        "src.router.content_classifier_model",
+        "src.router.system_features",
+        "src.router.adaptation.content_image_features",
+        "src.router.adaptation.content_image_manifest",
+        "src.router.adaptation.content_metadata_features",
+        "src.router.adaptation.content_metadata_policy",
+        "src.router.adaptation.content_classifier_model",
+        "src.router.adaptation.system_features",
     ],
 )
 def test_cli_help_smoke(module_name: str):

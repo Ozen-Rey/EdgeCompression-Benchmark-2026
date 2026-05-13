@@ -19,20 +19,20 @@ try:
     )
     from .cli import build_router_arg_parser
     from .context import RouterContext
-    from .content_policy import (
+    from .adaptation.content_policy import (
         build_content_policy_report,
         get_content_policy_preferred_candidate,
     )
     from .observability.decision_receipt import build_decision_receipt
     from .codecs.external_codec_registry import load_external_codec_points
-    from .content_classifier_model import (
+    from .adaptation.content_classifier_model import (
         build_metadata_no_source_features,
         extract_metadata_features_from_image,
         load_content_classifier_config,
         load_training_rows_from_config,
         predict_content_classifier,
     )
-    from .context_policy import compute_context_policy
+    from .adaptation.context_policy import compute_context_policy
     from .execution import (
         apply_execution_result,
         build_feedback_row as _build_feedback_row,
@@ -51,18 +51,18 @@ try:
     from .report import build_router_report
     from .router_config import expand_argv_with_config
     from .observability.run_manifest import build_run_manifest
-    from .system_features import build_system_features
-    from .system_penalty import (
+    from .adaptation.system_features import build_system_features
+    from .adaptation.system_penalty import (
         build_system_penalty_context,
         load_system_penalty_weights,
         make_system_penalty_fn,
     )
-    from .system_policy import (
+    from .adaptation.system_policy import (
         apply_system_policy_simulation,
         build_system_policy,
         parse_system_policy_simulation,
     )
-    from .system_probe import probe_system
+    from .adaptation.system_probe import probe_system
 except ImportError:
     from calibration_apply import apply_local_calibration
     from calibration_bundle import (
