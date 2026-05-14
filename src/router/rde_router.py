@@ -47,7 +47,7 @@ from src.router.core.rde_database import (
     RDEPoint,
     aggregate_points_by_config,
     filter_points_by_raw_column,
-    load_rde_points,
+    load_rde_points_with_diagnostics,
     select_best_rde,
 )
 from src.router.report import build_router_report
@@ -1306,7 +1306,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         calibration_bundle_validation_report
     )
 
-    points = load_rde_points(
+    points, csv_row_diagnostics = load_rde_points_with_diagnostics(
         csv_path=effective_csv_path,
         codec_col=args.codec_col,
         config_col=args.config_col,
@@ -1315,6 +1315,18 @@ def main(argv: Optional[List[str]] = None) -> None:
         energy_col=args.energy_col,
         time_col=args.time_col,
     )
+    router_context.csv_row_diagnostics = csv_row_diagnostics
+
+    if csv_row_diagnostics["dropped_rows"] > 0:
+        reasons_summary = ", ".join(
+            f"{reason}={count}"
+            for reason, count in sorted(csv_row_diagnostics["reasons"].items())
+        )
+        print(
+            f"Warning: dropped {csv_row_diagnostics['dropped_rows']} CSV row(s) "
+            f"from {effective_csv_path} ({reasons_summary}). "
+            "See report.csv_row_diagnostics for details."
+        )
 
     if args.external_codec_manifest:
         external_points, external_codecs_report = load_external_codec_points(

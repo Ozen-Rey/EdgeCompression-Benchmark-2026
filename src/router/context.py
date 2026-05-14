@@ -32,4 +32,5 @@ class RouterContext:
     content_policy_report: Optional[Dict[str, Any]] = None
     content_classifier_report: Optional[Dict[str, Any]] = None
     content_filter_report: Optional[Dict[str, Any]] = None
+    csv_row_diagnostics: Optional[Dict[str, Any]] = None
     preferred_candidate_source: Optional[str] = None
