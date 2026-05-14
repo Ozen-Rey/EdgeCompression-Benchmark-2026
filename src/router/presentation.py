@@ -1,12 +1,13 @@
 """Human-readable CLI presentation of router decision reports.
 
-Extracted from rde_router.py. The function here only consumes a fully
-built router report dict and prints to stdout: no decision, ranking,
+Extracted from rde_router.py. Functions here only consume fully built
+router report dicts (and, for the --all-profiles header, the parsed
+argparse namespace) and print to stdout: no decision, ranking,
 scoring, normalization, I/O, or report assembly happens in this module.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
@@ -343,3 +344,62 @@ def print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
 
     print()
     print(f"Report written to: {json_path}")
+
+
+def print_all_profiles_header(
+    args: Any,
+    *,
+    num_rows_loaded: int,
+    num_points_after_filter: int,
+    normalization_scope_label: str,
+    num_normalization_points: int,
+    filter_report: Dict[str, Any],
+) -> None:
+    print("\n=== R-D-E Router: all profiles ===")
+    print(f"Loaded rows: {num_rows_loaded}")
+    print(f"Candidate points after aggregation/filtering: {num_points_after_filter}")
+    print(
+        f"Normalization: {normalization_scope_label} "
+        f"({num_normalization_points} reference points)"
+    )
+    print(f"Aggregate by config: {args.aggregate_by_config}")
+    print(f"Available codecs: {args.available_codecs}")
+    print(f"Exclude codecs: {args.exclude_codecs}")
+    print(f"Exclude neural: {args.exclude_neural}")
+    print(f"System-aware: {args.system_aware}")
+    if args.system_aware:
+        print(f"CUDA available: {filter_report['system_aware']['cuda_available']}")
+        print(f"Effective exclude neural: {filter_report['system_aware']['effective_exclude_neural']}")
+    print(f"Capability-aware: {args.capability_aware}")
+    print(f"Strict executables: {args.strict_executables}")
+    print(f"Safe mode: {args.safe_mode}")
+    print(f"Quality guard: {args.quality_constraint_stat} >= {args.quality_floor}")
+    print(f"Export top-k: {args.export_topk}")
+    print()
+
+
+def print_all_profiles_selection(profile_name: str, report: Dict[str, Any]) -> None:
+    selected = report["decision"]["selected"]
+    print(
+        f"{profile_name:18s} -> "
+        f"{selected['codec']} {selected['config']} "
+        f"| mode={report['decision']['decision_mode']} "
+        f"| R={selected['rate']:.6f}, "
+        f"Qmean={selected['quality']:.2f}, "
+        f"Qguard={selected['quality_constraint_value']:.2f}, "
+        f"E={selected['energy']:.6f}, "
+        f"J={selected['cost']:.6f}"
+    )
+
+
+def print_all_profiles_footer(
+    *,
+    out_dir: Path,
+    summary_path: Path,
+    topk_path: Optional[Path] = None,
+) -> None:
+    print()
+    print(f"JSON reports written to: {out_dir}")
+    print(f"Summary written to:      {summary_path}")
+    if topk_path is not None:
+        print(f"Top-k written to:        {topk_path}")
