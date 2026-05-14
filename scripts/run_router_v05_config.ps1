@@ -54,10 +54,13 @@ Write-Host "Override selected:" $override.decision.selected.codec $override.deci
 
 Write-Host ""
 Write-Host "[3/3] Running pytest..."
-python -m pytest tests -q
-
-if ($LASTEXITCODE -ne 0) {
-  throw "Regression tests failed."
+$PytestBasetemp = ".pytest_tmp_" + [IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Name)
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+python -m pytest tests -q --basetemp $PytestBasetemp
+$PytestExit = $LASTEXITCODE
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+if ($PytestExit -ne 0) {
+    throw "pytest failed with exit code $PytestExit"
 }
 
 Write-Host ""
