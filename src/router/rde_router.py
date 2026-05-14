@@ -1,6 +1,4 @@
 import argparse
-import csv
-import json
 import sys
 import unicodedata
 from pathlib import Path
@@ -48,6 +46,12 @@ from src.router.core.rde_database import (
     filter_points_by_raw_column,
     load_rde_points_with_diagnostics,
     select_best_rde,
+)
+from src.router.outputs import (
+    safe_profile_filename,
+    write_json_report,
+    write_summary_csv,
+    write_topk_csv,
 )
 from src.router.pipeline import (
     annotate_points_with_calibration_provenance,
@@ -274,10 +278,6 @@ def _build_time_guard_report(
     return report
 
 
-def _safe_profile_filename(profile_name: str) -> str:
-    return profile_name.strip().lower().replace("-", "_").replace(" ", "_")
-
-
 def _build_content_classifier_router_report(args: argparse.Namespace) -> Dict[str, Any]:
     enabled = bool(getattr(args, "content_classifier", False))
     mode = str(getattr(args, "content_classifier_mode", "report-only"))
@@ -340,41 +340,6 @@ def _build_content_classifier_router_report(args: argparse.Namespace) -> Dict[st
     classifier_report["config"] = config_path
 
     return classifier_report
-
-
-def _write_json_report(report: Dict[str, Any], out_path: Path) -> None:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with out_path.open("w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2, ensure_ascii=False)
-
-
-def _write_summary_csv(rows: List[Dict[str, Any]], out_path: Path) -> None:
-    if not rows:
-        return
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    fieldnames = list(rows[0].keys())
-
-    with out_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _write_topk_csv(rows: List[Dict[str, Any]], out_path: Path) -> None:
-    if not rows:
-        return
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    fieldnames = list(rows[0].keys())
-
-    with out_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
@@ -1367,10 +1332,10 @@ def main(argv: Optional[List[str]] = None) -> None:
                 filter_report=filter_report,
             )
 
-            safe_name = _safe_profile_filename(profile_name)
+            safe_name = safe_profile_filename(profile_name)
             json_path = out_dir / f"router_decision_report_{safe_name}.json"
             report["decision_receipt"] = build_decision_receipt(report)
-            _write_json_report(report, json_path)
+            write_json_report(report, json_path)
 
             summary_rows.append(summary_row_from_report(report))
 
@@ -1395,11 +1360,11 @@ def main(argv: Optional[List[str]] = None) -> None:
             else out_dir / "router_summary.csv"
         )
 
-        _write_summary_csv(summary_rows, summary_path)
+        write_summary_csv(summary_rows, summary_path)
 
         if args.export_topk:
             topk_path = out_dir / "router_topk.csv"
-            _write_topk_csv(topk_rows, topk_path)
+            write_topk_csv(topk_rows, topk_path)
 
         print()
         print(f"JSON reports written to: {out_dir}")
@@ -1427,7 +1392,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         apply_execution_result(report, execute=args.execute)
 
         report["decision_receipt"] = build_decision_receipt(report)
-        _write_json_report(report, out_path)
+        write_json_report(report, out_path)
 
         if args.execute and args.feedback_out:
             write_feedback_report(
@@ -1435,11 +1400,11 @@ def main(argv: Optional[List[str]] = None) -> None:
                 feedback_out=args.feedback_out,
                 report_path=out_path,
             )
-            _write_json_report(report, out_path)
+            write_json_report(report, out_path)
 
         if args.export_topk:
             topk_path = out_path.with_name(out_path.stem + "_topk.csv")
-            _write_topk_csv(topk_rows_from_report(report), topk_path)
+            write_topk_csv(topk_rows_from_report(report), topk_path)
 
         _print_single_decision(report, out_path)
 
