@@ -3,10 +3,13 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.router.adaptation.energy_provenance import classify_energy_provenance
 from src.router.core.normalization_profile import normalize_with_profile
+
+
+CSV_ROW_DIAGNOSTICS_EXAMPLE_LIMIT = 10
 
 
 @dataclass
@@ -149,7 +152,7 @@ def _std(values: List[float]) -> float:
     return math.sqrt(sum((x - m) ** 2 for x in values) / len(values))
 
 
-def load_rde_points(
+def load_rde_points_with_diagnostics(
     csv_path: str | Path,
     codec_col: Optional[str] = None,
     config_col: Optional[str] = None,
@@ -157,7 +160,7 @@ def load_rde_points(
     quality_col: Optional[str] = None,
     energy_col: Optional[str] = None,
     time_col: Optional[str] = None,
-) -> List[RDEPoint]:
+) -> Tuple[List[RDEPoint], Dict[str, Any]]:
     csv_path = Path(csv_path)
 
     if not csv_path.exists():
@@ -272,54 +275,144 @@ def load_rde_points(
             )
 
         points: List[RDEPoint] = []
+        reasons: Dict[str, int] = {}
+        examples: List[Dict[str, Any]] = []
 
-        for row in reader:
-            try:
-                codec = str(row[codec_key]).strip()
-                config = _build_config(row, config_key)
-                rate = _parse_float(row[rate_key])
-                quality = _parse_float(row[quality_key])
-                energy = _parse_float(row[energy_key])
+        diagnostic_keys = [
+            k for k in (codec_key, config_key, rate_key, quality_key, energy_key, time_key)
+            if k is not None
+        ]
 
-                if not codec:
-                    continue
+        def _record_drop(
+            reason: str,
+            row: Dict[str, Any],
+            row_index: int,
+            csv_line_number: int,
+            detail: Optional[str] = None,
+        ) -> None:
+            reasons[reason] = reasons.get(reason, 0) + 1
+            if len(examples) < CSV_ROW_DIAGNOSTICS_EXAMPLE_LIMIT:
+                raw_values = {k: row.get(k) for k in diagnostic_keys}
+                entry: Dict[str, Any] = {
+                    "row_index": row_index,
+                    "csv_line_number": csv_line_number,
+                    "reason": reason,
+                    "raw_values": raw_values,
+                }
+                if detail is not None:
+                    entry["detail"] = detail
+                examples.append(entry)
 
-                time_ms = None
-                if time_key is not None:
-                    time_ms = _parse_time_ms(row.get(time_key), time_key)
+        for row_index, row in enumerate(reader):
+            csv_line_number = reader.line_num
 
-                raw = dict(row)
-                raw.update(
-                    {
-                        "quality_mean": quality,
-                        "quality_min": quality,
-                        "quality_p10": quality,
-                        "quality_p25": quality,
-                        "quality_std": 0.0,
-                        "time_mean_ms": time_ms,
-                        "time_p90_ms": time_ms,
-                        "time_max_ms": time_ms,
-                    }
-                )
-
-                points.append(
-                    RDEPoint(
-                        codec=codec,
-                        config=config,
-                        rate=rate,
-                        quality=quality,
-                        energy=energy,
-                        raw=raw,
-                        time_ms=time_ms,
-                    )
-                )
-
-            except Exception:
+            raw_codec = row.get(codec_key)
+            codec = "" if raw_codec is None else str(raw_codec).strip()
+            if not codec:
+                _record_drop("missing_codec", row, row_index, csv_line_number)
                 continue
 
-    if not points:
-        raise ValueError("Nessun punto R-D-E valido trovato nel CSV.")
+            try:
+                rate = _parse_float(row.get(rate_key))
+            except (ValueError, TypeError) as exc:
+                _record_drop("invalid_rate", row, row_index, csv_line_number, detail=str(exc))
+                continue
 
+            try:
+                quality = _parse_float(row.get(quality_key))
+            except (ValueError, TypeError) as exc:
+                _record_drop("invalid_quality", row, row_index, csv_line_number, detail=str(exc))
+                continue
+
+            try:
+                energy = _parse_float(row.get(energy_key))
+            except (ValueError, TypeError) as exc:
+                _record_drop("invalid_energy", row, row_index, csv_line_number, detail=str(exc))
+                continue
+
+            try:
+                time_ms: Optional[float] = None
+                if time_key is not None:
+                    time_ms = _parse_time_ms(row.get(time_key), time_key)
+            except (ValueError, TypeError) as exc:
+                _record_drop("invalid_time", row, row_index, csv_line_number, detail=str(exc))
+                continue
+
+            try:
+                config = _build_config(row, config_key)
+            except Exception as exc:
+                _record_drop(
+                    "config_build_error",
+                    row,
+                    row_index,
+                    csv_line_number,
+                    detail=f"{type(exc).__name__}: {exc}",
+                )
+                continue
+
+            raw = dict(row)
+            raw.update(
+                {
+                    "quality_mean": quality,
+                    "quality_min": quality,
+                    "quality_p10": quality,
+                    "quality_p25": quality,
+                    "quality_std": 0.0,
+                    "time_mean_ms": time_ms,
+                    "time_p90_ms": time_ms,
+                    "time_max_ms": time_ms,
+                }
+            )
+
+            points.append(
+                RDEPoint(
+                    codec=codec,
+                    config=config,
+                    rate=rate,
+                    quality=quality,
+                    energy=energy,
+                    raw=raw,
+                    time_ms=time_ms,
+                )
+            )
+
+    dropped_rows = sum(reasons.values())
+    diagnostics: Dict[str, Any] = {
+        "enabled": True,
+        "csv_path": str(csv_path),
+        "dropped_rows": dropped_rows,
+        "reasons": dict(reasons),
+        "examples": examples,
+        "example_limit": CSV_ROW_DIAGNOSTICS_EXAMPLE_LIMIT,
+    }
+
+    if not points:
+        raise ValueError(
+            "Nessun punto R-D-E valido trovato nel CSV. "
+            f"dropped_rows={dropped_rows}; reasons={dict(reasons)}"
+        )
+
+    return points, diagnostics
+
+
+def load_rde_points(
+    csv_path: str | Path,
+    codec_col: Optional[str] = None,
+    config_col: Optional[str] = None,
+    rate_col: Optional[str] = None,
+    quality_col: Optional[str] = None,
+    energy_col: Optional[str] = None,
+    time_col: Optional[str] = None,
+) -> List[RDEPoint]:
+    points, _ = load_rde_points_with_diagnostics(
+        csv_path=csv_path,
+        codec_col=codec_col,
+        config_col=config_col,
+        rate_col=rate_col,
+        quality_col=quality_col,
+        energy_col=energy_col,
+        time_col=time_col,
+    )
     return points
 
 

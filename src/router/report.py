@@ -416,6 +416,15 @@ def build_router_report(
             context.content_filter_report,
             {"enabled": False, "applied": False},
         ),
+        "csv_row_diagnostics": _coalesce(
+            context.csv_row_diagnostics,
+            {
+                "enabled": False,
+                "dropped_rows": 0,
+                "reasons": {},
+                "examples": [],
+            },
+        ),
         "system_policy_simulation": _coalesce(
             context.system_policy_simulation,
             {"enabled": False, "classes": {}},
