@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.router.normalization_consistency import (
+from src.router.observability.normalization_consistency import (
     NormalizationAuditLoadError,
     compare_normalization_audits,
     load_previous_normalization_audit,

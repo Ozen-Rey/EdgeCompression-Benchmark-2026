@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from src.router.codec_capabilities import (
+from src.router.codecs.codec_capabilities import (
     build_execution_plan,
     get_codec_capability,
     load_external_codec_registry,

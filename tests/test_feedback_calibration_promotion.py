@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from src.router.feedback_calibration_promotion import (
+from src.router.observability.feedback_calibration_promotion import (
     build_feedback_calibration_promotion,
     main,
 )

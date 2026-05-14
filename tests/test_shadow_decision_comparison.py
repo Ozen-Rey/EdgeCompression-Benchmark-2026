@@ -7,9 +7,9 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.calibration_bundle import sha256_file
+from src.router.calibration.calibration_bundle import sha256_file
 from src.router.rde_router import main as router_main
-from src.router.shadow_decision_comparison import (
+from src.router.observability.shadow_decision_comparison import (
     main as shadow_main,
     run_shadow_decision_comparison,
 )

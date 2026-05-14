@@ -1,4 +1,4 @@
-from src.router.rde_database import RDEPoint, select_best_rde
+from src.router.core.rde_database import RDEPoint, select_best_rde
 
 
 def _three_point_decision(**kwargs):

@@ -4,7 +4,7 @@ import struct
 import subprocess
 from pathlib import Path
 
-from src.router.external_codec_rde_exporter import (
+from src.router.codecs.external_codec_rde_exporter import (
     RDE_COLUMNS,
     export_external_codec_rde,
     main,

@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.calibration_bundle import sha256_file
-from src.router.calibration_impact_audit import run_calibration_impact_audit
+from src.router.calibration.calibration_bundle import sha256_file
+from src.router.calibration.calibration_impact_audit import run_calibration_impact_audit
 from src.router.rde_router import main as router_main
 from src.router.version import ROUTER_VERSION
 

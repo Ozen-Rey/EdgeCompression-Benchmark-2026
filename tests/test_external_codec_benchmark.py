@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from src.router.external_codec_benchmark import (
+from src.router.codecs.external_codec_benchmark import (
     CSV_COLUMNS,
     main,
     run_external_codec_benchmark,
@@ -308,7 +308,7 @@ def test_invalid_spec_does_not_execute_and_writes_empty_csv(tmp_path: Path, monk
     def fail_if_called(*args, **kwargs):
         raise AssertionError("invalid spec must not execute subprocess")
 
-    monkeypatch.setattr("src.router.external_codec_dry_run.subprocess.run", fail_if_called)
+    monkeypatch.setattr("src.router.codecs.external_codec_dry_run.subprocess.run", fail_if_called)
     spec_path = _write_spec(tmp_path, _valid_spec(tmp_path, codec_id="Bad Codec!"))
     input_path = _input_file(tmp_path, "a.png")
     csv_path = tmp_path / "measurements.csv"
@@ -335,7 +335,7 @@ def test_benchmark_subprocess_uses_shell_false(tmp_path: Path, monkeypatch):
         Path(args[0][4]).write_bytes(b"fake")
         return subprocess.CompletedProcess(args=args[0], returncode=0)
 
-    monkeypatch.setattr("src.router.external_codec_dry_run.subprocess.run", fake_run)
+    monkeypatch.setattr("src.router.codecs.external_codec_dry_run.subprocess.run", fake_run)
     spec_path = _write_spec(tmp_path, _valid_spec(tmp_path))
     input_path = _input_file(tmp_path, "a.png")
 

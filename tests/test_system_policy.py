@@ -1,6 +1,6 @@
 import pytest
 
-from src.router.system_policy import (
+from src.router.adaptation.system_policy import (
     apply_system_policy_simulation,
     build_system_policy,
     parse_system_policy_simulation,

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.router.content_policy import (
+from src.router.adaptation.content_policy import (
     build_content_policy_report,
     get_content_policy_preferred_candidate,
     load_content_policy_rules,

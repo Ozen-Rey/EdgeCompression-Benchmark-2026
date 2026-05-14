@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from src.router.content_oracle_classifier import (
+from src.router.analysis.content_oracle_classifier import (
     evaluate_oracle_classifier,
     load_classifier_rows,
 )

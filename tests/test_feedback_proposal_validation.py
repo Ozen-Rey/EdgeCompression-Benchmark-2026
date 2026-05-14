@@ -6,8 +6,8 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.feedback_logger import FEEDBACK_FIELDS
-from src.router.feedback_proposal_validation import (
+from src.router.observability.feedback_logger import FEEDBACK_FIELDS
+from src.router.observability.feedback_proposal_validation import (
     main,
     validate_feedback_proposals,
 )

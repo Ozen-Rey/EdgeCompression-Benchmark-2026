@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.router.calibration_apply import apply_local_calibration, main
+from src.router.calibration.calibration_apply import apply_local_calibration, main
 
 
 @dataclass(frozen=True)

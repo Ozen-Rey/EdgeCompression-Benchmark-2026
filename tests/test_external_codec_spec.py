@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.router.external_codec_spec import (
+from src.router.codecs.external_codec_spec import (
     load_external_codec_spec,
     main,
     validate_external_codec_spec,

@@ -1,8 +1,8 @@
-from src.router.energy_provenance import (
+from src.router.adaptation.energy_provenance import (
     build_energy_provenance_summary,
     classify_energy_provenance,
 )
-from src.router.rde_database import RDEPoint
+from src.router.core.rde_database import RDEPoint
 
 
 def test_benchmark_point_without_local_energy_metadata_is_reference():

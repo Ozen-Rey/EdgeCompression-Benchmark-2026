@@ -1,4 +1,4 @@
-from src.router.energy_provenance_compatibility import (
+from src.router.adaptation.energy_provenance_compatibility import (
     build_energy_provenance_compatibility_audit,
 )
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.router.content_metadata_features import (
+from src.router.adaptation.content_metadata_features import (
     extract_metadata_features,
     join_metadata_with_oracle,
     summarize_metadata_oracle,

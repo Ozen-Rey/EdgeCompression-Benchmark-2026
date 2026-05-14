@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.router.calibration_bundle import validate_calibration_bundle_manifest
-from src.router.codec_fingerprints import (
+from src.router.calibration.calibration_bundle import validate_calibration_bundle_manifest
+from src.router.codecs.codec_fingerprints import (
     CalibrationStalenessError,
     validate_codec_fingerprints,
 )
@@ -80,7 +80,7 @@ def test_manifest_with_matching_codec_fingerprint_is_accepted(
     _write_csv(csv_path)
     binary.write_bytes(b"fake-cjxl")
     monkeypatch.setattr(
-        "src.router.codec_fingerprints._version_from_binary",
+        "src.router.codecs.codec_fingerprints._version_from_binary",
         lambda path, backend: "codec 1.0",
     )
     _write_manifest(
@@ -110,7 +110,7 @@ def test_hash_mismatch_rejects_bundle(
     expected = _fingerprint(binary)
     expected["binary_sha256"] = "0" * 64
     monkeypatch.setattr(
-        "src.router.codec_fingerprints._version_from_binary",
+        "src.router.codecs.codec_fingerprints._version_from_binary",
         lambda path, backend: "codec 1.0",
     )
     _write_manifest(manifest, csv_path, fingerprints={"JXL": expected})
@@ -129,7 +129,7 @@ def test_version_mismatch_rejects_bundle(
     _write_csv(csv_path)
     binary.write_bytes(b"fake-cjxl")
     monkeypatch.setattr(
-        "src.router.codec_fingerprints._version_from_binary",
+        "src.router.codecs.codec_fingerprints._version_from_binary",
         lambda path, backend: "codec 2.0",
     )
     _write_manifest(

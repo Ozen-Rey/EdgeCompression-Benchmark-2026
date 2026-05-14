@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.router.router_config import config_to_cli_args, expand_argv_with_config
+from src.router.core.router_config import config_to_cli_args, expand_argv_with_config
 
 
 def test_config_to_cli_args_maps_core_fields():

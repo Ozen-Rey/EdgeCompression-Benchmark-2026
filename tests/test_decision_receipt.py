@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from src.router.calibration_bundle import sha256_file
-from src.router.decision_receipt import (
+from src.router.calibration.calibration_bundle import sha256_file
+from src.router.observability.decision_receipt import (
     build_decision_receipt,
     sanitize_replay_argv,
 )

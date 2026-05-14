@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.calibration_bundle import (
+from src.router.calibration.calibration_bundle import (
     sha256_file,
     validate_calibration_bundle_manifest,
     validate_calibration_bundle_validation,

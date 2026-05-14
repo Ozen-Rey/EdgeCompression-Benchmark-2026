@@ -6,7 +6,7 @@ import pytest
 
 from src.router.rde_router import main
 from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
-from src.router.codec_fingerprints import fingerprint_codec
+from src.router.codecs.codec_fingerprints import fingerprint_codec
 
 
 def _tmp_path(name: str) -> Path:
