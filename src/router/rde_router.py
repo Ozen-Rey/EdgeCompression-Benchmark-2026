@@ -394,27 +394,6 @@ def _write_json_report(report: Dict[str, Any], out_path: Path) -> None:
         json.dump(report, f, indent=2, ensure_ascii=False)
 
 
-def _router_context(args: argparse.Namespace) -> Optional[RouterContext]:
-    context = getattr(args, "_router_context", None)
-    if isinstance(context, RouterContext):
-        return context
-    return None
-
-
-def _context_or_args(
-    args: argparse.Namespace,
-    context_field: str,
-    args_field: str,
-    default: Any,
-) -> Any:
-    context = _router_context(args)
-    if context is not None:
-        value = getattr(context, context_field)
-        if value is not None:
-            return value
-    return getattr(args, args_field, default)
-
-
 def _annotate_points_with_calibration_provenance(
     points: List[RDEPoint],
     calibration_report: Dict[str, Any],
@@ -926,6 +905,7 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
 
 def _run_profile(
     args: argparse.Namespace,
+    router_context: RouterContext,
     profile_name: str,
     points: List[RDEPoint],
     normalization_points: List[RDEPoint],
@@ -939,22 +919,17 @@ def _run_profile(
         args,
         profile_name,
     )
-    router_context = _router_context(args)
+
+    system_features_report = router_context.system_features_report or {"enabled": False}
 
     system_policy_report = build_system_policy(
         base_weights=weights,
-        system_features_report=_context_or_args(
-            args,
-            "system_features_report",
-            "_system_features_report",
-            {"enabled": False},
-        ),
+        system_features_report=system_features_report,
         enabled=args.system_policy,
         mode=args.system_policy_mode,
     )
 
-    if router_context is not None:
-        router_context.system_policy_report = system_policy_report
+    router_context.system_policy_report = system_policy_report
 
     if system_policy_report.get("enabled", False) and system_policy_report.get("applied", False):
         weights = system_policy_report["effective_weights"]
@@ -969,12 +944,10 @@ def _run_profile(
         fallback="router",
     )
 
-    if router_context is not None:
-        router_context.content_policy_report = content_policy_report
+    router_context.content_policy_report = content_policy_report
 
     content_classifier_report = _build_content_classifier_router_report(args)
-    if router_context is not None:
-        router_context.content_classifier_report = content_classifier_report
+    router_context.content_classifier_report = content_classifier_report
 
     preferred_codec = None
     preferred_config = None
@@ -1010,34 +983,26 @@ def _run_profile(
         )
         preferred_source = "content_classifier"
 
-    if router_context is not None:
-        router_context.preferred_candidate_source = preferred_source
+    router_context.preferred_candidate_source = preferred_source
 
     system_penalty_weights_report = load_system_penalty_weights(
         args.system_penalty_weights_file
     )
 
-    if router_context is not None:
-        router_context.system_penalty_weights_report = system_penalty_weights_report
+    router_context.system_penalty_weights_report = system_penalty_weights_report
 
     system_penalty_context = build_system_penalty_context(
         enabled=args.system_penalty,
         mode=args.system_penalty_mode,
         lambda_sys=args.system_penalty_lambda,
-        system_features_report=_context_or_args(
-            args,
-            "system_features_report",
-            "_system_features_report",
-            {"enabled": False},
-        ),
+        system_features_report=system_features_report,
         latency_constrained=args.max_time_ms is not None,
         execution_requested=bool(args.execute),
         penalty_weights=system_penalty_weights_report["weights"],
         penalty_weights_source=system_penalty_weights_report["source"],
     )
 
-    if router_context is not None:
-        router_context.system_penalty_report = system_penalty_context
+    router_context.system_penalty_report = system_penalty_context
 
     system_penalty_fn = (
         make_system_penalty_fn(system_penalty_context)
@@ -1056,8 +1021,7 @@ def _run_profile(
         strict_time=args.strict_time,
     )
 
-    if router_context is not None:
-        router_context.time_guard_report = time_guard_report
+    router_context.time_guard_report = time_guard_report
 
     decision = select_best_rde(
         points=points,
@@ -1071,12 +1035,7 @@ def _run_profile(
         allow_degraded_fallback=args.allow_degraded_fallback,
         top_k=args.top_k,
         normalization_points=normalization_points,
-        normalization_profile=_context_or_args(
-            args,
-            "normalization_profile",
-            "_normalization_profile",
-            None,
-        ),
+        normalization_profile=router_context.normalization_profile,
         system_penalty_fn=system_penalty_fn,
         system_penalty_apply=(
             system_penalty_context.get("enabled", False)
@@ -1182,6 +1141,7 @@ def _run_profile(
 
     return build_router_report(
         args=args,
+        context=router_context,
         profile_name=profile_name,
         weights=weights,
         min_quality=min_quality,
@@ -1211,7 +1171,6 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser = build_router_arg_parser()
     args = parser.parse_args(argv)
     router_context = RouterContext()
-    args._router_context = router_context
     router_context.router_config_report = router_config_report
     if args.system_features:
         router_context.system_features_report = build_system_features(
@@ -1595,10 +1554,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         for profile_name in available_profiles():
             report = _run_profile(
                 args=args,
+                router_context=router_context,
                 profile_name=profile_name,
                 points=points,
                 normalization_points=normalization_points,
-        normalization_scope=normalization_scope_label,
+                normalization_scope=normalization_scope_label,
                 csv_path=effective_csv_path,
                 num_rows_loaded=num_rows_loaded,
                 system_state=system_state,
@@ -1649,6 +1609,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     else:
         report = _run_profile(
             args=args,
+            router_context=router_context,
             profile_name="context-auto" if args.auto_weights else args.profile,
             points=points,
             normalization_points=normalization_points,

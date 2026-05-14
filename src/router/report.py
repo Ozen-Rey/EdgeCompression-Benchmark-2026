@@ -17,25 +17,8 @@ from src.router.observability.normalization_consistency import (
 from src.router.adaptation.system_features import estimate_probe_efficiency
 
 
-def _router_context(args: Any) -> Optional[RouterContext]:
-    context = getattr(args, "_router_context", None)
-    if isinstance(context, RouterContext):
-        return context
-    return None
-
-
-def _context_or_args(
-    args: Any,
-    context: Optional[RouterContext],
-    context_field: str,
-    args_field: str,
-    default: Any,
-) -> Any:
-    if context is not None:
-        value = getattr(context, context_field)
-        if value is not None:
-            return value
-    return getattr(args, args_field, default)
+def _coalesce(value: Any, default: Any) -> Any:
+    return value if value is not None else default
 
 
 def _build_energy_provenance_report(
@@ -227,6 +210,7 @@ def _find_selected_calibration(
 
 def build_router_report(
     args: Any,
+    context: RouterContext,
     profile_name: str,
     weights: Dict[str, float],
     min_quality: float | None,
@@ -241,7 +225,11 @@ def build_router_report(
     weight_source: str,
     context_policy: Dict[str, Any] | None,
 ) -> Dict[str, Any]:
-    router_context = _router_context(args)
+    if not isinstance(context, RouterContext):
+        raise TypeError(
+            "build_router_report requires a RouterContext instance; "
+            f"got {type(context).__name__}"
+        )
 
     execution_plan = build_execution_plan(
         codec_name=decision["selected"]["codec"],
@@ -252,11 +240,8 @@ def build_router_report(
         requested=args.generate_command or args.input is not None or args.execute,
     )
 
-    calibration_report = _context_or_args(
-        args,
-        router_context,
-        "calibration_report",
-        "_calibration_report",
+    calibration_report = _coalesce(
+        context.calibration_report,
         {"enabled": False},
     )
     selected_calibration = _find_selected_calibration(
@@ -264,14 +249,9 @@ def build_router_report(
         decision=decision,
     )
 
-    system_features_report = _context_or_args(
-        args,
-        router_context,
-        "system_features_report",
-        "_system_features_report",
-        {
-            "enabled": False,
-        },
+    system_features_report = _coalesce(
+        context.system_features_report,
+        {"enabled": False},
     )
 
     if system_features_report.get("enabled", False):
@@ -289,67 +269,34 @@ def build_router_report(
         }
 
     normalization_audit = _build_normalization_audit(
-        normalization_report=_context_or_args(
-            args,
-            router_context,
-            "normalization_report",
-            "_normalization_report",
+        normalization_report=_coalesce(
+            context.normalization_report,
             {"mode": "runtime", "enabled": False},
         ),
-        normalization_profile=_context_or_args(
-            args,
-            router_context,
-            "normalization_profile",
-            "_normalization_profile",
-            None,
-        ),
+        normalization_profile=context.normalization_profile,
         normalization_reference=decision.get("normalization_reference", {}),
         quality_metric=getattr(args, "quality_metric", None),
     )
-    normalization_consistency = _context_or_args(
-        args,
-        router_context,
-        "normalization_consistency_report",
-        "_normalization_consistency_report",
-        None,
-    )
+    normalization_consistency = context.normalization_consistency_report
     if normalization_consistency is None:
         normalization_consistency = _build_normalization_consistency_report(
             previous_receipt_path=getattr(args, "previous_decision_receipt", None),
             current_audit=normalization_audit,
         )
-    energy_provenance_report = _context_or_args(
-        args,
-        router_context,
-        "energy_provenance_report",
-        "_energy_provenance_report",
-        None,
-    )
+    energy_provenance_report = context.energy_provenance_report
     if energy_provenance_report is None:
         energy_provenance_report = _build_energy_provenance_report(
             calibration_report=calibration_report,
             selected_calibration=selected_calibration,
         )
-    energy_provenance_summary = _context_or_args(
-        args,
-        router_context,
-        "energy_provenance_summary",
-        "_energy_provenance_summary",
-        None,
-    )
+    energy_provenance_summary = context.energy_provenance_summary
     if energy_provenance_summary is None:
         energy_provenance_summary = build_energy_provenance_summary(
             selected=decision.get("selected", {}),
             scored_candidate_pool=decision.get("scored_candidate_pool", []),
             unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
         )
-    energy_provenance_compatibility = _context_or_args(
-        args,
-        router_context,
-        "energy_provenance_compatibility",
-        "_energy_provenance_compatibility",
-        None,
-    )
+    energy_provenance_compatibility = context.energy_provenance_compatibility
     if energy_provenance_compatibility is None:
         energy_provenance_compatibility = (
             build_energy_provenance_compatibility_audit(
@@ -358,13 +305,7 @@ def build_router_report(
                 unscored_candidate_pool=decision.get("unscored_candidate_pool", []),
             )
         )
-    energy_tier_policy = _context_or_args(
-        args,
-        router_context,
-        "energy_tier_policy",
-        "_energy_tier_policy",
-        None,
-    )
+    energy_tier_policy = context.energy_tier_policy
     if energy_tier_policy is None:
         energy_tier_policy = build_energy_tier_policy_shadow(
             selected=decision.get("selected", {}),
@@ -380,63 +321,33 @@ def build_router_report(
         "weight_source": weight_source,
         "context_policy": context_policy,
         "calibration": calibration_report,
-        "calibration_bundle": _context_or_args(
-            args,
-            router_context,
-            "calibration_bundle_report",
-            "_calibration_bundle_report",
-            {
-                "enabled": False,
-            },
+        "calibration_bundle": _coalesce(
+            context.calibration_bundle_report,
+            {"enabled": False},
         ),
-        "calibration_bundle_validation": _context_or_args(
-            args,
-            router_context,
-            "calibration_bundle_validation_report",
-            "_calibration_bundle_validation_report",
-            {
-                "enabled": False,
-            },
+        "calibration_bundle_validation": _coalesce(
+            context.calibration_bundle_validation_report,
+            {"enabled": False},
         ),
         "energy_provenance": energy_provenance_report,
         "energy_provenance_summary": energy_provenance_summary,
         "energy_provenance_compatibility": energy_provenance_compatibility,
         "energy_tier_policy": energy_tier_policy,
-        "codec_registry": _context_or_args(
-            args,
-            router_context,
-            "codec_registry_report",
-            "_codec_registry_report",
-            {
-                "enabled": False,
-            },
+        "codec_registry": _coalesce(
+            context.codec_registry_report,
+            {"enabled": False},
         ),
-        "external_codecs": _context_or_args(
-            args,
-            router_context,
-            "external_codecs_report",
-            "_external_codecs_report",
-            {
-                "enabled": False,
-            },
+        "external_codecs": _coalesce(
+            context.external_codecs_report,
+            {"enabled": False},
         ),
-        "router_config": _context_or_args(
-            args,
-            router_context,
-            "router_config_report",
-            "_router_config_report",
-            {
-                "enabled": False,
-            },
+        "router_config": _coalesce(
+            context.router_config_report,
+            {"enabled": False},
         ),
-        "run_manifest": _context_or_args(
-            args,
-            router_context,
-            "run_manifest",
-            "_run_manifest",
-            {
-                "enabled": False,
-            },
+        "run_manifest": _coalesce(
+            context.run_manifest,
+            {"enabled": False},
         ),
         "resolved_args": {
             k: v for k, v in vars(args).items()
@@ -452,34 +363,17 @@ def build_router_report(
         },
         "normalization_audit": normalization_audit,
         "normalization_consistency": normalization_consistency,
-        "normalization_profile": _context_or_args(
-            args,
-            router_context,
-            "normalization_report",
-            "_normalization_report",
-            {
-                "enabled": False,
-                "mode": "runtime",
-            },
+        "normalization_profile": _coalesce(
+            context.normalization_report,
+            {"enabled": False, "mode": "runtime"},
         ),
-        "quality_thresholds": _context_or_args(
-            args,
-            router_context,
-            "quality_threshold_report",
-            "_quality_threshold_report",
-            {
-                "enabled": False,
-            },
+        "quality_thresholds": _coalesce(
+            context.quality_threshold_report,
+            {"enabled": False},
         ),
-        "time_guard": _context_or_args(
-            args,
-            router_context,
-            "time_guard_report",
-            "_time_guard_report",
-            {
-                "enabled": False,
-                "max_time_ms": None,
-            },
+        "time_guard": _coalesce(
+            context.time_guard_report,
+            {"enabled": False, "max_time_ms": None},
         ),
         "weights": weights,
         "constraints": {
@@ -498,74 +392,40 @@ def build_router_report(
         "system_state": system_state,
         "system_features": system_features_report,
         "system_probe_efficiency": system_probe_efficiency,
-        "system_policy": _context_or_args(
-            args,
-            router_context,
-            "system_policy_report",
-            "_system_policy_report",
-            {
-                "enabled": False,
-            },
+        "system_policy": _coalesce(
+            context.system_policy_report,
+            {"enabled": False},
         ),
-        "content_policy": _context_or_args(
-            args,
-            router_context,
-            "content_policy_report",
-            "_content_policy_report",
+        "content_policy": _coalesce(
+            context.content_policy_report,
             {
                 "enabled": False,
                 "mode": "report-only",
                 "suggestion": None,
             },
         ),
-        "content_classifier": _context_or_args(
-            args,
-            router_context,
-            "content_classifier_report",
-            "_content_classifier_report",
+        "content_classifier": _coalesce(
+            context.content_classifier_report,
             {
                 "enabled": False,
                 "mode": "report-only",
                 "prediction": None,
             },
         ),
-        "content_filter": _context_or_args(
-            args,
-            router_context,
-            "content_filter_report",
-            "_content_filter_report",
-            {
-                "enabled": False,
-                "applied": False,
-            },
+        "content_filter": _coalesce(
+            context.content_filter_report,
+            {"enabled": False, "applied": False},
         ),
-        "system_policy_simulation": _context_or_args(
-            args,
-            router_context,
-            "system_policy_simulation",
-            "_system_policy_simulation",
-            {
-                "enabled": False,
-                "classes": {},
-            },
+        "system_policy_simulation": _coalesce(
+            context.system_policy_simulation,
+            {"enabled": False, "classes": {}},
         ),
-        "system_penalty": _context_or_args(
-            args,
-            router_context,
-            "system_penalty_report",
-            "_system_penalty_report",
-            {
-                "enabled": False,
-            },
+        "system_penalty": _coalesce(
+            context.system_penalty_report,
+            {"enabled": False},
         ),
-        "system_penalty_weights": _context_or_args(
-            args,
-            router_context,
-            "system_penalty_weights_report",
-            "_system_penalty_weights_report",
-            {
-                "source": None,
-                "source_exists": False,
-            },
+        "system_penalty_weights": _coalesce(
+            context.system_penalty_weights_report,
+            {"source": None, "source_exists": False},
         ),
     }
