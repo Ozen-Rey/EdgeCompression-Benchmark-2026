@@ -20,9 +20,10 @@ python -m src.router.codecs.external_codec_benchmark --help
 python -m src.router.codecs.external_codec_rde_exporter --help
 ```
 
-During the structural refactor, keep legacy direct-script import fallbacks in
-place unless a module is fully covered by module-execution tests. This preserves
-existing workflows while new code can rely on package imports.
+The legacy top-level wrapper modules were removed in v0.42.15. New code and
+developer scripts should import and execute router tools through their
+subpackage paths, as shown above. See `docs/router_architecture.md` for the
+package map.
 
 ## Backend Smoke Executables
 

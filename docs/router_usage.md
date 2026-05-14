@@ -137,7 +137,7 @@ configurations and repetitions.
 ### Run quick calibration
 
 ```powershell
-python -m src.router.calibration `
+python -m src.router.calibration.calibration `
   --level quick `
   --input-dir calibration_images `
   --codecs JPEG,JXL,HEVC `
