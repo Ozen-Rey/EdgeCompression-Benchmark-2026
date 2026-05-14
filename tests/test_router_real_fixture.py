@@ -7,10 +7,11 @@ import pytest
 from src.router.rde_router import main
 from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
 from src.router.codecs.codec_fingerprints import fingerprint_codec
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "router_real_fixture"
+    tmp_dir = scratch_root() / "router_real_fixture"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

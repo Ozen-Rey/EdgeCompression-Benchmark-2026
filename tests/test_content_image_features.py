@@ -8,15 +8,14 @@ from src.router.adaptation.content_image_features import (
     extract_image_features,
     summarize_feature_rows,
 )
-
-
-TEST_DIR = Path("tests/_tmp/content_image_features")
+from tests.conftest import scratch_root
 
 
 def _reset_test_dir() -> Path:
-    shutil.rmtree(TEST_DIR, ignore_errors=True)
-    TEST_DIR.mkdir(parents=True, exist_ok=True)
-    return TEST_DIR
+    root = scratch_root() / "content_image_features"
+    shutil.rmtree(root, ignore_errors=True)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def test_extract_image_features_detects_flat_rgb_image():

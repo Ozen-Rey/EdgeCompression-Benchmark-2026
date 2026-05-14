@@ -8,10 +8,11 @@ from typing import Any
 import pytest
 
 from src.router.rde_router import main
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "router_characterization"
+    tmp_dir = scratch_root() / "router_characterization"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 
@@ -73,11 +74,12 @@ def _normalize_report_for_semantic_comparison(value: Any) -> Any:
 
     if isinstance(value, str):
         text = value.replace(str(Path.cwd()), "<repo>")
-        return re.sub(
-            r"tests[\\/]+_tmp[\\/]+router_characterization[\\/]+[^\\/]+",
-            "tests/_tmp/router_characterization/<tmp-file>",
+        text = re.sub(
+            r"router_scratch[^\\/\"]*[\\/]+router_characterization[\\/]+[^\\/\"]+",
+            "router_scratch/router_characterization/<tmp-file>",
             text,
         )
+        return text
 
     return value
 

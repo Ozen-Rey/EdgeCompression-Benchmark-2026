@@ -5,10 +5,11 @@ from src.router.adaptation.content_metadata_features import (
     join_metadata_with_oracle,
     summarize_metadata_oracle,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "content_metadata_features"
+    tmp_dir = scratch_root() / "content_metadata_features"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

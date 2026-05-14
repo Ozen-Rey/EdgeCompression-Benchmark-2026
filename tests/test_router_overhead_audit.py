@@ -11,11 +11,12 @@ from src.router.observability.router_overhead_audit import (
     run_router_overhead_audit,
 )
 from src.router.version import ROUTER_VERSION
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
     root = (
-        Path(__file__).with_name("_tmp")
+        scratch_root()
         / "router_overhead_audit"
         / f"{name}_{uuid4().hex}"
     )

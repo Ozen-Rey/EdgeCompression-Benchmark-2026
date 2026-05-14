@@ -6,10 +6,11 @@ from src.router.codecs.codec_capabilities import (
     get_codec_capability,
     load_external_codec_registry,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "codec_registry"
+    tmp_dir = scratch_root() / "codec_registry"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

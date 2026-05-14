@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from src.router.observability.feedback_logger import FEEDBACK_FIELDS, append_feedback_row
 from src.router.execution import build_feedback_row as _build_feedback_row
+from tests.conftest import scratch_root
 
 
 def _read_rows(path: Path):
@@ -13,7 +14,7 @@ def _read_rows(path: Path):
 
 
 def _tmp_feedback_path(name: str) -> Path:
-    root = Path(__file__).with_name("_tmp") / "feedback_logger"
+    root = scratch_root() / "feedback_logger"
     root.mkdir(parents=True, exist_ok=True)
     return root / f"{name}_{uuid4().hex}.csv"
 

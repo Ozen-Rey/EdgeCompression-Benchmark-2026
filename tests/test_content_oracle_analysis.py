@@ -4,10 +4,11 @@ from src.router.analysis.content_oracle_analysis import (
     analyze_content_oracle,
     load_oracle_rows,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "content_oracle_analysis"
+    tmp_dir = scratch_root() / "content_oracle_analysis"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

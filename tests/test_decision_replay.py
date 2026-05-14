@@ -10,11 +10,12 @@ from src.router.observability.decision_replay import (
 )
 from src.router.rde_router import main as router_main
 from src.router.version import ROUTER_VERSION
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
     root = (
-        Path(__file__).with_name("_tmp")
+        scratch_root()
         / "decision_replay"
         / f"{name}_{uuid4().hex}"
     )

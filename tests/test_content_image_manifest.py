@@ -6,10 +6,11 @@ from src.router.adaptation.content_image_manifest import (
     _parse_roots,
     build_image_manifest,
 )
+from tests.conftest import scratch_root
 
 
 def _case_dir(name: str) -> Path:
-    path = Path(".test_tmp") / "content_image_manifest" / name
+    path = scratch_root() / "content_image_manifest" / name
     path.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -5,15 +5,14 @@ from src.router.analysis.content_oracle_classifier import (
     evaluate_oracle_classifier,
     load_classifier_rows,
 )
-
-
-TEST_DIR = Path("tests/_tmp/content_oracle_classifier")
+from tests.conftest import scratch_root
 
 
 def _reset_test_dir() -> Path:
-    shutil.rmtree(TEST_DIR, ignore_errors=True)
-    TEST_DIR.mkdir(parents=True, exist_ok=True)
-    return TEST_DIR
+    root = scratch_root() / "content_oracle_classifier"
+    shutil.rmtree(root, ignore_errors=True)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def test_load_classifier_rows_joins_metadata_and_pixel_features():

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.router.calibration.calibration_apply import apply_local_calibration, main
+from tests.conftest import scratch_root
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,7 @@ def test_apply_local_calibration_updates_rate_time_and_energy():
         },
     }
 
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     tmp_dir.mkdir(exist_ok=True)
     path = tmp_dir / "calibration.json"
     path.write_text(json.dumps(calibration), encoding="utf-8")
@@ -105,7 +106,7 @@ def test_auto_uses_local_energy_only_when_usable_for_total():
         },
     }
 
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     tmp_dir.mkdir(exist_ok=True)
     path = tmp_dir / "calibration_measured_energy.json"
     path.write_text(json.dumps(calibration), encoding="utf-8")
@@ -159,7 +160,7 @@ def test_partial_gpu_only_energy_is_not_used_as_total_energy():
         },
     }
 
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     tmp_dir.mkdir(exist_ok=True)
     path = tmp_dir / "calibration_gpu_only_energy.json"
     path.write_text(json.dumps(calibration), encoding="utf-8")
@@ -214,7 +215,7 @@ def test_benchmark_only_ignores_usable_local_energy():
         },
     }
 
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     tmp_dir.mkdir(exist_ok=True)
     path = tmp_dir / "calibration_benchmark_only_energy.json"
     path.write_text(json.dumps(calibration), encoding="utf-8")
@@ -266,7 +267,7 @@ def test_require_measured_total_rejects_partial_gpu_only_energy():
         },
     }
 
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     tmp_dir.mkdir(exist_ok=True)
     path = tmp_dir / "calibration_strict_gpu_only_energy.json"
     path.write_text(json.dumps(calibration), encoding="utf-8")
@@ -321,7 +322,7 @@ def test_strict_energy_mode_rejects_windows_gpu_only():
         },
     }
 
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     tmp_dir.mkdir(exist_ok=True)
     path = tmp_dir / "calibration_strict_windows_gpu_only_energy.json"
     path.write_text(json.dumps(calibration), encoding="utf-8")
@@ -383,7 +384,7 @@ def _promotion_profile(entries: list[dict]) -> dict:
 
 
 def test_without_promotion_profile_behavior_remains_unchanged():
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     calibration_path = tmp_dir / "calibration_no_promotion_regression.json"
     _write_json(calibration_path, _base_calibration())
 
@@ -401,7 +402,7 @@ def test_without_promotion_profile_behavior_remains_unchanged():
 
 
 def test_promotion_profile_applies_accepted_rate_and_time_scales():
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     calibration_path = tmp_dir / "calibration_promotion_rate_time.json"
     promotion_path = tmp_dir / "promotion_rate_time.json"
     _write_json(calibration_path, _base_calibration())
@@ -452,7 +453,7 @@ def test_promotion_profile_applies_accepted_rate_and_time_scales():
 
 
 def test_rejected_promotion_scale_is_ignored():
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     calibration_path = tmp_dir / "calibration_rejected_promotion.json"
     promotion_path = tmp_dir / "promotion_rejected.json"
     _write_json(calibration_path, _base_calibration())
@@ -506,7 +507,7 @@ def test_promotion_energy_scale_applies_only_with_total_usable_evidence():
             "energy_quality": "cpu=hardware_counter;gpu=not_measured",
         }
     )
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     calibration_path = tmp_dir / "calibration_energy_promotion.json"
     promotion_path = tmp_dir / "promotion_energy_total.json"
     _write_json(calibration_path, calibration)
@@ -556,7 +557,7 @@ def test_gpu_only_promotion_energy_scale_is_not_applied():
             "energy_quality": "cpu=not_measured;gpu=hardware_counter",
         }
     )
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     calibration_path = tmp_dir / "calibration_gpu_promotion.json"
     promotion_path = tmp_dir / "promotion_energy_gpu_only.json"
     _write_json(calibration_path, calibration)
@@ -599,7 +600,7 @@ def test_gpu_only_promotion_energy_scale_is_not_applied():
 
 
 def test_missing_codec_config_in_promotion_profile_does_not_break():
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     calibration_path = tmp_dir / "calibration_missing_promotion.json"
     promotion_path = tmp_dir / "promotion_missing_config.json"
     _write_json(calibration_path, _base_calibration())
@@ -636,7 +637,7 @@ def test_missing_codec_config_in_promotion_profile_does_not_break():
 
 
 def test_promotion_provenance_is_written_to_report():
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     calibration_path = tmp_dir / "calibration_promotion_provenance.json"
     promotion_path = tmp_dir / "promotion_provenance.json"
     _write_json(calibration_path, _base_calibration())
@@ -678,7 +679,7 @@ def test_promotion_provenance_is_written_to_report():
 
 
 def test_calibration_apply_cli_writes_calibrated_csv_with_promotion():
-    tmp_dir = Path(__file__).with_name("_tmp")
+    tmp_dir = scratch_root() / "calibration_apply"
     benchmark_path = tmp_dir / "benchmark_cli.csv"
     calibration_path = tmp_dir / "calibration_cli.json"
     promotion_path = tmp_dir / "promotion_cli.json"

@@ -11,15 +11,14 @@ from src.router.adaptation.content_classifier_model import (
     load_training_rows_from_config,
     predict_content_classifier,
 )
-
-
-TEST_DIR = Path("tests/_tmp/content_classifier_model")
+from tests.conftest import scratch_root
 
 
 def _reset():
-    shutil.rmtree(TEST_DIR, ignore_errors=True)
-    TEST_DIR.mkdir(parents=True, exist_ok=True)
-    return TEST_DIR
+    root = scratch_root() / "content_classifier_model"
+    shutil.rmtree(root, ignore_errors=True)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def test_build_metadata_no_source_features_classifies_geometry():

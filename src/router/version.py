@@ -1,6 +1,6 @@
 """Centralized router version metadata."""
 
-ROUTER_VERSION = "0.42.27"
+ROUTER_VERSION = "0.42.28"
 
 FEATURE_LEVEL = {
     "rde_selection": "stable",

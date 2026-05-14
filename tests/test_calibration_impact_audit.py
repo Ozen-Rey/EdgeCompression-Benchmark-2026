@@ -11,11 +11,12 @@ from src.router.calibration.calibration_bundle import sha256_file
 from src.router.calibration.calibration_impact_audit import run_calibration_impact_audit
 from src.router.rde_router import main as router_main
 from src.router.version import ROUTER_VERSION
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
     root = (
-        Path(__file__).with_name("_tmp")
+        scratch_root()
         / "calibration_impact_audit"
         / f"{name}_{uuid4().hex}"
     )

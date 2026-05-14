@@ -6,10 +6,11 @@ from src.router.experiment_manager import (
     load_experiment_suite,
     summarize_report,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "experiment_manager"
+    tmp_dir = scratch_root() / "experiment_manager"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 
