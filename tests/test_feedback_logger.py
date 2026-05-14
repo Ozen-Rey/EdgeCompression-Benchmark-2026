@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from src.router.observability.feedback_logger import FEEDBACK_FIELDS, append_feedback_row
-from src.router.rde_router import _build_feedback_row
+from src.router.execution import build_feedback_row as _build_feedback_row
 
 
 def _read_rows(path: Path):
