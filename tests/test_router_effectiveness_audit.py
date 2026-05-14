@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.calibration_bundle import sha256_file
-from src.router.router_effectiveness_audit import (
+from src.router.calibration.calibration_bundle import sha256_file
+from src.router.observability.router_effectiveness_audit import (
     main as effectiveness_main,
     run_router_effectiveness_audit,
 )
@@ -287,13 +287,13 @@ def test_feasible_unscored_candidate_is_not_generic_missing_cost():
     )
     scenario = _scenario(report)
 
-    # JXL passes quality guard → now always in scored_candidate_pool → always comparable
+    # JXL passes quality guard â†’ now always in scored_candidate_pool â†’ always comparable
     highest_quality = _policy(scenario, "highest_quality")
     assert highest_quality["selected_codec"] == "JXL"
     assert highest_quality["comparable"] is True
     assert highest_quality["cost_status"] == "available"
 
-    # HEVC fails quality guard → not in scored pool → specific reason, not generic
+    # HEVC fails quality guard â†’ not in scored pool â†’ specific reason, not generic
     fixed = _policy(scenario, "fixed_codec_config")
     assert fixed["selected_codec"] == "HEVC"
     assert fixed["comparable"] is False

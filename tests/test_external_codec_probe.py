@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.router.external_codec_probe import main, probe_external_codec_spec
+from src.router.codecs.external_codec_probe import main, probe_external_codec_spec
 
 
 def _valid_spec(**overrides):
@@ -121,7 +121,7 @@ def test_invalid_spec_does_not_run_subprocess(tmp_path: Path, monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError("invalid specs must not run subprocess")
 
-    monkeypatch.setattr("src.router.external_codec_probe.subprocess.run", fail_if_called)
+    monkeypatch.setattr("src.router.codecs.external_codec_probe.subprocess.run", fail_if_called)
     spec_path = _write_spec(tmp_path, _valid_spec(codec_id="Bad Codec!"))
 
     report = _probe(probe_external_codec_spec(spec_path))
@@ -162,7 +162,7 @@ def test_version_probe_uses_shell_false(tmp_path: Path, monkeypatch):
             stderr="",
         )
 
-    monkeypatch.setattr("src.router.external_codec_probe.subprocess.run", fake_run)
+    monkeypatch.setattr("src.router.codecs.external_codec_probe.subprocess.run", fake_run)
     spec_path = _write_spec(tmp_path, _valid_spec())
 
     report = _probe(probe_external_codec_spec(spec_path))
@@ -226,7 +226,7 @@ def test_cli_no_version_probe_skips_execution(tmp_path: Path, monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError("--no-version-probe must not run subprocess")
 
-    monkeypatch.setattr("src.router.external_codec_probe.subprocess.run", fail_if_called)
+    monkeypatch.setattr("src.router.codecs.external_codec_probe.subprocess.run", fail_if_called)
     spec_path = _write_spec(tmp_path, _valid_spec())
     out_path = tmp_path / "probe_report.json"
 

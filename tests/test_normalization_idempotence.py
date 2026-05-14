@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from src.router.normalization_profile import (
+from src.router.core.normalization_profile import (
     build_normalization_profile,
     load_normalization_profile,
     normalize_with_profile,
     save_normalization_profile,
 )
-from src.router.rde_database import RDEPoint
+from src.router.core.rde_database import RDEPoint
 
 
 def _tmp_path(name: str) -> Path:

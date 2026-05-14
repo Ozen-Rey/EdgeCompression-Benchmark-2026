@@ -28,6 +28,10 @@ WRAPPER_TEMPLATE = (
 )
 
 
+def _legacy_module_path(name: str) -> str:
+    return "src.router." + name
+
+
 def _build_fake_repo(
     tmp_path: Path,
     *,
@@ -113,7 +117,7 @@ def test_audit_flags_suspicious_runtime_import(tmp_path):
         wrappers={"rde_database": "core"},
         extra_files={
             "src/router/some_runtime.py": (
-                "from src.router.rde_database import RDEPoint\n"
+                f"from {_legacy_module_path('rde_database')} import RDEPoint\n"
             ),
         },
     )
@@ -133,11 +137,11 @@ def test_audit_treats_wrapper_self_reference_as_allowed(tmp_path):
         wrappers={"rde_database": "core"},
         extra_files={
             "src/router/rde_database.py": (
-                "# explicit wrapper aliasing src.router.rde_database to the\n"
+                f"# explicit wrapper aliasing {_legacy_module_path('rde_database')} to the\n"
                 "# src.router.core.rde_database subpackage module.\n"
                 "from src.router.core import rde_database as _module\n"
                 "from src.router.core.rde_database import *  # noqa: F401,F403\n"
-                "# legacy alias for src.router.rde_database\n"
+                f"# legacy alias for {_legacy_module_path('rde_database')}\n"
             ),
         },
     )
@@ -158,7 +162,7 @@ def test_audit_treats_test_legacy_reference_as_allowed(tmp_path):
         wrappers={"rde_database": "core"},
         extra_files={
             "tests/test_legacy_compat.py": (
-                "from src.router.rde_database import RDEPoint\n"
+                f"from {_legacy_module_path('rde_database')} import RDEPoint\n"
                 "from src.router.core.rde_database import RDEPoint as NewRDEPoint\n"
                 "\n"
                 "def test_legacy_alias():\n"
@@ -199,10 +203,10 @@ def test_audit_separates_scripts_and_docs(tmp_path):
         wrappers={"rde_database": "core"},
         extra_files={
             "scripts/use_legacy.ps1": (
-                "python -m src.router.rde_database --help\n"
+                f"python -m {_legacy_module_path('rde_database')} --help\n"
             ),
             "docs/legacy_usage.md": (
-                "Historical reference: `src.router.rde_database`.\n"
+                f"Historical reference: `{_legacy_module_path('rde_database')}`.\n"
             ),
         },
     )
@@ -221,7 +225,7 @@ def test_audit_cli_returns_nonzero_on_suspicious(tmp_path, capsys):
         wrappers={"rde_database": "core"},
         extra_files={
             "src/router/some_runtime.py": (
-                "from src.router.rde_database import RDEPoint\n"
+                f"from {_legacy_module_path('rde_database')} import RDEPoint\n"
             ),
         },
     )
@@ -252,7 +256,7 @@ def test_audit_cli_writes_json_out(tmp_path):
         wrappers={"rde_database": "core"},
         extra_files={
             "src/router/some_runtime.py": (
-                "from src.router.rde_database import RDEPoint\n"
+                f"from {_legacy_module_path('rde_database')} import RDEPoint\n"
             ),
         },
     )

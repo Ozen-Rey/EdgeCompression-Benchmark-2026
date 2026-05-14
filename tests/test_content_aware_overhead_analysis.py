@@ -2,7 +2,7 @@ import json
 import shutil
 from pathlib import Path
 
-from src.router.content_aware_overhead_analysis import (
+from src.router.analysis.content_aware_overhead_analysis import (
     build_knn_sensitivity_table,
     build_overhead_table,
     load_overhead_cases,

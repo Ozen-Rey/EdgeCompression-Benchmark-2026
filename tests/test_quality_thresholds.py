@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 
-from src.router.quality_thresholds import resolve_quality_floor
+from src.router.core.quality_thresholds import resolve_quality_floor
 
 
 def _write_thresholds_fixture(name: str, thresholds: dict) -> Path:

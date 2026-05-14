@@ -5,12 +5,12 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.feedback_calibration_proposal import (
+from src.router.observability.feedback_calibration_proposal import (
     build_feedback_calibration_proposal,
     main,
     write_feedback_calibration_proposal,
 )
-from src.router.feedback_logger import FEEDBACK_FIELDS
+from src.router.observability.feedback_logger import FEEDBACK_FIELDS
 
 
 def _tmp_dir(name: str) -> Path:

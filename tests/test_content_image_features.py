@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from src.router.content_image_features import (
+from src.router.adaptation.content_image_features import (
     extract_features_from_manifest,
     extract_image_features,
     summarize_feature_rows,

@@ -1,4 +1,4 @@
-from src.router.energy_tier_policy import build_energy_tier_policy_shadow
+from src.router.adaptation.energy_tier_policy import build_energy_tier_policy_shadow
 
 
 def _candidate(

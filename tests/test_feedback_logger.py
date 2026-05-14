@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from src.router.feedback_logger import FEEDBACK_FIELDS, append_feedback_row
+from src.router.observability.feedback_logger import FEEDBACK_FIELDS, append_feedback_row
 from src.router.rde_router import _build_feedback_row
 
 

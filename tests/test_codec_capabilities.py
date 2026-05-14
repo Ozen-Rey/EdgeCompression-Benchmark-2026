@@ -1,4 +1,4 @@
-from src.router.codec_capabilities import (
+from src.router.codecs.codec_capabilities import (
     build_execution_plan,
     get_codec_capability,
     is_neural_codec,

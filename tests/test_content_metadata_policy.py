@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.router.content_metadata_policy import (
+from src.router.adaptation.content_metadata_policy import (
     build_candidate_lookup,
     build_majority_rules,
     evaluate_metadata_policy,

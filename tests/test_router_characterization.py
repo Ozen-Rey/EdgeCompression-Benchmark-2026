@@ -10,120 +10,6 @@ import pytest
 from src.router.rde_router import main
 
 
-def test_thematic_subpackage_imports_keep_legacy_paths():
-    from src.router.codecs.external_codec_spec import (
-        validate_external_codec_spec as new_validate_external_codec_spec,
-    )
-    from src.router.external_codec_spec import (
-        validate_external_codec_spec as legacy_validate_external_codec_spec,
-    )
-    from src.router.calibration.calibration_bundle import (
-        validate_calibration_bundle_manifest as new_validate_calibration_bundle,
-    )
-    from src.router.calibration_bundle import (
-        validate_calibration_bundle_manifest as legacy_validate_calibration_bundle,
-    )
-
-    assert new_validate_external_codec_spec is legacy_validate_external_codec_spec
-    assert new_validate_calibration_bundle is legacy_validate_calibration_bundle
-
-
-def test_observability_subpackage_imports_keep_legacy_paths():
-    from src.router.observability.decision_receipt import (
-        build_decision_receipt as new_build_decision_receipt,
-    )
-    from src.router.decision_receipt import (
-        build_decision_receipt as legacy_build_decision_receipt,
-    )
-    from src.router.observability.feedback_analysis import (
-        analyze_feedback as new_analyze_feedback,
-    )
-    from src.router.feedback_analysis import (
-        analyze_feedback as legacy_analyze_feedback,
-    )
-    from src.router.observability.shadow_decision_validation import (
-        run_shadow_decision_validation as new_run_shadow_decision_validation,
-    )
-    from src.router.shadow_decision_validation import (
-        run_shadow_decision_validation as legacy_run_shadow_decision_validation,
-    )
-
-    assert new_build_decision_receipt is legacy_build_decision_receipt
-    assert new_analyze_feedback is legacy_analyze_feedback
-    assert new_run_shadow_decision_validation is legacy_run_shadow_decision_validation
-
-
-def test_adaptation_subpackage_imports_keep_legacy_paths():
-    from src.router.adaptation.content_policy import (
-        build_content_policy_report as new_build_content_policy_report,
-    )
-    from src.router.adaptation.energy_provenance import (
-        classify_energy_provenance as new_classify_energy_provenance,
-    )
-    from src.router.adaptation.system_policy import (
-        build_system_policy as new_build_system_policy,
-    )
-    from src.router.content_policy import (
-        build_content_policy_report as legacy_build_content_policy_report,
-    )
-    from src.router.energy_provenance import (
-        classify_energy_provenance as legacy_classify_energy_provenance,
-    )
-    from src.router.system_policy import (
-        build_system_policy as legacy_build_system_policy,
-    )
-
-    assert new_classify_energy_provenance is legacy_classify_energy_provenance
-    assert new_build_content_policy_report is legacy_build_content_policy_report
-    assert new_build_system_policy is legacy_build_system_policy
-
-
-def test_analysis_subpackage_imports_keep_legacy_paths():
-    from src.router.analysis.content_oracle_analysis import (
-        analyze_content_oracle as new_analyze_content_oracle,
-    )
-    from src.router.content_oracle_analysis import (
-        analyze_content_oracle as legacy_analyze_content_oracle,
-    )
-    from src.router.analysis.content_oracle_classifier import (
-        evaluate_oracle_classifier as new_evaluate_oracle_classifier,
-    )
-    from src.router.content_oracle_classifier import (
-        evaluate_oracle_classifier as legacy_evaluate_oracle_classifier,
-    )
-    from src.router.analysis.content_aware_paper_artifacts import (
-        build_artifacts as new_build_artifacts,
-    )
-    from src.router.content_aware_paper_artifacts import (
-        build_artifacts as legacy_build_artifacts,
-    )
-
-    assert new_analyze_content_oracle is legacy_analyze_content_oracle
-    assert new_evaluate_oracle_classifier is legacy_evaluate_oracle_classifier
-    assert new_build_artifacts is legacy_build_artifacts
-
-
-def test_core_subpackage_imports_keep_legacy_paths():
-    from src.router.core.normalization_profile import (
-        build_normalization_profile as new_build_normalization_profile,
-    )
-    from src.router.core.quality_thresholds import (
-        resolve_quality_floor as new_resolve_quality_floor,
-    )
-    from src.router.core.rde_database import RDEPoint as NewRDEPoint
-    from src.router.normalization_profile import (
-        build_normalization_profile as legacy_build_normalization_profile,
-    )
-    from src.router.quality_thresholds import (
-        resolve_quality_floor as legacy_resolve_quality_floor,
-    )
-    from src.router.rde_database import RDEPoint as LegacyRDEPoint
-
-    assert NewRDEPoint is LegacyRDEPoint
-    assert new_build_normalization_profile is legacy_build_normalization_profile
-    assert new_resolve_quality_floor is legacy_resolve_quality_floor
-
-
 def _tmp_path(name: str) -> Path:
     tmp_dir = Path(__file__).with_name("_tmp") / "router_characterization"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -381,27 +267,12 @@ def test_external_codec_disabled_by_default_characterization():
     "module_name",
     [
         "src.router.rde_router",
-        "src.router.external_codec_spec",
-        "src.router.external_codec_probe",
-        "src.router.external_codec_dry_run",
-        "src.router.external_codec_benchmark",
-        "src.router.external_codec_rde_exporter",
-        "src.router.calibration_apply",
         "src.router.codecs.external_codec_spec",
         "src.router.codecs.external_codec_probe",
         "src.router.codecs.external_codec_dry_run",
         "src.router.codecs.external_codec_benchmark",
         "src.router.codecs.external_codec_rde_exporter",
         "src.router.calibration.calibration_apply",
-        "src.router.decision_replay",
-        "src.router.router_overhead_audit",
-        "src.router.router_effectiveness_audit",
-        "src.router.shadow_decision_comparison",
-        "src.router.shadow_decision_validation",
-        "src.router.feedback_analysis",
-        "src.router.feedback_calibration_proposal",
-        "src.router.feedback_proposal_validation",
-        "src.router.feedback_calibration_promotion",
         "src.router.observability.decision_replay",
         "src.router.observability.router_overhead_audit",
         "src.router.observability.router_effectiveness_audit",
@@ -411,27 +282,13 @@ def test_external_codec_disabled_by_default_characterization():
         "src.router.observability.feedback_calibration_proposal",
         "src.router.observability.feedback_proposal_validation",
         "src.router.observability.feedback_calibration_promotion",
-        "src.router.content_image_features",
-        "src.router.content_image_manifest",
-        "src.router.content_metadata_features",
-        "src.router.content_metadata_policy",
-        "src.router.content_classifier_model",
-        "src.router.system_features",
         "src.router.adaptation.content_image_features",
         "src.router.adaptation.content_image_manifest",
         "src.router.adaptation.content_metadata_features",
         "src.router.adaptation.content_metadata_policy",
         "src.router.adaptation.content_classifier_model",
         "src.router.adaptation.system_features",
-        "src.router.build_normalization_profile",
         "src.router.core.build_normalization_profile",
-        "src.router.content_oracle_analysis",
-        "src.router.content_oracle_classifier",
-        "src.router.content_oracle_classifier_sweep",
-        "src.router.content_oracle_classifier_sklearn_ablation",
-        "src.router.content_aware_benchmark_table",
-        "src.router.content_aware_overhead_analysis",
-        "src.router.content_aware_paper_artifacts",
         "src.router.analysis.content_oracle_analysis",
         "src.router.analysis.content_oracle_classifier",
         "src.router.analysis.content_oracle_classifier_sweep",

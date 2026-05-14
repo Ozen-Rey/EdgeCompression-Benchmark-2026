@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.router.system_penalty import (
+from src.router.adaptation.system_penalty import (
     build_system_penalty_context,
     compute_candidate_system_penalty,
     load_system_penalty_weights,

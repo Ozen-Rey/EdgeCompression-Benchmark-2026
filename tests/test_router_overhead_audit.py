@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.calibration_bundle import sha256_file
-from src.router.router_overhead_audit import (
+from src.router.calibration.calibration_bundle import sha256_file
+from src.router.observability.router_overhead_audit import (
     main as overhead_main,
     run_router_overhead_audit,
 )

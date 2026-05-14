@@ -1,6 +1,6 @@
 import argparse
 
-from src.router.run_manifest import build_run_manifest
+from src.router.observability.run_manifest import build_run_manifest
 
 
 def test_build_run_manifest_contains_reproducibility_fields():

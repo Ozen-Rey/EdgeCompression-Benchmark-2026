@@ -2,7 +2,7 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from src.router.content_oracle_classifier_sklearn_ablation import (
+from src.router.analysis.content_oracle_classifier_sklearn_ablation import (
     run_sklearn_ablation,
 )
 

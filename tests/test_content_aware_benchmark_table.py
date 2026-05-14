@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from src.router.content_aware_benchmark_table import (
+from src.router.analysis.content_aware_benchmark_table import (
     build_content_aware_benchmark_tables,
 )
 

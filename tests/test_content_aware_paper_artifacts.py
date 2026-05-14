@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 
-from src.router.content_aware_paper_artifacts import (
+from src.router.analysis.content_aware_paper_artifacts import (
     build_artifacts,
     build_best_k_table,
     build_main_paper_table,

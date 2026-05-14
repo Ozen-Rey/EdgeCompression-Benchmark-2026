@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from src.router.feedback_analysis import analyze_feedback
-from src.router.feedback_logger import FEEDBACK_FIELDS
+from src.router.observability.feedback_analysis import analyze_feedback
+from src.router.observability.feedback_logger import FEEDBACK_FIELDS
 
 
 def _tmp_dir(name: str) -> Path:

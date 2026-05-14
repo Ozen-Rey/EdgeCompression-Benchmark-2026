@@ -1,4 +1,4 @@
-from src.router.rde_database import RDEPoint, select_best_rde
+from src.router.core.rde_database import RDEPoint, select_best_rde
 
 
 def test_cost_decomposition_sums_to_j_rde():

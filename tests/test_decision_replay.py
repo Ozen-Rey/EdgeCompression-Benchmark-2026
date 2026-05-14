@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from src.router.decision_replay import (
+from src.router.observability.decision_replay import (
     main as decision_replay_main,
     replay_decision_receipt,
 )

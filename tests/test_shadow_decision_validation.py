@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from src.router.shadow_decision_validation import run_shadow_decision_validation
+from src.router.observability.shadow_decision_validation import run_shadow_decision_validation
 from src.router.version import ROUTER_VERSION
 
 

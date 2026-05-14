@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from src.router.content_classifier_model import (
+from src.router.adaptation.content_classifier_model import (
     build_metadata_no_source_features,
     extract_metadata_features_from_image,
     load_content_classifier_config,

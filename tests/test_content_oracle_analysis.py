@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.router.content_oracle_analysis import (
+from src.router.analysis.content_oracle_analysis import (
     analyze_content_oracle,
     load_oracle_rows,
 )

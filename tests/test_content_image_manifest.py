@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from PIL import Image
 
-from src.router.content_image_manifest import (
+from src.router.adaptation.content_image_manifest import (
     _parse_roots,
     build_image_manifest,
 )

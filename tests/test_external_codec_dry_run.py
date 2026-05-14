@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from src.router.external_codec_dry_run import main, dry_run_external_codec_spec
+from src.router.codecs.external_codec_dry_run import main, dry_run_external_codec_spec
 
 
 def _fake_codec(tmp_path: Path) -> Path:
@@ -206,7 +206,7 @@ def test_subprocess_uses_shell_false(tmp_path: Path, monkeypatch):
         Path(args[0][4]).write_bytes(b"fake")
         return subprocess.CompletedProcess(args=args[0], returncode=0)
 
-    monkeypatch.setattr("src.router.external_codec_dry_run.subprocess.run", fake_run)
+    monkeypatch.setattr("src.router.codecs.external_codec_dry_run.subprocess.run", fake_run)
 
     _run(tmp_path, _valid_spec(tmp_path))
 
@@ -259,7 +259,7 @@ def test_invalid_spec_blocks_dry_run_without_subprocess(tmp_path: Path, monkeypa
     def fail_if_called(*args, **kwargs):
         raise AssertionError("invalid spec must not execute subprocess")
 
-    monkeypatch.setattr("src.router.external_codec_dry_run.subprocess.run", fail_if_called)
+    monkeypatch.setattr("src.router.codecs.external_codec_dry_run.subprocess.run", fail_if_called)
 
     report = _run(tmp_path, _valid_spec(tmp_path, codec_id="Bad Codec!"))
 

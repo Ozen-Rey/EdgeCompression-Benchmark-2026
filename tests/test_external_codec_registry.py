@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.router.external_codec_registry import (
+from src.router.codecs.external_codec_registry import (
     ExternalCodecManifestError,
     load_external_codec_points,
     validate_external_codec_manifest,

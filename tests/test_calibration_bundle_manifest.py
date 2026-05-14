@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from src.router.calibration_apply import main
+from src.router.calibration.calibration_apply import main
 from src.router.version import ROUTER_VERSION
 
 

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from src.router.normalization_profile import (
+from src.router.core.normalization_profile import (
     build_normalization_profile,
     normalize_with_profile,
 )
