@@ -5,10 +5,11 @@ from src.router.adaptation.system_penalty import (
     compute_candidate_system_penalty,
     load_system_penalty_weights,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "system_penalty"
+    tmp_dir = scratch_root() / "system_penalty"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

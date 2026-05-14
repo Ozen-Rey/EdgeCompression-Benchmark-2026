@@ -8,11 +8,12 @@ from src.router.observability.decision_receipt import (
     sanitize_replay_argv,
 )
 from src.router.version import ROUTER_VERSION
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
     root = (
-        Path(__file__).with_name("_tmp")
+        scratch_root()
         / "decision_receipt"
         / f"{name}_{uuid4().hex}"
     )

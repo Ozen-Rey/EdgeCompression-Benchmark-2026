@@ -5,11 +5,12 @@ from uuid import uuid4
 
 from src.router.observability.shadow_decision_validation import run_shadow_decision_validation
 from src.router.version import ROUTER_VERSION
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
     root = (
-        Path(__file__).with_name("_tmp")
+        scratch_root()
         / "shadow_decision_validation"
         / f"{name}_{uuid4().hex}"
     )

@@ -6,10 +6,11 @@ from uuid import uuid4
 
 from src.router.calibration.calibration_apply import main
 from src.router.version import ROUTER_VERSION
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
-    root = Path(__file__).with_name("_tmp") / "calibration_bundle" / f"{name}_{uuid4().hex}"
+    root = scratch_root() / "calibration_bundle" / f"{name}_{uuid4().hex}"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

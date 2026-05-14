@@ -11,10 +11,11 @@ from src.router.observability.feedback_proposal_validation import (
     main,
     validate_feedback_proposals,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
-    root = Path(__file__).with_name("_tmp") / "feedback_validation" / f"{name}_{uuid4().hex}"
+    root = scratch_root() / "feedback_validation" / f"{name}_{uuid4().hex}"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

@@ -7,10 +7,11 @@ from src.router.adaptation.content_policy import (
     get_content_policy_preferred_candidate,
     load_content_policy_rules,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "content_policy"
+    tmp_dir = scratch_root() / "content_policy"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

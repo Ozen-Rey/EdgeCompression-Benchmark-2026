@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from src.router.core.router_config import config_to_cli_args, expand_argv_with_config
+from tests.conftest import scratch_root
 
 
 def test_config_to_cli_args_maps_core_fields():
@@ -58,8 +59,8 @@ def test_config_to_cli_args_maps_core_fields():
 
 
 def test_expand_argv_with_config_places_cli_overrides_after_config():
-    tmp_dir = Path(__file__).with_name("_tmp")
-    tmp_dir.mkdir(exist_ok=True)
+    tmp_dir = scratch_root() / "router_config"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
     config_path = tmp_dir / "router_config.json"
 
     config_path.write_text(

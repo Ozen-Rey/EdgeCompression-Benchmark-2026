@@ -4,15 +4,14 @@ from pathlib import Path
 from src.router.analysis.content_aware_benchmark_table import (
     build_content_aware_benchmark_tables,
 )
-
-
-TEST_DIR = Path("tests/_tmp/content_aware_benchmark_table")
+from tests.conftest import scratch_root
 
 
 def _reset():
-    shutil.rmtree(TEST_DIR, ignore_errors=True)
-    TEST_DIR.mkdir(parents=True, exist_ok=True)
-    return TEST_DIR
+    root = scratch_root() / "content_aware_benchmark_table"
+    shutil.rmtree(root, ignore_errors=True)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def test_build_content_aware_benchmark_table_selects_best_rows():

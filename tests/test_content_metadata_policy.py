@@ -9,10 +9,11 @@ from src.router.adaptation.content_metadata_policy import (
     infer_global_baseline,
     resolve_global_baseline,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "content_metadata_policy"
+    tmp_dir = scratch_root() / "content_metadata_policy"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

@@ -10,10 +10,11 @@ from src.router.calibration.calibration_bundle import (
     validate_calibration_bundle_manifest,
     validate_calibration_bundle_validation,
 )
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
-    root = Path(__file__).with_name("_tmp") / "calibration_bundle_validation" / f"{name}_{uuid4().hex}"
+    root = scratch_root() / "calibration_bundle_validation" / f"{name}_{uuid4().hex}"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

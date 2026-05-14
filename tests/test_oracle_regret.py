@@ -4,10 +4,11 @@ import math
 from pathlib import Path
 
 from src.router.rde_router import main
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "oracle_regret"
+    tmp_dir = scratch_root() / "oracle_regret"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

@@ -11,10 +11,11 @@ from src.router.observability.feedback_calibration_proposal import (
     write_feedback_calibration_proposal,
 )
 from src.router.observability.feedback_logger import FEEDBACK_FIELDS
+from tests.conftest import scratch_root
 
 
 def _tmp_dir(name: str) -> Path:
-    root = Path(__file__).with_name("_tmp") / "feedback_proposal" / f"{name}_{uuid4().hex}"
+    root = scratch_root() / "feedback_proposal" / f"{name}_{uuid4().hex}"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

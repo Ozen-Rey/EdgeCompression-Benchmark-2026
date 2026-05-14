@@ -2,11 +2,12 @@ from pathlib import Path
 import json
 
 from src.router.core.quality_thresholds import resolve_quality_floor
+from tests.conftest import scratch_root
 
 
 def _write_thresholds_fixture(name: str, thresholds: dict) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp")
-    tmp_dir.mkdir(exist_ok=True)
+    tmp_dir = scratch_root() / "quality_thresholds"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
     path = tmp_dir / name
     path.write_text(json.dumps(thresholds), encoding="utf-8")
     return path

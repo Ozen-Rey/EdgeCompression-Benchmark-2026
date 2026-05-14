@@ -9,13 +9,14 @@ from src.router.core.rde_database import (
     load_rde_points_with_diagnostics,
 )
 from src.router.rde_router import main
+from tests.conftest import scratch_root
 
 
 _VALID_HEADER = "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms"
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "csv_row_diagnostics"
+    tmp_dir = scratch_root() / "csv_row_diagnostics"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 

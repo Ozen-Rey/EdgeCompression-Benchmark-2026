@@ -1,10 +1,11 @@
 from pathlib import Path
 
 from src.router.execution_validation import validate_execution_output
+from tests.conftest import scratch_root
 
 
 def _tmp_path(name: str) -> Path:
-    tmp_dir = Path(__file__).with_name("_tmp") / "execution_validation"
+    tmp_dir = scratch_root() / "execution_validation"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / name
 
