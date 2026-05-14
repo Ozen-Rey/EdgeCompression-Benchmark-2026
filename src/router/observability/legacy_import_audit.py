@@ -17,16 +17,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-try:
-    from ..version import ROUTER_VERSION
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.version import ROUTER_VERSION
+from src.router.version import ROUTER_VERSION
 
 
 SELF_RELATIVE_PATH = "src/router/observability/legacy_import_audit.py"

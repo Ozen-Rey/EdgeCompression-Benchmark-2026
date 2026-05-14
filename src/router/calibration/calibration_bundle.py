@@ -4,15 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from ..codecs.codec_fingerprints import validate_codec_fingerprints
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.codecs.codec_fingerprints import validate_codec_fingerprints
+from src.router.codecs.codec_fingerprints import validate_codec_fingerprints
 
 
 def sha256_file(path: str | Path) -> str:

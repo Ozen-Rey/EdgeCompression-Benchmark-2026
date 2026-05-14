@@ -1,51 +1,26 @@
 import argparse
-import sys
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-try:
-    from ..adaptation.content_metadata_policy import (
-        build_candidate_lookup,
-        resolve_global_baseline,
-    )
-    from .content_oracle_classifier import (
-        FEATURE_SETS,
-        _candidate_is_feasible,
-        _encode_row,
-        _feature_spec,
-        _fit_categorical_values,
-        _fit_numeric_stats,
-        _label_from_sorted_distances,
-        _predict_knn_label,
-        _squared_distance,
-        _split_label,
-        _to_float,
-        load_classifier_rows,
-        summarize_classifier_decisions,
-        write_csv,
-    )
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.adaptation.content_metadata_policy import (
-        build_candidate_lookup,
-        resolve_global_baseline,
-    )
-    from src.router.analysis.content_oracle_classifier import (
-        FEATURE_SETS,
-        _candidate_is_feasible,
-        _encode_row,
-        _feature_spec,
-        _fit_categorical_values,
-        _fit_numeric_stats,
-        _label_from_sorted_distances,
-        _predict_knn_label,
-        _squared_distance,
-        _split_label,
-        _to_float,
-        load_classifier_rows,
-        summarize_classifier_decisions,
-        write_csv,
-    )
+from src.router.adaptation.content_metadata_policy import (
+    build_candidate_lookup,
+    resolve_global_baseline,
+)
+from src.router.analysis.content_oracle_classifier import (
+    FEATURE_SETS,
+    _candidate_is_feasible,
+    _encode_row,
+    _feature_spec,
+    _fit_categorical_values,
+    _fit_numeric_stats,
+    _label_from_sorted_distances,
+    _predict_knn_label,
+    _squared_distance,
+    _split_label,
+    _to_float,
+    load_classifier_rows,
+    summarize_classifier_decisions,
+    write_csv,
+)
 
 
 Pair = Tuple[str, str]

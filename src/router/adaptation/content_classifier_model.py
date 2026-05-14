@@ -1,36 +1,21 @@
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
-try:
-    from .content_metadata_features import (
-        _orientation_class,
-        _resolution_class,
-    )
-    from .content_metadata_policy import load_metadata_oracle_rows
-    from ..analysis.content_oracle_classifier import (
-        FEATURE_SETS,
-        _predict_knn_label,
-        _split_label,
-        load_classifier_rows,
-    )
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.adaptation.content_metadata_features import (
-        _orientation_class,
-        _resolution_class,
-    )
-    from src.router.adaptation.content_metadata_policy import load_metadata_oracle_rows
-    from src.router.analysis.content_oracle_classifier import (
-        FEATURE_SETS,
-        _predict_knn_label,
-        _split_label,
-        load_classifier_rows,
-    )
+from src.router.adaptation.content_metadata_features import (
+    _orientation_class,
+    _resolution_class,
+)
+from src.router.adaptation.content_metadata_policy import load_metadata_oracle_rows
+from src.router.analysis.content_oracle_classifier import (
+    FEATURE_SETS,
+    _predict_knn_label,
+    _split_label,
+    load_classifier_rows,
+)
 
 
 def load_content_classifier_config(path: str) -> Dict[str, Any]:

@@ -3,28 +3,17 @@ import csv
 import json
 import statistics
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-try:
-    from src.router.version import ROUTER_VERSION
-    from src.utils.energy_backends import (
-        CompositeEnergyMeter,
-        collect_energy_backend_diagnostics,
-    )
-    from src.router.codecs.codec_capabilities import build_execution_plan
-    from src.router.adaptation.system_probe import probe_system
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.version import ROUTER_VERSION
-    from src.utils.energy_backends import (
-        CompositeEnergyMeter,
-        collect_energy_backend_diagnostics,
-    )
-    from src.router.codecs.codec_capabilities import build_execution_plan
-    from src.router.adaptation.system_probe import probe_system
+from src.router.version import ROUTER_VERSION
+from src.utils.energy_backends import (
+    CompositeEnergyMeter,
+    collect_energy_backend_diagnostics,
+)
+from src.router.codecs.codec_capabilities import build_execution_plan
+from src.router.adaptation.system_probe import probe_system
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}

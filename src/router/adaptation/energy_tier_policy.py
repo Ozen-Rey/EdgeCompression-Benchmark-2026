@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any
 
-try:
-    from .energy_provenance import classify_energy_provenance
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.adaptation.energy_provenance import classify_energy_provenance
+from src.router.adaptation.energy_provenance import classify_energy_provenance
 
 
 RELIABILITY_ORDER = [

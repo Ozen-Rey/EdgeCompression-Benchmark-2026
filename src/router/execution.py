@@ -1,17 +1,10 @@
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-try:
-    from src.utils.energy_backends import CompositeEnergyMeter
-    from .execution_validation import validate_execution_output
-    from .observability.feedback_logger import append_feedback_row
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from src.utils.energy_backends import CompositeEnergyMeter
-    from src.router.execution_validation import validate_execution_output
-    from src.router.observability.feedback_logger import append_feedback_row
+from src.utils.energy_backends import CompositeEnergyMeter
+from src.router.execution_validation import validate_execution_output
+from src.router.observability.feedback_logger import append_feedback_row
 
 
 def _image_pixel_count(path: Optional[str]) -> Optional[int]:

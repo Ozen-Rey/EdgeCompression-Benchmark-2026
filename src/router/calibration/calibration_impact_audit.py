@@ -7,26 +7,16 @@ import contextlib
 import csv
 import io
 import json
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-try:
-    from src.router.calibration.calibration_bundle import (
-        validate_calibration_bundle_manifest,
-    )
-    from src.router.rde_router import main as router_main
-    from src.router.core.router_config import load_router_config
-    from src.router.version import ROUTER_VERSION
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.calibration.calibration_bundle import (
-        validate_calibration_bundle_manifest,
-    )
-    from src.router.rde_router import main as router_main
-    from src.router.core.router_config import load_router_config
-    from src.router.version import ROUTER_VERSION
+from src.router.calibration.calibration_bundle import (
+    validate_calibration_bundle_manifest,
+)
+from src.router.rde_router import main as router_main
+from src.router.core.router_config import load_router_config
+from src.router.version import ROUTER_VERSION
 
 
 SUMMARY_FIELDS = [

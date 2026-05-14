@@ -5,17 +5,11 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from .external_codec_spec import load_external_codec_spec
-    from ..core.rde_database import RDEPoint, load_rde_points
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.codecs.external_codec_spec import load_external_codec_spec
-    from src.router.core.rde_database import RDEPoint, load_rde_points
+from src.router.codecs.external_codec_spec import load_external_codec_spec
+from src.router.core.rde_database import RDEPoint, load_rde_points
 
 
 MANIFEST_SCHEMA_VERSION = "external_codec_router_manifest_v1"
