@@ -250,6 +250,20 @@ def test_audit_cli_returns_zero_when_clean(tmp_path, capsys):
     assert "OK" in captured.out
 
 
+def test_audit_handles_repo_with_no_legacy_wrappers(tmp_path, capsys):
+    repo = _build_fake_repo(tmp_path)
+
+    findings, wrappers, _ = run_audit(repo_root=repo)
+    rc = audit_main(["--repo-root", str(repo)])
+    captured = capsys.readouterr()
+
+    assert findings == []
+    assert wrappers == {}
+    assert rc == 0
+    assert "Legacy wrappers      : 0" in captured.out
+    assert "OK" in captured.out
+
+
 def test_audit_cli_writes_json_out(tmp_path):
     repo = _build_fake_repo(
         tmp_path,
