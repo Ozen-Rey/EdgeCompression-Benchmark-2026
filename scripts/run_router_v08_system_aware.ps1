@@ -137,7 +137,14 @@ Write-Host "J_total:" $penaltyJson.decision.selected.J_total
 
 Write-Host ""
 Write-Host "[5/5] Running pytest..."
-python -m pytest tests -q
+$PytestBasetemp = ".pytest_tmp_" + [IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Name)
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+python -m pytest tests -q --basetemp $PytestBasetemp
+$PytestExit = $LASTEXITCODE
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+if ($PytestExit -ne 0) {
+    throw "pytest failed with exit code $PytestExit"
+}
 
 Write-Host ""
 Write-Host "v0.8 system-aware validation completed successfully."

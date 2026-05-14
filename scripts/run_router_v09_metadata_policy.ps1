@@ -51,7 +51,14 @@ foreach ($PolicyKey in $PolicyKeys) {
 
 Write-Host ""
 Write-Host "[final] Running pytest..."
-python -m pytest tests -q
+$PytestBasetemp = ".pytest_tmp_" + [IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Name)
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+python -m pytest tests -q --basetemp $PytestBasetemp
+$PytestExit = $LASTEXITCODE
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+if ($PytestExit -ne 0) {
+    throw "pytest failed with exit code $PytestExit"
+}
 
 Write-Host ""
 Write-Host "v0.9 metadata content policy completed successfully."

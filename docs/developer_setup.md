@@ -56,3 +56,13 @@ ambiguous infeasible router decision.
 This bootstrap is only a developer smoke-script convenience. The router itself
 does not auto-install tools, does not perform implicit WinGet discovery, and
 continues to honor strict capability filtering exactly as configured.
+
+## Pytest temporary directory in smoke scripts
+
+The PowerShell smoke scripts under `scripts/run_router_*.ps1` that invoke
+pytest pass an explicit `--basetemp .pytest_tmp_<script_name>` directory local
+to the repository and remove it before and after the run. This avoids
+permission errors on the default global Windows pytest temp directory
+(`$env:LOCALAPPDATA\Temp\pytest-of-*`), and lets the scripts fail loudly via
+`throw` when pytest returns a non-zero exit code. The local basetemp paths are
+ignored by `.gitignore` (`.pytest_tmp_*/`).

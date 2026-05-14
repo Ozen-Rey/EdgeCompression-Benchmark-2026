@@ -95,7 +95,14 @@ Write-Host "Execution time ms:" $jxlExec.execution_validation.execution_time_ms
 
 Write-Host ""
 Write-Host "[4/4] Running pytest..."
-python -m pytest tests -q
+$PytestBasetemp = ".pytest_tmp_" + [IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Name)
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+python -m pytest tests -q --basetemp $PytestBasetemp
+$PytestExit = $LASTEXITCODE
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $PytestBasetemp
+if ($PytestExit -ne 0) {
+    throw "pytest failed with exit code $PytestExit"
+}
 
 Write-Host ""
 Write-Host "v0.6 validation completed successfully."
