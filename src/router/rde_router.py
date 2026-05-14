@@ -903,6 +903,65 @@ def _print_single_decision(report: Dict[str, Any], json_path: Path) -> None:
     print(f"Report written to: {json_path}")
 
 
+def _apply_preferred_candidate_override(
+    *,
+    report: Dict[str, Any],
+    decision: Dict[str, Any],
+    candidate_key: str,
+    label_prefix: str,
+) -> None:
+    """Resolve whether a preferred candidate (suggestion/prediction) was selected.
+
+    Shared between the content-policy and content-classifier ``apply`` paths.
+    Mutates ``report`` in place: sets ``applied``, appends to ``reasons``/
+    ``warnings``, and records ``decision_audit`` when the router falls back
+    from the preferred candidate to its own J_RDE-ranked choice. No effect
+    when the report is disabled, in report-only mode, or has no candidate.
+    """
+    if not (report.get("enabled") and report.get("mode") == "apply"):
+        return
+
+    candidate = report.get(candidate_key)
+    if not candidate:
+        return
+
+    candidate_codec = str(candidate.get("codec"))
+    candidate_config = str(candidate.get("config"))
+
+    selected = decision.get("selected", {})
+    selected_codec = str(selected.get("codec"))
+    selected_config = str(selected.get("config"))
+
+    if selected_codec == candidate_codec and selected_config == candidate_config:
+        report["applied"] = True
+        report["reasons"].append(f"{label_prefix}_{candidate_key}_selected")
+        return
+
+    report["applied"] = False
+
+    preferred_audit = (
+        decision.get("decision_trace", {}).get("preferred_candidate")
+    )
+    report["decision_audit"] = preferred_audit
+
+    if preferred_audit and preferred_audit.get("admissible") is True:
+        report["warnings"].append(
+            f"{label_prefix}_{candidate_key}_not_j_total_competitive_fallback_to_router"
+        )
+        report["reasons"].append(
+            f"{candidate_key}_admissible_but_not_competitive"
+        )
+    else:
+        report["warnings"].append(
+            f"{label_prefix}_{candidate_key}_not_admissible_fallback_to_router"
+        )
+        report["reasons"].append(
+            f"{candidate_key}_not_admissible"
+        )
+
+    report["reasons"].append("fallback_to_router_selection")
+
+
 def _run_profile(
     args: argparse.Namespace,
     router_context: RouterContext,
@@ -1046,98 +1105,19 @@ def _run_profile(
         preferred_reason=preferred_reason or "preferred_candidate",
     )
 
-    if content_policy_report.get("enabled") and content_policy_report.get("mode") == "apply":
-        selected = decision.get("selected", {})
-        suggestion = content_policy_report.get("suggestion")
+    _apply_preferred_candidate_override(
+        report=content_policy_report,
+        decision=decision,
+        candidate_key="suggestion",
+        label_prefix="content_policy",
+    )
 
-        if suggestion:
-            suggested_codec = str(suggestion.get("codec"))
-            suggested_config = str(suggestion.get("config"))
-
-            selected_codec = str(selected.get("codec"))
-            selected_config = str(selected.get("config"))
-
-            if selected_codec == suggested_codec and selected_config == suggested_config:
-                content_policy_report["applied"] = True
-                content_policy_report["reasons"].append(
-                    "content_policy_suggestion_selected"
-                )
-            else:
-                content_policy_report["applied"] = False
-
-                preferred_audit = (
-                    decision.get("decision_trace", {})
-                    .get("preferred_candidate")
-                )
-
-                content_policy_report["decision_audit"] = preferred_audit
-
-                if preferred_audit and preferred_audit.get("admissible") is True:
-                    content_policy_report["warnings"].append(
-                        "content_policy_suggestion_not_j_total_competitive_fallback_to_router"
-                    )
-                    content_policy_report["reasons"].append(
-                        "suggestion_admissible_but_not_competitive"
-                    )
-                else:
-                    content_policy_report["warnings"].append(
-                        "content_policy_suggestion_not_admissible_fallback_to_router"
-                    )
-                    content_policy_report["reasons"].append(
-                        "suggestion_not_admissible"
-                    )
-
-                content_policy_report["reasons"].append(
-                    "fallback_to_router_selection"
-                )
-
-    if (
-        content_classifier_report.get("enabled")
-        and content_classifier_report.get("mode") == "apply"
-    ):
-        selected = decision.get("selected", {})
-        prediction = content_classifier_report.get("prediction")
-
-        if prediction:
-            predicted_codec = str(prediction.get("codec"))
-            predicted_config = str(prediction.get("config"))
-
-            selected_codec = str(selected.get("codec"))
-            selected_config = str(selected.get("config"))
-
-            if selected_codec == predicted_codec and selected_config == predicted_config:
-                content_classifier_report["applied"] = True
-                content_classifier_report["reasons"].append(
-                    "content_classifier_prediction_selected"
-                )
-            else:
-                content_classifier_report["applied"] = False
-
-                preferred_audit = (
-                    decision.get("decision_trace", {})
-                    .get("preferred_candidate")
-                )
-
-                content_classifier_report["decision_audit"] = preferred_audit
-
-                if preferred_audit and preferred_audit.get("admissible") is True:
-                    content_classifier_report["warnings"].append(
-                        "content_classifier_prediction_not_j_total_competitive_fallback_to_router"
-                    )
-                    content_classifier_report["reasons"].append(
-                        "prediction_admissible_but_not_competitive"
-                    )
-                else:
-                    content_classifier_report["warnings"].append(
-                        "content_classifier_prediction_not_admissible_fallback_to_router"
-                    )
-                    content_classifier_report["reasons"].append(
-                        "prediction_not_admissible"
-                    )
-
-                content_classifier_report["reasons"].append(
-                    "fallback_to_router_selection"
-                )
+    _apply_preferred_candidate_override(
+        report=content_classifier_report,
+        decision=decision,
+        candidate_key="prediction",
+        label_prefix="content_classifier",
+    )
 
     return build_router_report(
         args=args,
