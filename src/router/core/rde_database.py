@@ -29,7 +29,7 @@ def _normalize_name(name: str) -> str:
 
 def _parse_float(value: Any) -> float:
     if value is None:
-        raise ValueError("Valore numerico mancante")
+        raise ValueError("Missing numeric value")
 
     text = str(value).strip()
 
@@ -41,7 +41,7 @@ def _parse_float(value: Any) -> float:
     match = re.search(r"-?\d+(?:\.\d+)?(?:e[+-]?\d+)?", text, flags=re.IGNORECASE)
 
     if not match:
-        raise ValueError(f"Impossibile convertire in float: {value}")
+        raise ValueError(f"Cannot convert to float: {value}")
 
     return float(match.group(0))
 
@@ -122,7 +122,7 @@ def _build_config(row: Dict[str, Any], config_col: Optional[str]) -> str:
 
 def _quantile(values: List[float], q: float) -> float:
     if not values:
-        raise ValueError("Quantile richiesto su lista vuota.")
+        raise ValueError("Quantile requested on an empty list.")
 
     values = sorted(values)
 
@@ -164,7 +164,7 @@ def load_rde_points_with_diagnostics(
     csv_path = Path(csv_path)
 
     if not csv_path.exists():
-        raise FileNotFoundError(f"CSV non trovato: {csv_path}")
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
     with csv_path.open("r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
@@ -267,11 +267,11 @@ def load_rde_points_with_diagnostics(
 
         if missing:
             raise ValueError(
-                "Colonne mancanti: "
+                "Missing columns: "
                 + ", ".join(missing)
-                + "\nColonne trovate nel CSV: "
+                + "\nColumns found in the CSV: "
                 + ", ".join(headers)
-                + "\nUsa --codec-col, --rate-col, --quality-col, --energy-col per specificarle manualmente."
+                + "\nUse --codec-col, --rate-col, --quality-col, --energy-col to specify them explicitly."
             )
 
         points: List[RDEPoint] = []
@@ -388,7 +388,7 @@ def load_rde_points_with_diagnostics(
 
     if not points:
         raise ValueError(
-            "Nessun punto R-D-E valido trovato nel CSV. "
+            "No valid R-D-E points were found in the CSV. "
             f"dropped_rows={dropped_rows}; reasons={dict(reasons)}"
         )
 
@@ -484,7 +484,7 @@ def _make_minmax_transform(
     high_is_good: bool = False,
 ):
     if not values:
-        raise ValueError("Impossibile normalizzare: lista valori vuota.")
+        raise ValueError("Cannot normalize: empty value list.")
 
     if use_log:
         transformed = [math.log10(max(v, 1e-12)) for v in values]
@@ -535,7 +535,7 @@ def _get_quality_stat(point: RDEPoint, stat: str) -> float:
     if stat == "p25":
         return float(point.raw.get("quality_p25", point.quality))
 
-    raise ValueError(f"Statistica qualità non supportata: {stat}")
+    raise ValueError(f"Unsupported quality statistic: {stat}")
 
 
 def _passes_base_constraints(
@@ -618,7 +618,7 @@ def select_best_rde(
         decision_mode = "degraded_fallback"
     else:
         raise ValueError(
-            "Nessuna configurazione soddisfa il vincolo di usabilità. "
+            "No configuration satisfies the usability constraint. "
             f"quality_constraint_stat={quality_constraint_stat}, "
             f"quality_floor={min_quality}, "
             f"near_quality_floor={near_quality_floor}, "
@@ -629,7 +629,7 @@ def select_best_rde(
 
     if normalization_profile is None:
         if not reference_points:
-            raise ValueError("Pool di riferimento per la normalizzazione vuoto.")
+            raise ValueError("Reference pool for normalization is empty.")
 
         rate_transform = _make_minmax_transform(
             [p.rate for p in reference_points],
@@ -756,7 +756,7 @@ def select_best_rde(
 
     if not scored:
         raise ValueError(
-            "Nessuna configurazione rimasta dopo system penalty/hard exclusion."
+            "No configuration remains after system penalty/hard exclusion."
         )
 
     scored.sort(key=lambda x: x["ranking_cost"])

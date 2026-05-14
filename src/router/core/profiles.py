@@ -48,7 +48,7 @@ def get_profile(name: str) -> RDEProfile:
 
     if key not in PROFILES:
         available = ", ".join(PROFILES.keys())
-        raise ValueError(f"Profilo sconosciuto: {name}. Profili disponibili: {available}")
+        raise ValueError(f"Unknown profile: {name}. Available profiles: {available}")
 
     return PROFILES[key]
 

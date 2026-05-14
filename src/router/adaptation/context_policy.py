@@ -6,7 +6,7 @@ def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
     total = w_e + w_r + w_d
 
     if total <= 0:
-        raise ValueError("La somma dei pesi deve essere positiva.")
+        raise ValueError("The sum of the weights must be positive.")
 
     return {
         "w_E": w_e / total,
@@ -41,12 +41,12 @@ def compute_context_policy(
     system_load: str = "normal",
 ) -> Dict[str, Any]:
     """
-    Traduce il contesto operativo in pesi R-D-E.
+    Translate the operating context into R-D-E weights.
 
-    La logica è volutamente esplicita e leggibile:
-    - batteria bassa / temperatura alta -> più peso all'energia;
-    - rete limitata -> più peso al rate;
-    - target qualità alto -> più peso alla distorsione e soglia qualità più alta.
+    The logic is deliberately explicit and readable:
+    - low battery / high temperature -> more weight on energy;
+    - limited network -> more weight on rate;
+    - high quality target -> more weight on distortion and a higher quality floor.
     """
 
     power_mode = power_mode.lower().strip()

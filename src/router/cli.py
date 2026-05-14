@@ -14,7 +14,7 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
         help="Router configuration JSON file. Expanded before normal argument parsing.",
     )
 
-    parser.add_argument("--csv", required=True, help="Path del CSV con i punti R-D-E.")
+    parser.add_argument("--csv", required=True, help="Path to the CSV file containing R-D-E points.")
 
     parser.add_argument(
         "--calibration-bundle-manifest",
@@ -37,13 +37,13 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--calibration-file",
         default=None,
-        help="File JSON di calibrazione locale da applicare ai punti R-D-E.",
+        help="Local calibration JSON file to apply to the R-D-E points.",
     )
 
     parser.add_argument(
         "--normalization-file",
         default=None,
-        help="File JSON con scale di normalizzazione precomputate.",
+        help="JSON file with precomputed normalization scales.",
     )
 
     parser.add_argument(
@@ -51,9 +51,9 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
         default="auto",
         choices=["auto", "runtime", "global", "dataset", "local"],
         help=(
-            "Politica di normalizzazione: auto, runtime, global, dataset, local. "
-            "runtime usa la normalizzazione calcolata al volo; global/dataset/local "
-            "richiedono --normalization-file."
+            "Normalization policy: auto, runtime, global, dataset, local. "
+            "runtime computes normalization on the fly; global/dataset/local "
+            "require --normalization-file."
         ),
     )
 
@@ -69,92 +69,92 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--input",
         default=None,
-        help="File di input da usare per generare un piano di esecuzione.",
+        help="Input file used to generate an execution plan.",
     )
 
     parser.add_argument(
         "--output",
         default=None,
-        help="File di output desiderato per il piano di esecuzione.",
+        help="Desired output file for the execution plan.",
     )
 
     parser.add_argument(
         "--generate-command",
         action="store_true",
-        help="Genera un execution plan per il codec selezionato.",
+        help="Generate an execution plan for the selected codec.",
     )
 
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Esegue direttamente il comando generato se il piano è eseguibile.",
+        help="Execute the generated command directly when the plan is executable.",
     )
 
     parser.add_argument(
         "--domain",
         default="image",
         choices=["image", "audio", "video"],
-        help="Dominio multimediale.",
+        help="Media domain.",
     )
 
     parser.add_argument(
         "--profile",
         default="balanced",
         choices=available_profiles(),
-        help="Profilo operativo da usare se --all-profiles non è attivo.",
+        help="Operating profile to use when --all-profiles is not set.",
     )
 
     parser.add_argument(
         "--all-profiles",
         action="store_true",
-        help="Esegue il router su tutti i profili disponibili e genera un summary CSV.",
+        help="Run the router over all available profiles and produce a summary CSV.",
     )
 
     parser.add_argument(
         "--auto-weights",
         action="store_true",
-        help="Calcola automaticamente i pesi R-D-E dal contesto operativo.",
+        help="Automatically derive the R-D-E weights from the operating context.",
     )
 
     parser.add_argument(
         "--power-mode",
         choices=["ac", "battery", "unknown"],
         default="ac",
-        help="Modalità alimentazione usata dalla policy contestuale.",
+        help="Power mode used by the contextual policy.",
     )
 
     parser.add_argument(
         "--battery-percent",
         type=float,
         default=None,
-        help="Percentuale batteria usata dalla policy contestuale.",
+        help="Battery percentage used by the contextual policy.",
     )
 
     parser.add_argument(
         "--thermal-state",
         choices=["nominal", "warm", "hot", "critical"],
         default="nominal",
-        help="Stato termico usato dalla policy contestuale.",
+        help="Thermal state used by the contextual policy.",
     )
 
     parser.add_argument(
         "--network-profile",
         choices=["normal", "limited", "very-limited"],
         default="normal",
-        help="Profilo rete usato dalla policy contestuale.",
+        help="Network profile used by the contextual policy.",
     )
 
     parser.add_argument(
         "--quality-target",
         choices=["preview", "normal", "high", "very-high"],
         default="normal",
-        help="Target qualità usato dalla policy contestuale.",
+        help="Quality target used by the contextual policy.",
     )
 
     parser.add_argument(
         "--quality-thresholds-file",
         default="configs/quality_thresholds.json",
-        help="File JSON con soglie qualità domain-specific.",
+        help="JSON file with domain-specific quality thresholds.",
     )
 
     parser.add_argument(
@@ -177,13 +177,13 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
         "--system-load",
         choices=["normal", "high", "very-high"],
         default="normal",
-        help="Carico sistema usato dalla policy contestuale.",
+        help="System load used by the contextual policy.",
     )
 
     parser.add_argument(
         "--aggregate-by-config",
         action="store_true",
-        help="Aggrega le righe per codec+config usando la media di rate, qualità ed energia.",
+        help="Aggregate rows by codec+config using the mean of rate, quality, and energy.",
     )
 
     parser.add_argument(
@@ -191,33 +191,33 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
         choices=["global", "filtered"],
         default="global",
         help=(
-            "global = normalizza sui punti prima dei filtri codec; "
-            "filtered = normalizza solo sui punti rimasti dopo i filtri."
+            "global = normalize over the points before codec filtering; "
+            "filtered = normalize only over the points that survive the filters."
         ),
     )
 
     parser.add_argument(
         "--available-codecs",
         default=None,
-        help="Lista separata da virgole dei codec disponibili. Esempio: JPEG,JXL,HEVC",
+        help="Comma-separated list of available codecs. Example: JPEG,JXL,HEVC",
     )
 
     parser.add_argument(
         "--exclude-codecs",
         default=None,
-        help="Lista separata da virgole dei codec da escludere. Esempio: DCAE,JPEG_AI",
+        help="Comma-separated list of codecs to exclude. Example: DCAE,JPEG_AI",
     )
 
     parser.add_argument(
         "--exclude-neural",
         action="store_true",
-        help="Esclude codec neurali o basati su modelli appresi.",
+        help="Exclude neural or learning-based codecs.",
     )
 
     parser.add_argument(
         "--system-aware",
         action="store_true",
-        help="Usa il profilo del sistema reale per filtrare automaticamente il pool ammissibile.",
+        help="Use the real system profile to automatically filter the admissible candidate pool.",
     )
 
     parser.add_argument(
@@ -387,76 +387,76 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--capability-aware",
         action="store_true",
-        help="Filtra i codec usando il registry dei requisiti hardware/software.",
+        help="Filter codecs using the hardware/software requirement registry.",
     )
 
     parser.add_argument(
         "--strict-executables",
         action="store_true",
-        help="Se attivo, esclude i codec i cui eseguibili richiesti non sono nel PATH.",
+        help="When set, exclude codecs whose required executables are not on PATH.",
     )
 
     parser.add_argument(
         "--simulate-no-cuda",
         action="store_true",
-        help="Debug: simula assenza di CUDA per testare il filtro system-aware.",
+        help="Debug: simulate the absence of CUDA to test the system-aware filter.",
     )
 
     parser.add_argument(
         "--safe-mode",
         action="store_true",
-        help="Attiva guardia qualità robusta: usa p10 se non specificato e floor minimo 60.",
+        help="Enable the robust quality guard: use p10 when unspecified and a minimum floor of 60.",
     )
 
     parser.add_argument(
         "--quality-constraint-stat",
         choices=["mean", "p25", "p10", "min"],
         default=None,
-        help="Statistica usata come vincolo duro di qualità.",
+        help="Statistic used as the hard quality constraint.",
     )
 
     parser.add_argument(
         "--quality-floor",
         type=float,
         default=None,
-        help="Soglia minima assoluta di qualità accettabile.",
+        help="Absolute minimum acceptable quality threshold.",
     )
 
     parser.add_argument(
         "--near-quality-floor",
         type=float,
         default=None,
-        help="Soglia qualità quasi-usabile per fallback degradato.",
+        help="Near-usable quality threshold for degraded fallback.",
     )
 
     parser.add_argument(
         "--allow-degraded-fallback",
         action="store_true",
-        help="Permette fallback degradato se nessun punto supera la soglia sicura.",
+        help="Allow degraded fallback when no point clears the safe threshold.",
     )
 
     parser.add_argument(
         "--min-quality",
         type=float,
         default=None,
-        help="Qualità minima ammissibile. Se assente, usa quella del profilo/policy.",
+        help="Minimum admissible quality. If omitted, the profile/policy value is used.",
     )
 
-    parser.add_argument("--max-rate", type=float, default=None, help="Rate massimo ammissibile.")
-    parser.add_argument("--max-energy", type=float, default=None, help="Energia massima ammissibile.")
-    parser.add_argument("--max-time-ms", type=float, default=None, help="Tempo massimo ammissibile in millisecondi.")
+    parser.add_argument("--max-rate", type=float, default=None, help="Maximum admissible rate.")
+    parser.add_argument("--max-energy", type=float, default=None, help="Maximum admissible energy.")
+    parser.add_argument("--max-time-ms", type=float, default=None, help="Maximum admissible time in milliseconds.")
     parser.add_argument(
         "--strict-time",
         action="store_true",
         help=(
-            "Se usato con --max-time-ms, richiede che tutti i punti candidati "
-            "abbiano time_ms disponibile."
+            "When used with --max-time-ms, require every candidate point "
+            "to have a time_ms value."
         ),
     )
 
-    parser.add_argument("--wE", "--w-e", dest="wE", type=float, default=None, help="Peso energia custom.")
-    parser.add_argument("--wR", "--w-r", dest="wR", type=float, default=None, help="Peso rate custom.")
-    parser.add_argument("--wD", "--w-d", dest="wD", type=float, default=None, help="Peso distorsione custom.")
+    parser.add_argument("--wE", "--w-e", dest="wE", type=float, default=None, help="Custom energy weight.")
+    parser.add_argument("--wR", "--w-r", dest="wR", type=float, default=None, help="Custom rate weight.")
+    parser.add_argument("--wD", "--w-d", dest="wD", type=float, default=None, help="Custom distortion weight.")
 
     parser.add_argument("--codec-col", default=None)
     parser.add_argument("--config-col", default=None)
@@ -470,13 +470,13 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
         "--top-k",
         type=int,
         default=5,
-        help="Numero di configurazioni migliori da salvare nel report JSON.",
+        help="Number of best configurations to save in the JSON report.",
     )
 
     parser.add_argument(
         "--export-topk",
         action="store_true",
-        help="Esporta anche i top-k candidati in CSV.",
+        help="Also export the top-k candidates as a CSV file.",
     )
 
     parser.add_argument(
@@ -491,19 +491,19 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         default="results/routing/router_decision_report.json",
-        help="Path del report JSON quando si usa un solo profilo.",
+        help="Path to the JSON report when a single profile is used.",
     )
 
     parser.add_argument(
         "--out-dir",
         default="results/routing",
-        help="Cartella di output quando si usa --all-profiles.",
+        help="Output directory when --all-profiles is used.",
     )
 
     parser.add_argument(
         "--summary-out",
         default=None,
-        help="Path del summary CSV. Se assente, usa results/routing/router_summary.csv.",
+        help="Path to the summary CSV. Defaults to results/routing/router_summary.csv.",
     )
 
     return parser

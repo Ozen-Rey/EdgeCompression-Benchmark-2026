@@ -22,7 +22,7 @@ def _load_calibration_file(path: str) -> Dict[str, Any]:
     p = Path(path)
 
     if not p.exists():
-        raise FileNotFoundError(f"Calibration file non trovato: {p}")
+        raise FileNotFoundError(f"Calibration file not found: {p}")
 
     with p.open("r", encoding="utf-8") as f:
         return json.load(f)
@@ -76,7 +76,7 @@ def _load_json_file(path: str | Path, *, label: str) -> Dict[str, Any]:
     p = Path(path)
 
     if not p.exists():
-        raise FileNotFoundError(f"{label} file non trovato: {p}")
+        raise FileNotFoundError(f"{label} file not found: {p}")
 
     with p.open("r", encoding="utf-8") as f:
         data = json.load(f)

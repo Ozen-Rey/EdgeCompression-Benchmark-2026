@@ -69,7 +69,7 @@ def _find_images(input_dir: str, max_images: Optional[int]) -> List[Path]:
     root = Path(input_dir)
 
     if not root.exists():
-        raise FileNotFoundError(f"Input directory non trovata: {root}")
+        raise FileNotFoundError(f"Input directory not found: {root}")
 
     images = [
         p
@@ -78,7 +78,7 @@ def _find_images(input_dir: str, max_images: Optional[int]) -> List[Path]:
     ]
 
     if not images:
-        raise ValueError(f"Nessuna immagine trovata in: {root}")
+        raise ValueError(f"No images found in: {root}")
 
     if max_images is not None:
         images = images[:max_images]
@@ -635,51 +635,51 @@ def main() -> None:
         "--level",
         required=True,
         choices=["quick", "standard", "full"],
-        help="Livello di calibrazione locale.",
+        help="Local calibration level.",
     )
 
     parser.add_argument(
         "--input-dir",
         required=True,
-        help="Cartella contenente immagini di calibrazione.",
+        help="Directory containing calibration images.",
     )
 
     parser.add_argument(
         "--codecs",
         default="JPEG,JXL,HEVC",
-        help="Lista codec separata da virgole. Default: JPEG,JXL,HEVC.",
+        help="Comma-separated codec list. Default: JPEG,JXL,HEVC.",
     )
 
     parser.add_argument(
         "--max-images",
         type=int,
         default=None,
-        help="Numero massimo di immagini. Se assente, usa il default del livello.",
+        help="Maximum number of images. If omitted, the level default is used.",
     )
 
     parser.add_argument(
         "--repeats",
         type=int,
         default=None,
-        help="Numero di ripetizioni per punto. Se assente, usa il default del livello.",
+        help="Number of repetitions per point. If omitted, the level default is used.",
     )
 
     parser.add_argument(
         "--out",
         required=True,
-        help="Path del file JSON di calibrazione.",
+        help="Path to the calibration JSON output file.",
     )
 
     parser.add_argument(
         "--summary-csv",
         default=None,
-        help="Path opzionale per esportare una sintesi CSV della calibrazione.",
+        help="Optional path to export a CSV calibration summary.",
     )
 
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Genera il piano di calibrazione senza eseguire gli encoder.",
+        help="Produce the calibration plan without running the encoders.",
     )
 
     parser.add_argument(

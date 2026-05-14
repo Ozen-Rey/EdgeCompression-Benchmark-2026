@@ -71,7 +71,7 @@ def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
     total = w_e + w_r + w_d
 
     if total <= 0:
-        raise ValueError("La somma dei pesi deve essere positiva.")
+        raise ValueError("The sum of the weights must be positive.")
 
     return {
         "w_E": w_e / total,
@@ -1218,15 +1218,15 @@ def main(argv: Optional[List[str]] = None) -> None:
         args.generate_command = True
 
     if args.execute and args.all_profiles:
-        raise ValueError("--execute è supportato solo in modalità singolo profilo, non con --all-profiles.")
+        raise ValueError("--execute is only supported in single-profile mode, not with --all-profiles.")
 
     if args.execute and args.input is None:
-        raise ValueError("--execute richiede --input.")
+        raise ValueError("--execute requires --input.")
 
     if args.auto_weights and args.all_profiles:
         raise ValueError(
-            "--auto-weights genera un singolo profilo contestuale; "
-            "non usarlo insieme a --all-profiles."
+            "--auto-weights produces a single contextual profile; "
+            "do not combine it with --all-profiles."
         )
 
     if args.safe_mode:
@@ -1414,7 +1414,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     if normalization_mode == "runtime":
         if args.normalization_file:
             raise ValueError(
-                "--normalization-mode runtime non deve essere usato insieme a --normalization-file."
+                "--normalization-mode runtime must not be combined with --normalization-file."
             )
 
         normalization_profile = None
