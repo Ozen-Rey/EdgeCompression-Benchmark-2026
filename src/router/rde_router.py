@@ -53,7 +53,12 @@ from src.router.outputs import (
     write_summary_csv,
     write_topk_csv,
 )
-from src.router.presentation import print_single_decision
+from src.router.presentation import (
+    print_all_profiles_footer,
+    print_all_profiles_header,
+    print_all_profiles_selection,
+    print_single_decision,
+)
 from src.router.pipeline import (
     annotate_points_with_calibration_provenance,
     build_weights_for_profile,
@@ -964,24 +969,14 @@ def main(argv: Optional[List[str]] = None) -> None:
         summary_rows: List[Dict[str, Any]] = []
         topk_rows: List[Dict[str, Any]] = []
 
-        print("\n=== R-D-E Router: all profiles ===")
-        print(f"Loaded rows: {num_rows_loaded}")
-        print(f"Candidate points after aggregation/filtering: {len(points)}")
-        print(f"Normalization: {normalization_scope_label} ({len(normalization_points)} reference points)")
-        print(f"Aggregate by config: {args.aggregate_by_config}")
-        print(f"Available codecs: {args.available_codecs}")
-        print(f"Exclude codecs: {args.exclude_codecs}")
-        print(f"Exclude neural: {args.exclude_neural}")
-        print(f"System-aware: {args.system_aware}")
-        if args.system_aware:
-            print(f"CUDA available: {filter_report['system_aware']['cuda_available']}")
-            print(f"Effective exclude neural: {filter_report['system_aware']['effective_exclude_neural']}")
-        print(f"Capability-aware: {args.capability_aware}")
-        print(f"Strict executables: {args.strict_executables}")
-        print(f"Safe mode: {args.safe_mode}")
-        print(f"Quality guard: {args.quality_constraint_stat} >= {args.quality_floor}")
-        print(f"Export top-k: {args.export_topk}")
-        print()
+        print_all_profiles_header(
+            args,
+            num_rows_loaded=num_rows_loaded,
+            num_points_after_filter=len(points),
+            normalization_scope_label=normalization_scope_label,
+            num_normalization_points=len(normalization_points),
+            filter_report=filter_report,
+        )
 
         for profile_name in available_profiles():
             report = _run_profile(
@@ -1007,17 +1002,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             if args.export_topk:
                 topk_rows.extend(topk_rows_from_report(report))
 
-            selected = report["decision"]["selected"]
-            print(
-                f"{profile_name:18s} -> "
-                f"{selected['codec']} {selected['config']} "
-                f"| mode={report['decision']['decision_mode']} "
-                f"| R={selected['rate']:.6f}, "
-                f"Qmean={selected['quality']:.2f}, "
-                f"Qguard={selected['quality_constraint_value']:.2f}, "
-                f"E={selected['energy']:.6f}, "
-                f"J={selected['cost']:.6f}"
-            )
+            print_all_profiles_selection(profile_name, report)
 
         summary_path = (
             Path(args.summary_out)
@@ -1027,16 +1012,16 @@ def main(argv: Optional[List[str]] = None) -> None:
 
         write_summary_csv(summary_rows, summary_path)
 
+        topk_path: Optional[Path] = None
         if args.export_topk:
             topk_path = out_dir / "router_topk.csv"
             write_topk_csv(topk_rows, topk_path)
 
-        print()
-        print(f"JSON reports written to: {out_dir}")
-        print(f"Summary written to:      {summary_path}")
-
-        if args.export_topk:
-            print(f"Top-k written to:        {topk_path}")
+        print_all_profiles_footer(
+            out_dir=out_dir,
+            summary_path=summary_path,
+            topk_path=topk_path,
+        )
 
     else:
         report = _run_profile(
