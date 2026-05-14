@@ -27,7 +27,7 @@ if (!(Test-Path $OracleSummary)) {
 Write-Host ""
 Write-Host "[1/3] Building paper-ready tables and figures..."
 
-python -m src.router.content_aware_paper_artifacts `
+python -m src.router.analysis.content_aware_paper_artifacts `
   --benchmark-table $BenchmarkTable `
   --overhead-table $OverheadTable `
   --sensitivity-table $SensitivityTable `

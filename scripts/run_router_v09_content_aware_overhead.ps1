@@ -23,7 +23,7 @@ if (!(Test-Path $SweepSummary)) {
 Write-Host ""
 Write-Host "[1/3] Building overhead and sensitivity tables..."
 
-python -m src.router.content_aware_overhead_analysis `
+python -m src.router.analysis.content_aware_overhead_analysis `
   --pixel-features-csv $PixelFeatures `
   --benchmark-csv $BenchmarkCsv `
   --classifier-sweep-summary $SweepSummary `

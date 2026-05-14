@@ -26,7 +26,7 @@ foreach ($PolicyKey in $PolicyKeys) {
     $RulesOut = "results/routing_context/v09_metadata_policy_${PolicyKey}_rules.csv"
     $SummaryOut = "results/routing_context/v09_metadata_policy_${PolicyKey}_summary.csv"
 
-    python -m src.router.content_metadata_policy `
+    python -m src.router.adaptation.content_metadata_policy `
       --benchmark-csv $BenchmarkCsv `
       --metadata-oracle-csv $MetadataOracleCsv `
       --policy-key $PolicyKey `

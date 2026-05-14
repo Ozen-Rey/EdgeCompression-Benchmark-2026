@@ -17,7 +17,7 @@ if (!(Test-Path $Csv)) {
 if (!(Test-Path $OracleByImage)) {
     Write-Host "Oracle by-image CSV not found. Running oracle analysis first..."
 
-    python -m src.router.content_oracle_analysis `
+    python -m src.router.analysis.content_oracle_analysis `
       --csv $Csv `
       --dataset-col dataset `
       --image-col image `
@@ -40,7 +40,7 @@ if (!(Test-Path $OracleByImage)) {
 Write-Host ""
 Write-Host "[1/3] Extracting metadata features and joining oracle labels..."
 
-python -m src.router.content_metadata_features `
+python -m src.router.adaptation.content_metadata_features `
   --csv $Csv `
   --oracle-by-image $OracleByImage `
   --dataset-col dataset `

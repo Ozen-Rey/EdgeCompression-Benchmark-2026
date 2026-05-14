@@ -15,7 +15,7 @@ if (!(Test-Path $Manifest)) {
 Write-Host ""
 Write-Host "[1/3] Extracting pixel-level image features..."
 
-python -m src.router.content_image_features `
+python -m src.router.adaptation.content_image_features `
   --manifest $Manifest `
   --resize-long-side 256 `
   --features-out $FeaturesOut `

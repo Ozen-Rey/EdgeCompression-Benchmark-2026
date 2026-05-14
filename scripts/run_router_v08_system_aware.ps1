@@ -22,7 +22,7 @@ EnergyLight,mode=energy,1.2,85.0,1.0,20.0
 
 Write-Host ""
 Write-Host "[1/5] Extracting basic system features..."
-python -m src.router.system_features `
+python -m src.router.adaptation.system_features `
   --probe-level basic `
   --out $BasicFeatures
 
@@ -32,7 +32,7 @@ if (!(Test-Path $BasicFeatures)) {
 
 Write-Host ""
 Write-Host "[2/5] Extracting GPU system features..."
-python -m src.router.system_features `
+python -m src.router.adaptation.system_features `
   --probe-level gpu `
   --out $GpuFeatures
 

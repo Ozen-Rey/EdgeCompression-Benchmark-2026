@@ -8,7 +8,7 @@ backend execution behavior changes.
 Validate a spec offline:
 
 ```powershell
-python -m src.router.external_codec_spec `
+python -m src.router.codecs.external_codec_spec `
   --spec configs/external_codecs/example_image_codec.json `
   --validate
 ```
@@ -27,7 +27,7 @@ The validator returns:
 Probe a valid spec without running encode/decode:
 
 ```powershell
-python -m src.router.external_codec_probe `
+python -m src.router.codecs.external_codec_probe `
   --spec configs/external_codecs/example_image_codec.json `
   --out results/routing_context/external_codec_probe.json
 ```
@@ -44,7 +44,7 @@ the codec with the router, or change any router candidate pool.
 Run a controlled one-input contract dry-run:
 
 ```powershell
-python -m src.router.external_codec_dry_run `
+python -m src.router.codecs.external_codec_dry_run `
   --spec configs/external_codecs/example_image_codec.json `
   --input test_images/input.png `
   --out-dir results/external_codec_dry_runs/example_codec `
@@ -66,7 +66,7 @@ generate R-D-E CSV rows, register the codec, or affect router decisions.
 Run a small raw benchmark over explicitly named inputs:
 
 ```powershell
-python -m src.router.external_codec_benchmark `
+python -m src.router.codecs.external_codec_benchmark `
   --spec configs/external_codecs/example_image_codec.json `
   --input test_images/input_a.png `
   --input test_images/input_b.png `
@@ -92,7 +92,7 @@ ranking.
 Export raw measurements to an R-D-E-shaped CSV:
 
 ```powershell
-python -m src.router.external_codec_rde_exporter `
+python -m src.router.codecs.external_codec_rde_exporter `
   --spec configs/external_codecs/example_image_codec.json `
   --raw-csv results/external_codec_benchmarks/example_codec_measurements.csv `
   --out results/external_codec_benchmarks/example_codec_rde.csv `

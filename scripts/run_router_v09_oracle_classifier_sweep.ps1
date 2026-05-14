@@ -23,7 +23,7 @@ if (!(Test-Path $PixelFeaturesCsv)) {
 Write-Host ""
 Write-Host "[1/3] Running classifier sweep..."
 
-python -m src.router.content_oracle_classifier_sweep `
+python -m src.router.analysis.content_oracle_classifier_sweep `
   --benchmark-csv $BenchmarkCsv `
   --metadata-oracle-csv $MetadataOracleCsv `
   --pixel-features-csv $PixelFeaturesCsv `

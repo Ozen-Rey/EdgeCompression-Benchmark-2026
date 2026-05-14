@@ -14,7 +14,7 @@ if (!(Test-Path $Csv)) {
 Write-Host ""
 Write-Host "[1/3] Running content oracle analysis..."
 
-python -m src.router.content_oracle_analysis `
+python -m src.router.analysis.content_oracle_analysis `
   --csv $Csv `
   --dataset-col dataset `
   --image-col image `

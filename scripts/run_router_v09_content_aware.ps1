@@ -26,7 +26,7 @@ if (!(Test-Path $BenchmarkCsv)) {
 Write-Host ""
 Write-Host "[1/6] Running content oracle/regret analysis..."
 
-python -m src.router.content_oracle_analysis `
+python -m src.router.analysis.content_oracle_analysis `
   --csv $BenchmarkCsv `
   --dataset-col dataset `
   --image-col image `
@@ -56,7 +56,7 @@ if (!(Test-Path $OracleSummary)) {
 Write-Host ""
 Write-Host "[2/6] Extracting metadata features and joining oracle labels..."
 
-python -m src.router.content_metadata_features `
+python -m src.router.adaptation.content_metadata_features `
   --csv $BenchmarkCsv `
   --oracle-by-image $OracleByImage `
   --dataset-col dataset `
@@ -79,7 +79,7 @@ if (!(Test-Path $MetadataSummary)) {
 Write-Host ""
 Write-Host "[3/6] Evaluating dataset-majority metadata policy..."
 
-python -m src.router.content_metadata_policy `
+python -m src.router.adaptation.content_metadata_policy `
   --benchmark-csv $BenchmarkCsv `
   --metadata-oracle-csv $MetadataOracle `
   --policy-key dataset `

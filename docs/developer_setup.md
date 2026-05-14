@@ -13,11 +13,11 @@ continue to be invoked with module execution:
 
 ```powershell
 python -m src.router.rde_router --help
-python -m src.router.external_codec_spec --help
-python -m src.router.external_codec_probe --help
-python -m src.router.external_codec_dry_run --help
-python -m src.router.external_codec_benchmark --help
-python -m src.router.external_codec_rde_exporter --help
+python -m src.router.codecs.external_codec_spec --help
+python -m src.router.codecs.external_codec_probe --help
+python -m src.router.codecs.external_codec_dry_run --help
+python -m src.router.codecs.external_codec_benchmark --help
+python -m src.router.codecs.external_codec_rde_exporter --help
 ```
 
 During the structural refactor, keep legacy direct-script import fallbacks in

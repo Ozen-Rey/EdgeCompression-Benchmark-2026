@@ -8,7 +8,7 @@ $Out = "results/routing_context/v09_image_manifest.csv"
 
 $Roots = "kodak=datasets/images/kodak;div2k_valid=datasets/images/div2k_valid;clic2020=datasets/images/clic2020;tecnick=datasets/images/tecnick"
 
-python -m src.router.content_image_manifest `
+python -m src.router.adaptation.content_image_manifest `
   --csv $Csv `
   --roots $Roots `
   --dataset-col dataset `
