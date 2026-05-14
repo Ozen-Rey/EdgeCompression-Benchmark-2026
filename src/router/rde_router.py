@@ -6,121 +6,65 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-try:
-    from .calibration.calibration_apply import apply_local_calibration
-    from .calibration.calibration_bundle import (
-        validate_calibration_bundle_manifest,
-        validate_calibration_bundle_validation,
-    )
-    from .codecs.codec_capabilities import (
-        filter_points_by_capabilities,
-        is_neural_codec,
-        load_external_codec_registry,
-    )
-    from .cli import build_router_arg_parser
-    from .context import RouterContext
-    from .adaptation.content_policy import (
-        build_content_policy_report,
-        get_content_policy_preferred_candidate,
-    )
-    from .observability.decision_receipt import build_decision_receipt
-    from .codecs.external_codec_registry import load_external_codec_points
-    from .adaptation.content_classifier_model import (
-        build_metadata_no_source_features,
-        extract_metadata_features_from_image,
-        load_content_classifier_config,
-        load_training_rows_from_config,
-        predict_content_classifier,
-    )
-    from .adaptation.context_policy import compute_context_policy
-    from .execution import (
-        apply_execution_result,
-        build_feedback_row as _build_feedback_row,
-        write_feedback_report,
-    )
-    from .core.normalization_profile import load_normalization_profile
-    from .core.profiles import available_profiles, get_profile
-    from .core.quality_thresholds import resolve_quality_floor
-    from .core.rde_database import (
-        RDEPoint,
-        aggregate_points_by_config,
-        filter_points_by_raw_column,
-        load_rde_points,
-        select_best_rde,
-    )
-    from .report import build_router_report
-    from .core.router_config import expand_argv_with_config
-    from .observability.run_manifest import build_run_manifest
-    from .adaptation.system_features import build_system_features
-    from .adaptation.system_penalty import (
-        build_system_penalty_context,
-        load_system_penalty_weights,
-        make_system_penalty_fn,
-    )
-    from .adaptation.system_policy import (
-        apply_system_policy_simulation,
-        build_system_policy,
-        parse_system_policy_simulation,
-    )
-    from .adaptation.system_probe import probe_system
-except ImportError:
+if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from src.router.calibration.calibration_apply import apply_local_calibration
-    from src.router.calibration.calibration_bundle import (
-        validate_calibration_bundle_manifest,
-        validate_calibration_bundle_validation,
-    )
-    from src.router.codecs.codec_capabilities import (
-        filter_points_by_capabilities,
-        is_neural_codec,
-        load_external_codec_registry,
-    )
-    from src.router.cli import build_router_arg_parser
-    from src.router.context import RouterContext
-    from src.router.adaptation.content_policy import (
-        build_content_policy_report,
-        get_content_policy_preferred_candidate,
-    )
-    from src.router.observability.decision_receipt import build_decision_receipt
-    from src.router.codecs.external_codec_registry import load_external_codec_points
-    from src.router.adaptation.content_classifier_model import (
-        build_metadata_no_source_features,
-        extract_metadata_features_from_image,
-        load_content_classifier_config,
-        load_training_rows_from_config,
-        predict_content_classifier,
-    )
-    from src.router.adaptation.context_policy import compute_context_policy
-    from src.router.execution import (
-        apply_execution_result,
-        build_feedback_row as _build_feedback_row,
-        write_feedback_report,
-    )
-    from src.router.core.normalization_profile import load_normalization_profile
-    from src.router.core.profiles import available_profiles, get_profile
-    from src.router.core.quality_thresholds import resolve_quality_floor
-    from src.router.core.rde_database import (
-        RDEPoint,
-        aggregate_points_by_config,
-        filter_points_by_raw_column,
-        load_rde_points,
-        select_best_rde,
-    )
-    from src.router.report import build_router_report
-    from src.router.core.router_config import expand_argv_with_config
-    from src.router.observability.run_manifest import build_run_manifest
-    from src.router.adaptation.system_features import build_system_features
-    from src.router.adaptation.system_penalty import (
-        build_system_penalty_context,
-        load_system_penalty_weights,
-        make_system_penalty_fn,
-    )
-    from src.router.adaptation.system_policy import (
-        apply_system_policy_simulation,
-        build_system_policy,
-        parse_system_policy_simulation,
-    )
-    from src.router.adaptation.system_probe import probe_system
+
+from src.router.calibration.calibration_apply import apply_local_calibration
+from src.router.calibration.calibration_bundle import (
+    validate_calibration_bundle_manifest,
+    validate_calibration_bundle_validation,
+)
+from src.router.codecs.codec_capabilities import (
+    filter_points_by_capabilities,
+    is_neural_codec,
+    load_external_codec_registry,
+)
+from src.router.cli import build_router_arg_parser
+from src.router.context import RouterContext
+from src.router.adaptation.content_policy import (
+    build_content_policy_report,
+    get_content_policy_preferred_candidate,
+)
+from src.router.observability.decision_receipt import build_decision_receipt
+from src.router.codecs.external_codec_registry import load_external_codec_points
+from src.router.adaptation.content_classifier_model import (
+    build_metadata_no_source_features,
+    extract_metadata_features_from_image,
+    load_content_classifier_config,
+    load_training_rows_from_config,
+    predict_content_classifier,
+)
+from src.router.adaptation.context_policy import compute_context_policy
+from src.router.execution import (
+    apply_execution_result,
+    build_feedback_row as _build_feedback_row,
+    write_feedback_report,
+)
+from src.router.core.normalization_profile import load_normalization_profile
+from src.router.core.profiles import available_profiles, get_profile
+from src.router.core.quality_thresholds import resolve_quality_floor
+from src.router.core.rde_database import (
+    RDEPoint,
+    aggregate_points_by_config,
+    filter_points_by_raw_column,
+    load_rde_points,
+    select_best_rde,
+)
+from src.router.report import build_router_report
+from src.router.core.router_config import expand_argv_with_config
+from src.router.observability.run_manifest import build_run_manifest
+from src.router.adaptation.system_features import build_system_features
+from src.router.adaptation.system_penalty import (
+    build_system_penalty_context,
+    load_system_penalty_weights,
+    make_system_penalty_fn,
+)
+from src.router.adaptation.system_policy import (
+    apply_system_policy_simulation,
+    build_system_policy,
+    parse_system_policy_simulation,
+)
+from src.router.adaptation.system_probe import probe_system
 
 
 def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:

@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-try:
-    from src.router.calibration.calibration_bundle import sha256_file
-    from src.router.version import ROUTER_VERSION
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.calibration.calibration_bundle import sha256_file
-    from src.router.version import ROUTER_VERSION
+from src.router.calibration.calibration_bundle import sha256_file
+from src.router.version import ROUTER_VERSION
 
 
 FLAGS_WITH_VALUE_TO_REMOVE = {

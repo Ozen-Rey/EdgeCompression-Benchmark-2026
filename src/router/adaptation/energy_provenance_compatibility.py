@@ -2,23 +2,13 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any
 
-try:
-    from .energy_provenance import (
-        ENERGY_PROVENANCE_TIERS,
-        classify_energy_provenance,
-        summarize_energy_provenance_tiers,
-    )
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.adaptation.energy_provenance import (
-        ENERGY_PROVENANCE_TIERS,
-        classify_energy_provenance,
-        summarize_energy_provenance_tiers,
-    )
+from src.router.adaptation.energy_provenance import (
+    ENERGY_PROVENANCE_TIERS,
+    classify_energy_provenance,
+    summarize_energy_provenance_tiers,
+)
 
 
 def build_energy_provenance_compatibility_audit(

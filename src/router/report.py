@@ -1,38 +1,20 @@
-import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-try:
-    from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
-    from .codecs.codec_capabilities import build_execution_plan
-    from .context import RouterContext
-    from .adaptation.energy_provenance import build_energy_provenance_summary
-    from .adaptation.energy_provenance_compatibility import (
-        build_energy_provenance_compatibility_audit,
-    )
-    from .adaptation.energy_tier_policy import build_energy_tier_policy_shadow
-    from .observability.normalization_consistency import (
-        NormalizationAuditLoadError,
-        compare_normalization_audits,
-        load_previous_normalization_audit,
-    )
-    from .adaptation.system_features import estimate_probe_efficiency
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
-    from src.router.codecs.codec_capabilities import build_execution_plan
-    from src.router.context import RouterContext
-    from src.router.adaptation.energy_provenance import build_energy_provenance_summary
-    from src.router.adaptation.energy_provenance_compatibility import (
-        build_energy_provenance_compatibility_audit,
-    )
-    from src.router.adaptation.energy_tier_policy import build_energy_tier_policy_shadow
-    from src.router.observability.normalization_consistency import (
-        NormalizationAuditLoadError,
-        compare_normalization_audits,
-        load_previous_normalization_audit,
-    )
-    from src.router.adaptation.system_features import estimate_probe_efficiency
+from src.router.version import DOMAIN_SUPPORT, FEATURE_LEVEL, ROUTER_VERSION
+from src.router.codecs.codec_capabilities import build_execution_plan
+from src.router.context import RouterContext
+from src.router.adaptation.energy_provenance import build_energy_provenance_summary
+from src.router.adaptation.energy_provenance_compatibility import (
+    build_energy_provenance_compatibility_audit,
+)
+from src.router.adaptation.energy_tier_policy import build_energy_tier_policy_shadow
+from src.router.observability.normalization_consistency import (
+    NormalizationAuditLoadError,
+    compare_normalization_audits,
+    load_previous_normalization_audit,
+)
+from src.router.adaptation.system_features import estimate_probe_efficiency
 
 
 def _router_context(args: Any) -> Optional[RouterContext]:

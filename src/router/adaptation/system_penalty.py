@@ -1,14 +1,9 @@
 import copy
 import json
-import sys
 from pathlib import Path
 from typing import Any, Dict
 
-try:
-    from ..codecs.codec_capabilities import get_codec_capability
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.codecs.codec_capabilities import get_codec_capability
+from src.router.codecs.codec_capabilities import get_codec_capability
 
 
 LEVEL_SCORE = {

@@ -1,9 +1,6 @@
 import argparse
 
-try:
-    from .core.profiles import available_profiles
-except ImportError:  # pragma: no cover - direct script fallback
-    from src.router.core.profiles import available_profiles
+from src.router.core.profiles import available_profiles
 
 
 def build_router_arg_parser() -> argparse.ArgumentParser:

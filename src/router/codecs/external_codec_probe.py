@@ -5,23 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from .codec_fingerprints import _sha256_file
-    from .external_codec_spec import (
-        load_external_codec_spec,
-        validate_external_codec_spec,
-    )
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.codecs.codec_fingerprints import _sha256_file
-    from src.router.codecs.external_codec_spec import (
-        load_external_codec_spec,
-        validate_external_codec_spec,
-    )
+from src.router.codecs.codec_fingerprints import _sha256_file
+from src.router.codecs.external_codec_spec import (
+    load_external_codec_spec,
+    validate_external_codec_spec,
+)
 
 
 SCHEMA_VERSION = "external_codec_probe_v1"

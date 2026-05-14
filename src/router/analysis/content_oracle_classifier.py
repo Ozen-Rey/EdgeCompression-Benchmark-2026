@@ -1,25 +1,16 @@
 import argparse
 import csv
 import math
-import sys
 from collections import Counter
 from pathlib import Path
 from statistics import mean, median
 from typing import Any, Dict, List, Optional, Tuple
 
-try:
-    from ..adaptation.content_metadata_policy import (
-        build_candidate_lookup,
-        load_metadata_oracle_rows,
-        resolve_global_baseline,
-    )
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.adaptation.content_metadata_policy import (
-        build_candidate_lookup,
-        load_metadata_oracle_rows,
-        resolve_global_baseline,
-    )
+from src.router.adaptation.content_metadata_policy import (
+    build_candidate_lookup,
+    load_metadata_oracle_rows,
+    resolve_global_baseline,
+)
 
 
 Pair = Tuple[str, str]

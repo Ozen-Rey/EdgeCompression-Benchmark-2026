@@ -6,21 +6,13 @@ import argparse
 import csv
 import json
 import struct
-import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from .external_codec_spec import (
-        load_external_codec_spec,
-        validate_external_codec_spec,
-    )
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.codecs.external_codec_spec import (
-        load_external_codec_spec,
-        validate_external_codec_spec,
-    )
+from src.router.codecs.external_codec_spec import (
+    load_external_codec_spec,
+    validate_external_codec_spec,
+)
 
 
 SCHEMA_VERSION = "external_codec_rde_export_v1"

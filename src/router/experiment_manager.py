@@ -7,11 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-try:
-    from src.router.version import ROUTER_VERSION
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-    from src.router.version import ROUTER_VERSION
+from src.router.version import ROUTER_VERSION
 
 
 def load_experiment_suite(path: str) -> Dict[str, Any]:

@@ -5,17 +5,11 @@ from __future__ import annotations
 import hashlib
 import importlib
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from .codec_capabilities import get_codec_capability
-    from ..adaptation.system_probe import _find_executable
-except ImportError:  # pragma: no cover - direct script fallback
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-    from src.router.codecs.codec_capabilities import get_codec_capability
-    from src.router.adaptation.system_probe import _find_executable
+from src.router.codecs.codec_capabilities import get_codec_capability
+from src.router.adaptation.system_probe import _find_executable
 
 
 class CodecFingerprintError(ValueError):
