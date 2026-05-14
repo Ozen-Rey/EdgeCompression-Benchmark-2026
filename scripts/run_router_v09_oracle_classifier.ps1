@@ -31,7 +31,7 @@ foreach ($FeatureSet in $FeatureSets) {
     $DecisionsOut = "results/routing_context/v09_oracle_classifier_${FeatureSet}_decisions.csv"
     $SummaryOut = "results/routing_context/v09_oracle_classifier_${FeatureSet}_summary.csv"
 
-    python -m src.router.content_oracle_classifier `
+    python -m src.router.analysis.content_oracle_classifier `
       --benchmark-csv $BenchmarkCsv `
       --metadata-oracle-csv $MetadataOracleCsv `
       --pixel-features-csv $PixelFeaturesCsv `

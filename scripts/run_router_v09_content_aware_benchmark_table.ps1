@@ -28,7 +28,7 @@ if (!(Test-Path $ClassifierSweepSummary)) {
 Write-Host ""
 Write-Host "[1/3] Building benchmark tables..."
 
-python -m src.router.content_aware_benchmark_table `
+python -m src.router.analysis.content_aware_benchmark_table `
   --oracle-summary $OracleSummary `
   --dataset-policy-summary $DatasetPolicySummary `
   --classifier-sweep-summary $ClassifierSweepSummary `

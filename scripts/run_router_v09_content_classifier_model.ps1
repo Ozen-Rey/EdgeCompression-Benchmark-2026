@@ -33,7 +33,7 @@ Write-Host ""
 Write-Host "[1/3] Running classifier prediction..."
 Write-Host "Image: $Image"
 
-python -m src.router.content_classifier_model `
+python -m src.router.adaptation.content_classifier_model `
   --config $Config `
   --image $Image `
   --out $Out

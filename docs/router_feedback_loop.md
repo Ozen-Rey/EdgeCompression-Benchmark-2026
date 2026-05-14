@@ -37,7 +37,7 @@ input in v0.12.0.
 Router v0.13.0 adds a read-only feedback analysis layer:
 
 ```powershell
-python -m src.router.feedback_analysis `
+python -m src.router.observability.feedback_analysis `
   --feedback results/routing_context/online_feedback.csv `
   --out-dir results/routing_context/feedback_analysis
 ```
@@ -49,7 +49,7 @@ not feed results back into the router. There is no online learning in v0.13.0.
 Router v0.14.0 adds shadow feedback-derived calibration proposals:
 
 ```powershell
-python -m src.router.feedback_calibration_proposal `
+python -m src.router.observability.feedback_calibration_proposal `
   --feedback results/routing_context/online_feedback.csv `
   --out results/routing_context/feedback_calibration_proposal.json `
   --summary-out results/routing_context/feedback_calibration_proposal.csv `
@@ -73,7 +73,7 @@ calibration, not online learning.
 Router v0.15.0 adds offline validation for those shadow proposals:
 
 ```powershell
-python -m src.router.feedback_proposal_validation `
+python -m src.router.observability.feedback_proposal_validation `
   --feedback results/routing_context/online_feedback.csv `
   --proposal results/routing_context/feedback_calibration_proposal.json `
   --out results/routing_context/feedback_proposal_validation.json `
@@ -110,7 +110,7 @@ normalization.
 Router v0.16.0 adds a promotion gate:
 
 ```powershell
-python -m src.router.feedback_calibration_promotion `
+python -m src.router.observability.feedback_calibration_promotion `
   --proposal results/routing_context/feedback_calibration_proposal.json `
   --validation results/routing_context/feedback_proposal_validation.json `
   --out results/routing_context/feedback_calibration_profile_candidate.json `
@@ -128,7 +128,7 @@ Router v0.17.0 adds explicit opt-in application of a promoted calibration
 profile in `calibration_apply`:
 
 ```powershell
-python -m src.router.calibration_apply `
+python -m src.router.calibration.calibration_apply `
   --benchmark data/rde_points.csv `
   --calibration results/routing_calibration/quick.json `
   --promotion-profile results/routing_context/feedback_calibration_profile_candidate.json `
@@ -143,7 +143,7 @@ router does not auto-load promoted profiles in v0.17.0.
 Router v0.18.0 adds an optional provenance manifest for calibrated CSV bundles:
 
 ```powershell
-python -m src.router.calibration_apply `
+python -m src.router.calibration.calibration_apply `
   --benchmark data/rde_points.csv `
   --calibration results/routing_calibration/quick.json `
   --promotion-profile results/routing_context/feedback_calibration_profile_candidate.json `
@@ -174,7 +174,7 @@ manifest files automatically.
 Router v0.20.0 adds a read-only impact audit for explicit calibration bundles:
 
 ```powershell
-python -m src.router.calibration_impact_audit `
+python -m src.router.calibration.calibration_impact_audit `
   --config configs/router_image_v08.json `
   --csv results/routing_context/image_rde_points.csv `
   --calibration-bundle-manifest results/routing_context/calibration_bundle_manifest.json `
@@ -190,7 +190,7 @@ calibration bundles or router defaults, and it does not execute codec backends.
 Router v0.21.0 adds a stricter shadow decision comparison report:
 
 ```powershell
-python -m src.router.shadow_decision_comparison `
+python -m src.router.observability.shadow_decision_comparison `
   --baseline-csv results/routing_context/image_rde_points.csv `
   --bundle-manifest results/routing_context/calibration_bundle_manifest.json `
   --config configs/router_image_v08.json `
@@ -206,7 +206,7 @@ offline regret, oracle or ablation validation.
 Router v0.22.0 adds a validation gate for shadow comparison outputs:
 
 ```powershell
-python -m src.router.shadow_decision_validation `
+python -m src.router.observability.shadow_decision_validation `
   --comparison results/routing_context/shadow_decision_comparison.json `
   --out results/routing_context/shadow_decision_validation.json `
   --summary-out results/routing_context/shadow_decision_validation.csv
@@ -246,7 +246,7 @@ validation flag is used.
 Router v0.25.0 adds decision receipts and offline replay:
 
 ```powershell
-python -m src.router.decision_replay `
+python -m src.router.observability.decision_replay `
   --receipt results/routing/router_decision_report.json `
   --out results/routing/decision_replay_validation.json
 ```
@@ -261,7 +261,7 @@ normalization, calibration, feedback, or execution behavior.
 Router v0.26.0 adds a read-only overhead audit:
 
 ```powershell
-python -m src.router.router_overhead_audit `
+python -m src.router.observability.router_overhead_audit `
   --csv results/routing_context/original.csv `
   --config configs/router_image_v08.json `
   --bundle-manifest results/routing_context/calibrated_bundle_manifest.json `
@@ -278,7 +278,7 @@ separately and is marked as offline, not as a normal runtime path.
 Router v0.27.0 adds a read-only effectiveness audit:
 
 ```powershell
-python -m src.router.router_effectiveness_audit `
+python -m src.router.observability.router_effectiveness_audit `
   --csv results/routing_context/original.csv `
   --config configs/router_image_v08.json `
   --out-dir results/routing_context/effectiveness_audit

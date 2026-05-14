@@ -64,7 +64,7 @@ The supported probe levels are:
 Example:
 
 ```powershell
-python -m src.router.system_features `
+python -m src.router.adaptation.system_features `
   --probe-level basic `
   --out results/routing_context/v08_system_features_basic.json
 ```
