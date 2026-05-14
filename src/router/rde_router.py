@@ -34,14 +34,13 @@ from src.router.adaptation.content_classifier_model import (
     load_training_rows_from_config,
     predict_content_classifier,
 )
-from src.router.adaptation.context_policy import compute_context_policy
 from src.router.execution import (
     apply_execution_result,
     build_feedback_row as _build_feedback_row,
     write_feedback_report,
 )
 from src.router.core.normalization_profile import load_normalization_profile
-from src.router.core.profiles import available_profiles, get_profile
+from src.router.core.profiles import available_profiles
 from src.router.core.quality_thresholds import resolve_quality_floor
 from src.router.core.rde_database import (
     RDEPoint,
@@ -49,6 +48,12 @@ from src.router.core.rde_database import (
     filter_points_by_raw_column,
     load_rde_points_with_diagnostics,
     select_best_rde,
+)
+from src.router.pipeline import (
+    annotate_points_with_calibration_provenance,
+    build_weights_for_profile,
+    summary_row_from_report,
+    topk_rows_from_report,
 )
 from src.router.report import build_router_report
 from src.router.core.router_config import expand_argv_with_config
@@ -65,19 +70,6 @@ from src.router.adaptation.system_policy import (
     parse_system_policy_simulation,
 )
 from src.router.adaptation.system_probe import probe_system
-
-
-def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
-    total = w_e + w_r + w_d
-
-    if total <= 0:
-        raise ValueError("The sum of the weights must be positive.")
-
-    return {
-        "w_E": w_e / total,
-        "w_R": w_r / total,
-        "w_D": w_d / total,
-    }
 
 
 def _normalize_token(text: str) -> str:
@@ -350,143 +342,11 @@ def _build_content_classifier_router_report(args: argparse.Namespace) -> Dict[st
     return classifier_report
 
 
-def _build_weights_for_profile(
-    args: argparse.Namespace,
-    profile_name: str,
-) -> tuple[Dict[str, float], float | None, str, Dict[str, Any] | None]:
-    if args.auto_weights:
-        policy = compute_context_policy(
-            power_mode=args.power_mode,
-            battery_percent=args.battery_percent,
-            thermal_state=args.thermal_state,
-            network_profile=args.network_profile,
-            quality_target=args.quality_target,
-            system_load=args.system_load,
-        )
-
-        weights = policy["weights"]
-
-        min_quality = args.quality_floor
-        if args.min_quality is not None:
-            min_quality = max(args.min_quality, min_quality)
-
-        return weights, min_quality, "context_policy", policy
-
-    profile = get_profile(profile_name)
-
-    w_e = args.wE if args.wE is not None else profile.w_e
-    w_r = args.wR if args.wR is not None else profile.w_r
-    w_d = args.wD if args.wD is not None else profile.w_d
-
-    weights = _normalize_weights(w_e, w_r, w_d)
-
-    min_quality = args.quality_floor
-    if args.min_quality is not None:
-        min_quality = max(args.min_quality, min_quality)
-
-    return weights, min_quality, "manual_profile", None
-
-
 def _write_json_report(report: Dict[str, Any], out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with out_path.open("w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
-
-
-def _annotate_points_with_calibration_provenance(
-    points: List[RDEPoint],
-    calibration_report: Dict[str, Any],
-) -> None:
-    applied_by_key = {
-        (str(item.get("codec")), str(item.get("config"))): item
-        for item in calibration_report.get("applied", [])
-        if item.get("codec") is not None and item.get("config") is not None
-    }
-
-    for point in points:
-        calibration = applied_by_key.get((str(point.codec), str(point.config)))
-        if calibration is None:
-            continue
-
-        raw = dict(getattr(point, "raw", {}) or {})
-        for key in (
-            "energy_is_measured",
-            "energy_usable_for_total",
-            "energy_scope",
-            "energy_backend",
-            "energy_method",
-            "energy_quality",
-            "energy_scaling_method",
-            "current_method",
-        ):
-            if key in calibration:
-                raw[key] = calibration.get(key)
-
-        point.raw = raw
-
-
-def _summary_row_from_report(report: Dict[str, Any]) -> Dict[str, Any]:
-    selected = report["decision"]["selected"]
-    weights = report["weights"]
-    constraints = report["constraints"]
-    filtering = report["codec_filtering"]
-    normalization = report["normalization"]
-    context_policy = report["context_policy"]
-
-    return {
-        "profile": report["profile"],
-        "weight_source": report["weight_source"],
-        "decision_mode": report["decision"]["decision_mode"],
-        "selected_codec": selected["codec"],
-        "selected_config": selected["config"],
-        "rate": selected["rate"],
-        "quality_mean": selected["quality"],
-        "quality_constraint_stat": selected["quality_constraint_stat"],
-        "quality_constraint_value": selected["quality_constraint_value"],
-        "quality_min": selected["quality_stats"]["min"],
-        "quality_p10": selected["quality_stats"]["p10"],
-        "quality_p25": selected["quality_stats"]["p25"],
-        "energy": selected["energy"],
-        "time_ms": selected["time_ms"],
-        "J_RDE": selected["cost"],
-        "num_rows_loaded": report["num_rows_loaded_before_aggregation"],
-        "num_points_before_codec_filtering": filtering["num_before_codec_filtering"],
-        "num_points_after_codec_filtering": filtering["num_after_codec_filtering"],
-        "num_candidate_points": report["decision"]["num_points_total"],
-        "num_admissible_points": report["decision"]["num_points_admissible"],
-        "num_points_safe": report["decision"]["num_points_safe"],
-        "num_points_near": report["decision"]["num_points_near"],
-        "normalization_scope": normalization["scope"],
-        "num_normalization_reference_points": normalization["num_reference_points"],
-        "min_quality": constraints["min_quality"],
-        "quality_floor": constraints["quality_floor"],
-        "near_quality_floor": constraints["near_quality_floor"],
-        "allow_degraded_fallback": constraints["allow_degraded_fallback"],
-        "max_rate": constraints["max_rate"],
-        "max_energy": constraints["max_energy"],
-        "max_time_ms": constraints["max_time_ms"],
-        "w_E": weights["w_E"],
-        "w_R": weights["w_R"],
-        "w_D": weights["w_D"],
-        "aggregate_by_config": report["aggregate_by_config"],
-        "exclude_neural": filtering["exclude_neural"],
-        "context_power_mode": (
-            context_policy["context"]["power_mode"] if context_policy is not None else None
-        ),
-        "context_battery_percent": (
-            context_policy["context"]["battery_percent"] if context_policy is not None else None
-        ),
-        "context_network_profile": (
-            context_policy["context"]["network_profile"] if context_policy is not None else None
-        ),
-        "context_thermal_state": (
-            context_policy["context"]["thermal_state"] if context_policy is not None else None
-        ),
-        "context_quality_target": (
-            context_policy["context"]["quality_target"] if context_policy is not None else None
-        ),
-    }
 
 
 def _write_summary_csv(rows: List[Dict[str, Any]], out_path: Path) -> None:
@@ -501,56 +361,6 @@ def _write_summary_csv(rows: List[Dict[str, Any]], out_path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-
-
-def _topk_rows_from_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    weights = report["weights"]
-    constraints = report["constraints"]
-    filtering = report["codec_filtering"]
-    normalization = report["normalization"]
-
-    for rank, item in enumerate(report["decision"]["top_k"], start=1):
-        norm = item["normalized"]
-
-        rows.append(
-            {
-                "profile": report["profile"],
-                "rank": rank,
-                "decision_mode": item["decision_mode"],
-                "codec": item["codec"],
-                "config": item["config"],
-                "rate": item["rate"],
-                "quality_mean": item["quality"],
-                "quality_constraint_stat": item["quality_constraint_stat"],
-                "quality_constraint_value": item["quality_constraint_value"],
-                "quality_min": item["quality_stats"]["min"],
-                "quality_p10": item["quality_stats"]["p10"],
-                "quality_p25": item["quality_stats"]["p25"],
-                "energy": item["energy"],
-                "time_ms": item["time_ms"],
-                "J_RDE": item["cost"],
-                "norm_rate": norm["rate"],
-                "norm_distortion": norm["distortion"],
-                "norm_energy": norm["energy"],
-                "normalization_scope": normalization["scope"],
-                "num_normalization_reference_points": normalization["num_reference_points"],
-                "min_quality": constraints["min_quality"],
-                "quality_floor": constraints["quality_floor"],
-                "near_quality_floor": constraints["near_quality_floor"],
-                "allow_degraded_fallback": constraints["allow_degraded_fallback"],
-                "max_rate": constraints["max_rate"],
-                "max_energy": constraints["max_energy"],
-                "max_time_ms": constraints["max_time_ms"],
-                "w_E": weights["w_E"],
-                "w_R": weights["w_R"],
-                "w_D": weights["w_D"],
-                "aggregate_by_config": report["aggregate_by_config"],
-                "exclude_neural": filtering["exclude_neural"],
-            }
-        )
-
-    return rows
 
 
 def _write_topk_csv(rows: List[Dict[str, Any]], out_path: Path) -> None:
@@ -974,7 +784,7 @@ def _run_profile(
     system_state: Dict[str, Any],
     filter_report: Dict[str, Any],
 ) -> Dict[str, Any]:
-    weights, min_quality, weight_source, context_policy = _build_weights_for_profile(
+    weights, min_quality, weight_source, context_policy = build_weights_for_profile(
         args,
         profile_name,
     )
@@ -1378,7 +1188,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             points=points,
             calibration_file=args.calibration_file,
         )
-        _annotate_points_with_calibration_provenance(
+        annotate_points_with_calibration_provenance(
             points=points,
             calibration_report=calibration_report,
         )
@@ -1562,10 +1372,10 @@ def main(argv: Optional[List[str]] = None) -> None:
             report["decision_receipt"] = build_decision_receipt(report)
             _write_json_report(report, json_path)
 
-            summary_rows.append(_summary_row_from_report(report))
+            summary_rows.append(summary_row_from_report(report))
 
             if args.export_topk:
-                topk_rows.extend(_topk_rows_from_report(report))
+                topk_rows.extend(topk_rows_from_report(report))
 
             selected = report["decision"]["selected"]
             print(
@@ -1629,7 +1439,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
         if args.export_topk:
             topk_path = out_path.with_name(out_path.stem + "_topk.csv")
-            _write_topk_csv(_topk_rows_from_report(report), topk_path)
+            _write_topk_csv(topk_rows_from_report(report), topk_path)
 
         _print_single_decision(report, out_path)
 
