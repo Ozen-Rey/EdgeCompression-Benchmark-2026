@@ -50,7 +50,7 @@ def load_quality_thresholds(path: Optional[str]) -> Dict[str, Any]:
         data = json.load(f)
 
     if not isinstance(data, dict):
-        raise ValueError("quality_thresholds.json non valido: root non è un oggetto JSON.")
+        raise ValueError("Invalid quality_thresholds.json: root is not a JSON object.")
 
     return data
 

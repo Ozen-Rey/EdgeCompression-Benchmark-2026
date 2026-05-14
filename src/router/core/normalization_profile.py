@@ -104,7 +104,7 @@ def load_normalization_profile(path: str) -> Dict[str, Any]:
     p = Path(path)
 
     if not p.exists():
-        raise FileNotFoundError(f"Normalization profile non trovato: {p}")
+        raise FileNotFoundError(f"Normalization profile not found: {p}")
 
     with p.open("r", encoding="utf-8") as f:
         profile = json.load(f)
@@ -118,16 +118,16 @@ def _validate_normalization_profile(profile: Dict[str, Any]) -> None:
 
     for key in ["rate", "energy", "quality"]:
         if key not in scales:
-            raise ValueError(f"Normalization profile non valido: scala mancante '{key}'")
+            raise ValueError(f"Invalid normalization profile: missing scale '{key}'")
 
         mn = scales[key].get("min")
         mx = scales[key].get("max")
 
         if mn is None or mx is None:
-            raise ValueError(f"Normalization profile non valido: min/max mancanti per '{key}'")
+            raise ValueError(f"Invalid normalization profile: missing min/max for '{key}'")
 
         if float(mx) < float(mn):
-            raise ValueError(f"Normalization profile non valido: max < min per '{key}'")
+            raise ValueError(f"Invalid normalization profile: max < min for '{key}'")
 
 
 def _clamp01(x: float) -> float:
@@ -149,7 +149,7 @@ def normalize_with_profile(point, profile: Dict[str, Any]) -> Dict[str, float]:
     quality = _safe_float(getattr(point, "quality", None))
 
     if rate is None or energy is None or quality is None:
-        raise ValueError("Punto R-D-E incompleto: rate/energy/quality mancanti.")
+        raise ValueError("Incomplete R-D-E point: rate/energy/quality missing.")
 
     if transforms.get("rate") == "log10":
         if rate <= 0:
@@ -186,7 +186,7 @@ def normalize_with_profile(point, profile: Dict[str, Any]) -> Dict[str, float]:
     q_min = float(scales["quality"]["min"])
     q_max = float(scales["quality"]["max"])
 
-    # Distorsione normalizzata: qualità alta -> distorsione bassa.
+    # Normalized distortion: high quality -> low distortion.
     norm_quality = _norm_from_minmax(quality, q_min, q_max)
     norm_distortion = _clamp01(1.0 - norm_quality)
 

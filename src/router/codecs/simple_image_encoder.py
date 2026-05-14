@@ -7,7 +7,7 @@ def encode_jpeg(input_path: str, output_path: str, quality: int) -> None:
         from PIL import Image
     except ImportError as exc:
         raise RuntimeError(
-            "Pillow non è installato. Installa con: pip install pillow"
+            "Pillow is not installed. Install with: pip install pillow"
         ) from exc
 
     input_path = Path(input_path)
