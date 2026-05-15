@@ -255,10 +255,10 @@ These coefficients are heuristic and should be interpreted as experimental param
 
 ## Validation
 
-The v0.8 validation script is:
+The v0.8 validation runs through the unified smoke dispatcher:
 
 ```txt
-scripts/run_router_v08_system_aware.ps1
+scripts/run_router.ps1 -Scenario v08-system-aware
 ```
 
 It validates:
@@ -273,7 +273,7 @@ It validates:
 Run:
 
 ```powershell
-.\scripts\run_router_v08_system_aware.ps1
+.\scripts\run_router.ps1 -Scenario v08-system-aware
 ```
 
 Expected behavior on the synthetic decision-change case:
