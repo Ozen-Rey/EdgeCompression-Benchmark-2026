@@ -14,8 +14,10 @@ Hosts:
 
 argparse construction itself still lives in rde_router.main(); the
 ``--help`` entry points and the ``__main__`` exception wrapper are
-unchanged. _run_profile and its local helpers also stay in rde_router
-for now and are imported lazily here to avoid a circular import.
+unchanged. The per-profile orchestration (``run_profile`` and its
+helpers) lives in :mod:`src.router.profile_runner` and is imported
+lazily inside :func:`run_router` so the import direction stays
+pipeline -> profile_runner without a back-edge.
 """
 
 import argparse
@@ -23,7 +25,6 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.router.adaptation.context_policy import compute_context_policy
 from src.router.adaptation.system_features import build_system_features
 from src.router.adaptation.system_policy import (
     apply_system_policy_simulation,
@@ -43,7 +44,7 @@ from src.router.codecs.codec_capabilities import (
 from src.router.codecs.external_codec_registry import load_external_codec_points
 from src.router.context import RouterContext
 from src.router.core.normalization_profile import load_normalization_profile
-from src.router.core.profiles import available_profiles, get_profile
+from src.router.core.profiles import available_profiles
 from src.router.core.quality_thresholds import resolve_quality_floor
 from src.router.core.rde_database import (
     RDEPoint,
@@ -66,19 +67,7 @@ from src.router.presentation import (
     print_all_profiles_selection,
     print_single_decision,
 )
-
-
-def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
-    total = w_e + w_r + w_d
-
-    if total <= 0:
-        raise ValueError("The sum of the weights must be positive.")
-
-    return {
-        "w_E": w_e / total,
-        "w_R": w_r / total,
-        "w_D": w_d / total,
-    }
+from src.router.profile_runner import build_weights_for_profile, run_profile
 
 
 def normalize_token(text: str) -> str:
@@ -203,43 +192,6 @@ def filter_points_by_codec_availability(
         )
 
     return filtered, filter_report
-
-
-def build_weights_for_profile(
-    args: argparse.Namespace,
-    profile_name: str,
-) -> Tuple[Dict[str, float], Optional[float], str, Optional[Dict[str, Any]]]:
-    if args.auto_weights:
-        policy = compute_context_policy(
-            power_mode=args.power_mode,
-            battery_percent=args.battery_percent,
-            thermal_state=args.thermal_state,
-            network_profile=args.network_profile,
-            quality_target=args.quality_target,
-            system_load=args.system_load,
-        )
-
-        weights = policy["weights"]
-
-        min_quality = args.quality_floor
-        if args.min_quality is not None:
-            min_quality = max(args.min_quality, min_quality)
-
-        return weights, min_quality, "context_policy", policy
-
-    profile = get_profile(profile_name)
-
-    w_e = args.wE if args.wE is not None else profile.w_e
-    w_r = args.wR if args.wR is not None else profile.w_r
-    w_d = args.wD if args.wD is not None else profile.w_d
-
-    weights = _normalize_weights(w_e, w_r, w_d)
-
-    min_quality = args.quality_floor
-    if args.min_quality is not None:
-        min_quality = max(args.min_quality, min_quality)
-
-    return weights, min_quality, "manual_profile", None
 
 
 def annotate_points_with_calibration_provenance(
@@ -397,18 +349,16 @@ def run_router(
 ) -> None:
     """Run the router pipeline end-to-end from a parsed CLI namespace.
 
-    Imports ``_run_profile`` from rde_router lazily to avoid a circular
-    module-load import. All side-effect-free preprocessing helpers
-    (system-aware policy, codec availability/normalization,
-    :func:`apply_system_aware_policy`, :func:`parse_codec_list`,
-    :func:`filter_points_by_codec_availability`) live in this module so
-    they no longer participate in the lazy cycle. Everything else
-    (system probes, calibration bundle handling, CSV loading,
-    normalization mode resolution, per-profile loop, single-profile
-    branch, execution result printing) is orchestrated here.
+    Uses :func:`run_profile` and :func:`build_weights_for_profile` from
+    :mod:`src.router.profile_runner`, imported eagerly at module load
+    (no lazy cycle). All side-effect-free preprocessing helpers
+    (:func:`apply_system_aware_policy`, :func:`parse_codec_list`,
+    :func:`filter_points_by_codec_availability`) live in this module.
+    Everything else (system probes, calibration bundle handling, CSV
+    loading, normalization mode resolution, per-profile loop,
+    single-profile branch, execution result printing) is orchestrated
+    here.
     """
-    from src.router.rde_router import _run_profile
-
     router_context.router_config_report = router_config_report
     if args.system_features:
         router_context.system_features_report = build_system_features(
@@ -792,7 +742,7 @@ def run_router(
         )
 
         for profile_name in available_profiles():
-            report = _run_profile(
+            report = run_profile(
                 args=args,
                 router_context=router_context,
                 profile_name=profile_name,
@@ -837,7 +787,7 @@ def run_router(
         )
 
     else:
-        report = _run_profile(
+        report = run_profile(
             args=args,
             router_context=router_context,
             profile_name="context-auto" if args.auto_weights else args.profile,

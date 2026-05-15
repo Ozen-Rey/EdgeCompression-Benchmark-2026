@@ -1,16 +1,26 @@
 """Unit tests for ``src.router.profile_runner`` helpers.
 
-These tests exercise ``apply_preferred_candidate_override`` in isolation
-from the rest of the router pipeline so that the helper's side-effects
-(mutation of ``report`` in place) are verifiable without spinning up a
-full ``_run_profile`` flow.
+These tests exercise the side-effect-free helpers
+(``apply_preferred_candidate_override``, ``build_time_guard_report``,
+``build_content_classifier_router_report``) in isolation from the rest
+of the router pipeline so their schemas and edge cases are verifiable
+without spinning up a full ``run_profile`` flow.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import argparse
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
-from src.router.profile_runner import apply_preferred_candidate_override
+import pytest
+
+from src.router import profile_runner
+from src.router.profile_runner import (
+    apply_preferred_candidate_override,
+    build_content_classifier_router_report,
+    build_time_guard_report,
+)
 
 
 def _make_apply_report(candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -168,3 +178,108 @@ def test_noop_when_candidate_missing() -> None:
     assert "applied" not in report
     assert report["reasons"] == []
     assert report["warnings"] == []
+
+
+@dataclass
+class _TimePoint:
+    codec: str
+    config: str
+    time_ms: Optional[float]
+
+
+def test_build_time_guard_report_disabled_when_max_time_ms_is_none() -> None:
+    report = build_time_guard_report(points=[], max_time_ms=None)
+
+    assert report == {"enabled": False, "max_time_ms": None}
+
+
+def test_build_time_guard_report_non_strict_allows_missing_time() -> None:
+    points = [
+        _TimePoint("JPEG", "q=60", 5.0),
+        _TimePoint("JXL", "d=1.0", None),
+    ]
+
+    report = build_time_guard_report(
+        points=points,
+        max_time_ms=150.0,
+        strict_time=False,
+    )
+
+    assert report["enabled"] is True
+    assert report["strict_time"] is False
+    assert report["num_candidate_points"] == 2
+    assert report["num_with_time"] == 1
+    assert report["num_missing_time"] == 1
+    assert report["num_within_limit"] == 1
+    assert report["num_over_limit"] == 0
+    assert len(report["warnings"]) >= 1
+
+
+def test_build_time_guard_report_strict_succeeds_when_all_have_time() -> None:
+    points = [
+        _TimePoint("JPEG", "q=60", 5.0),
+        _TimePoint("JXL", "d=1.0", 80.0),
+    ]
+
+    report = build_time_guard_report(
+        points=points,
+        max_time_ms=150.0,
+        strict_time=True,
+    )
+
+    assert report["enabled"] is True
+    assert report["strict_time"] is True
+    assert report["num_missing_time"] == 0
+    assert report["num_within_limit"] == 2
+    assert report["warnings"] == []
+
+
+def _make_classifier_args(
+    enabled: bool = False,
+    mode: str = "report-only",
+    config: Optional[str] = None,
+) -> argparse.Namespace:
+    return argparse.Namespace(
+        content_classifier=enabled,
+        content_classifier_mode=mode,
+        content_classifier_config=config,
+        content_classifier_image=None,
+        content_classifier_width=None,
+        content_classifier_height=None,
+    )
+
+
+def test_build_content_classifier_router_report_disabled_returns_stable_schema() -> None:
+    report = build_content_classifier_router_report(_make_classifier_args(enabled=False))
+
+    assert report == {
+        "enabled": False,
+        "mode": "report-only",
+        "applied": False,
+        "config": None,
+        "prediction": None,
+        "features": None,
+        "warnings": [],
+        "reasons": ["content_classifier_disabled"],
+    }
+
+
+def test_build_content_classifier_router_report_enabled_without_config_warns() -> None:
+    report = build_content_classifier_router_report(_make_classifier_args(enabled=True))
+
+    assert report["enabled"] is True
+    assert report["applied"] is False
+    assert report["prediction"] is None
+    assert "content_classifier_enabled_but_missing_config" in report["warnings"]
+    assert "missing_classifier_config" in report["reasons"]
+
+
+def test_build_content_classifier_router_report_rejects_invalid_mode() -> None:
+    with pytest.raises(ValueError, match="content classifier mode"):
+        build_content_classifier_router_report(
+            _make_classifier_args(enabled=True, mode="bogus")
+        )
+
+
+def test_run_profile_is_importable_from_profile_runner() -> None:
+    assert callable(profile_runner.run_profile)
