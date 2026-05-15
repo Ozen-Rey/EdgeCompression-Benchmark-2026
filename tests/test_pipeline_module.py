@@ -9,22 +9,125 @@ exercise of run_router against the real fixture.
 import json
 from pathlib import Path
 
+import pytest
+
 from src.router import pipeline
 from src.router.cli import build_router_arg_parser
 from src.router.context import RouterContext
+from src.router.core.rde_database import RDEPoint
 from src.router.core.router_config import expand_argv_with_config
-from src.router.pipeline import run_router
+from src.router.pipeline import (
+    filter_points_by_codec_availability,
+    is_neural_codec,
+    normalize_token,
+    parse_codec_list,
+    run_router,
+)
 
 
 def test_pipeline_module_exports_extracted_helpers():
     for name in (
         "annotate_points_with_calibration_provenance",
         "build_weights_for_profile",
+        "filter_points_by_codec_availability",
+        "is_neural_codec",
+        "normalize_token",
+        "parse_codec_list",
         "run_router",
         "summary_row_from_report",
         "topk_rows_from_report",
     ):
         assert callable(getattr(pipeline, name)), f"missing pipeline helper: {name}"
+
+
+def test_parse_codec_list_returns_none_for_missing_value():
+    assert parse_codec_list(None) is None
+    assert parse_codec_list("") is None
+    assert parse_codec_list("   ") is None
+
+
+def test_parse_codec_list_normalizes_tokens_and_trims_whitespace():
+    parsed = parse_codec_list(" JPEG, jxl ,Hevc")
+
+    assert parsed == {"jpeg", "jxl", "hevc"}
+
+
+def test_normalize_token_strips_accents_and_punctuation():
+    assert normalize_token("JPEG") == "jpeg"
+    assert normalize_token(" jxl ") == "jxl"
+    assert normalize_token("Ballé") == "balle"
+
+
+def test_is_neural_codec_recognizes_known_neural_codec():
+    assert is_neural_codec("JPEG_AI") is True
+    assert is_neural_codec("jpegai") is True
+    assert is_neural_codec("JPEG") is False
+    assert is_neural_codec("JXL") is False
+
+
+def _make_point(codec: str, config: str = "q=50") -> RDEPoint:
+    return RDEPoint(
+        codec=codec,
+        config=config,
+        rate=1.0,
+        quality=80.0,
+        energy=1.0,
+        raw={},
+    )
+
+
+def test_filter_points_by_codec_availability_keeps_only_allowed_codecs():
+    points = [
+        _make_point("JPEG"),
+        _make_point("JXL"),
+        _make_point("HEVC"),
+        _make_point("JPEG_AI"),
+    ]
+
+    filtered, report = filter_points_by_codec_availability(
+        points=points,
+        available_codecs={"jpeg", "jxl"},
+        exclude_codecs=None,
+        exclude_neural=False,
+    )
+
+    assert [p.codec for p in filtered] == ["JPEG", "JXL"]
+    assert report["num_before_codec_filtering"] == 4
+    assert report["num_after_codec_filtering"] == 2
+    assert report["excluded_by_available_codecs"] == 2
+    assert report["excluded_by_exclude_codecs"] == 0
+    assert report["excluded_by_exclude_neural"] == 0
+
+
+def test_filter_points_by_codec_availability_drops_excluded_and_neural():
+    points = [
+        _make_point("JPEG"),
+        _make_point("JXL"),
+        _make_point("JPEG_AI"),
+    ]
+
+    filtered, report = filter_points_by_codec_availability(
+        points=points,
+        available_codecs=None,
+        exclude_codecs={"jxl"},
+        exclude_neural=True,
+    )
+
+    assert [p.codec for p in filtered] == ["JPEG"]
+    assert report["excluded_by_exclude_codecs"] == 1
+    assert report["excluded_by_exclude_neural"] == 1
+
+
+def test_filter_points_by_codec_availability_raises_on_empty_pool():
+    points = [_make_point("JPEG_AI")]
+
+    with pytest.raises(ValueError, match="Pool vuoto dopo i filtri codec"):
+        filter_points_by_codec_availability(
+            points=points,
+            available_codecs=None,
+            exclude_codecs=None,
+            exclude_neural=True,
+        )
 
 
 def test_normalize_weights_returns_normalized_components():

@@ -1,13 +1,11 @@
 import argparse
 import sys
-import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from src.router.codecs.codec_capabilities import is_neural_codec
 from src.router.cli import build_router_arg_parser
 from src.router.context import RouterContext
 from src.router.adaptation.content_policy import (
@@ -32,76 +30,6 @@ from src.router.adaptation.system_penalty import (
     make_system_penalty_fn,
 )
 from src.router.adaptation.system_policy import build_system_policy
-
-
-def _normalize_token(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    return "".join(ch for ch in text.lower() if ch.isalnum())
-
-
-def _parse_codec_list(value: Optional[str]) -> Optional[set[str]]:
-    if value is None or value.strip() == "":
-        return None
-
-    return {
-        _normalize_token(item)
-        for item in value.split(",")
-        if item.strip()
-    }
-
-
-def _is_neural_codec(codec_name: str) -> bool:
-    return is_neural_codec(codec_name)
-
-
-def _filter_points_by_codec_availability(
-    points: List[RDEPoint],
-    available_codecs: Optional[set[str]],
-    exclude_codecs: Optional[set[str]],
-    exclude_neural: bool,
-) -> tuple[List[RDEPoint], Dict[str, Any]]:
-    filtered: List[RDEPoint] = []
-
-    excluded_by_available = 0
-    excluded_by_exclude_list = 0
-    excluded_by_neural = 0
-
-    for p in points:
-        codec_norm = _normalize_token(p.codec)
-
-        if available_codecs is not None and codec_norm not in available_codecs:
-            excluded_by_available += 1
-            continue
-
-        if exclude_codecs is not None and codec_norm in exclude_codecs:
-            excluded_by_exclude_list += 1
-            continue
-
-        if exclude_neural and _is_neural_codec(p.codec):
-            excluded_by_neural += 1
-            continue
-
-        filtered.append(p)
-
-    filter_report = {
-        "available_codecs": sorted(available_codecs) if available_codecs is not None else None,
-        "exclude_codecs": sorted(exclude_codecs) if exclude_codecs is not None else None,
-        "exclude_neural": exclude_neural,
-        "num_before_codec_filtering": len(points),
-        "num_after_codec_filtering": len(filtered),
-        "excluded_by_available_codecs": excluded_by_available,
-        "excluded_by_exclude_codecs": excluded_by_exclude_list,
-        "excluded_by_exclude_neural": excluded_by_neural,
-    }
-
-    if not filtered:
-        raise ValueError(
-            "Pool vuoto dopo i filtri codec. "
-            "Controlla --available-codecs, --exclude-codecs o --exclude-neural."
-        )
-
-    return filtered, filter_report
 
 
 def _apply_system_aware_policy(
