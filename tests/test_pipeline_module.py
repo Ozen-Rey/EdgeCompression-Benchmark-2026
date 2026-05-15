@@ -17,6 +17,7 @@ from src.router.context import RouterContext
 from src.router.core.rde_database import RDEPoint
 from src.router.core.router_config import expand_argv_with_config
 from src.router.pipeline import (
+    apply_system_aware_policy,
     filter_points_by_codec_availability,
     is_neural_codec,
     normalize_token,
@@ -28,6 +29,7 @@ from src.router.pipeline import (
 def test_pipeline_module_exports_extracted_helpers():
     for name in (
         "annotate_points_with_calibration_provenance",
+        "apply_system_aware_policy",
         "build_weights_for_profile",
         "filter_points_by_codec_availability",
         "is_neural_codec",
@@ -128,6 +130,99 @@ def test_filter_points_by_codec_availability_raises_on_empty_pool():
             exclude_codecs=None,
             exclude_neural=True,
         )
+
+
+def _state(cuda_available: bool) -> dict:
+    return {"cuda": {"available": cuda_available}}
+
+
+def test_apply_system_aware_policy_disabled_passes_request_through():
+    effective, report = apply_system_aware_policy(
+        system_state=_state(cuda_available=False),
+        enabled=False,
+        simulate_no_cuda=False,
+        exclude_neural_requested=False,
+        capability_aware_enabled=False,
+    )
+
+    assert effective is False
+    assert report["enabled"] is False
+    assert report["cuda_available"] is False
+    assert report["effective_exclude_neural"] is False
+    assert report["rules_applied"] == []
+
+
+def test_apply_system_aware_policy_keeps_neural_when_cuda_available():
+    effective, report = apply_system_aware_policy(
+        system_state=_state(cuda_available=True),
+        enabled=True,
+        simulate_no_cuda=False,
+        exclude_neural_requested=False,
+        capability_aware_enabled=False,
+    )
+
+    assert effective is False
+    assert report["cuda_available"] is True
+    assert report["rules_applied"] == ["cuda_available_keep_neural_candidates"]
+
+
+def test_apply_system_aware_policy_excludes_neural_when_cuda_missing():
+    effective, report = apply_system_aware_policy(
+        system_state=_state(cuda_available=False),
+        enabled=True,
+        simulate_no_cuda=False,
+        exclude_neural_requested=False,
+        capability_aware_enabled=False,
+    )
+
+    assert effective is True
+    assert report["effective_exclude_neural"] is True
+    assert report["rules_applied"] == ["cuda_unavailable_exclude_neural_candidates"]
+
+
+def test_apply_system_aware_policy_defers_to_capability_aware_when_set():
+    effective, report = apply_system_aware_policy(
+        system_state=_state(cuda_available=False),
+        enabled=True,
+        simulate_no_cuda=False,
+        exclude_neural_requested=False,
+        capability_aware_enabled=True,
+    )
+
+    assert effective is False
+    assert report["capability_aware_enabled"] is True
+    assert report["rules_applied"] == [
+        "cuda_unavailable_defer_neural_filtering_to_codec_capabilities"
+    ]
+
+
+def test_apply_system_aware_policy_manual_exclude_neural_is_recorded():
+    effective, report = apply_system_aware_policy(
+        system_state=_state(cuda_available=True),
+        enabled=False,
+        simulate_no_cuda=False,
+        exclude_neural_requested=True,
+        capability_aware_enabled=False,
+    )
+
+    assert effective is True
+    assert report["exclude_neural_requested"] is True
+    assert report["rules_applied"] == ["manual_exclude_neural"]
+
+
+def test_apply_system_aware_policy_simulate_no_cuda_overrides_state():
+    effective, report = apply_system_aware_policy(
+        system_state=_state(cuda_available=True),
+        enabled=True,
+        simulate_no_cuda=True,
+        exclude_neural_requested=False,
+        capability_aware_enabled=False,
+    )
+
+    assert effective is True
+    assert report["simulate_no_cuda"] is True
+    assert report["cuda_available"] is False
+    assert report["rules_applied"] == ["cuda_unavailable_exclude_neural_candidates"]
 
 
 def test_normalize_weights_returns_normalized_components():

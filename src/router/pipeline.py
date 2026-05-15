@@ -104,6 +104,57 @@ def parse_codec_list(value: Optional[str]) -> Optional[set[str]]:
     }
 
 
+def apply_system_aware_policy(
+    system_state: Dict[str, Any],
+    enabled: bool,
+    simulate_no_cuda: bool,
+    exclude_neural_requested: bool,
+    capability_aware_enabled: bool = False,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Resolve the effective ``exclude_neural`` flag from the system state.
+
+    When the system-aware policy is enabled and CUDA is unavailable (or
+    simulated unavailable), neural candidates are dropped unless the
+    capability-aware filter is active, in which case the decision is
+    deferred to codec capability filtering. Returns the effective flag
+    plus a report dict that mirrors the inputs and the list of rules
+    applied; the report is consumed by the router's ``codec_filtering``
+    section.
+    """
+    cuda_available = bool(system_state.get("cuda", {}).get("available", False))
+
+    if simulate_no_cuda:
+        cuda_available = False
+
+    effective_exclude_neural = exclude_neural_requested
+    rules_applied: list[str] = []
+
+    if exclude_neural_requested:
+        rules_applied.append("manual_exclude_neural")
+
+    if enabled:
+        if not cuda_available:
+            if capability_aware_enabled:
+                rules_applied.append(
+                    "cuda_unavailable_defer_neural_filtering_to_codec_capabilities"
+                )
+            else:
+                effective_exclude_neural = True
+                rules_applied.append("cuda_unavailable_exclude_neural_candidates")
+        else:
+            rules_applied.append("cuda_available_keep_neural_candidates")
+
+    return effective_exclude_neural, {
+        "enabled": enabled,
+        "simulate_no_cuda": simulate_no_cuda,
+        "cuda_available": cuda_available,
+        "exclude_neural_requested": exclude_neural_requested,
+        "effective_exclude_neural": effective_exclude_neural,
+        "capability_aware_enabled": capability_aware_enabled,
+        "rules_applied": rules_applied,
+    }
+
+
 def filter_points_by_codec_availability(
     points: List[RDEPoint],
     available_codecs: Optional[set[str]],
@@ -346,19 +397,17 @@ def run_router(
 ) -> None:
     """Run the router pipeline end-to-end from a parsed CLI namespace.
 
-    Imports ``_run_profile`` and ``_apply_system_aware_policy`` from
-    rde_router lazily to avoid a circular module-load import. The codec
-    availability/normalization helpers (:func:`parse_codec_list`,
+    Imports ``_run_profile`` from rde_router lazily to avoid a circular
+    module-load import. All side-effect-free preprocessing helpers
+    (system-aware policy, codec availability/normalization,
+    :func:`apply_system_aware_policy`, :func:`parse_codec_list`,
     :func:`filter_points_by_codec_availability`) live in this module so
     they no longer participate in the lazy cycle. Everything else
     (system probes, calibration bundle handling, CSV loading,
     normalization mode resolution, per-profile loop, single-profile
     branch, execution result printing) is orchestrated here.
     """
-    from src.router.rde_router import (
-        _apply_system_aware_policy,
-        _run_profile,
-    )
+    from src.router.rde_router import _run_profile
 
     router_context.router_config_report = router_config_report
     if args.system_features:
@@ -680,7 +729,7 @@ def run_router(
 
     system_state = probe_system()
 
-    effective_exclude_neural, system_aware_report = _apply_system_aware_policy(
+    effective_exclude_neural, system_aware_report = apply_system_aware_policy(
         system_state=system_state,
         enabled=args.system_aware,
         simulate_no_cuda=args.simulate_no_cuda,
