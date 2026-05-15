@@ -32,47 +32,6 @@ from src.router.adaptation.system_penalty import (
 from src.router.adaptation.system_policy import build_system_policy
 
 
-def _apply_system_aware_policy(
-    system_state: Dict[str, Any],
-    enabled: bool,
-    simulate_no_cuda: bool,
-    exclude_neural_requested: bool,
-    capability_aware_enabled: bool = False,
-) -> tuple[bool, Dict[str, Any]]:
-    cuda_available = bool(system_state.get("cuda", {}).get("available", False))
-
-    if simulate_no_cuda:
-        cuda_available = False
-
-    effective_exclude_neural = exclude_neural_requested
-    rules_applied: list[str] = []
-
-    if exclude_neural_requested:
-        rules_applied.append("manual_exclude_neural")
-
-    if enabled:
-        if not cuda_available:
-            if capability_aware_enabled:
-                rules_applied.append(
-                    "cuda_unavailable_defer_neural_filtering_to_codec_capabilities"
-                )
-            else:
-                effective_exclude_neural = True
-                rules_applied.append("cuda_unavailable_exclude_neural_candidates")
-        else:
-            rules_applied.append("cuda_available_keep_neural_candidates")
-
-    return effective_exclude_neural, {
-        "enabled": enabled,
-        "simulate_no_cuda": simulate_no_cuda,
-        "cuda_available": cuda_available,
-        "exclude_neural_requested": exclude_neural_requested,
-        "effective_exclude_neural": effective_exclude_neural,
-        "capability_aware_enabled": capability_aware_enabled,
-        "rules_applied": rules_applied,
-    }
-
-
 def _build_time_guard_report(
     points,
     max_time_ms,
