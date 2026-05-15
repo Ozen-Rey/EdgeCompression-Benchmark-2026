@@ -26,20 +26,20 @@ def main() -> None:
         "--mode",
         default="global",
         choices=["global", "dataset", "local"],
-        help="Tipo semantico del profilo di normalizzazione.",
+        help="Semantic type of the normalization profile.",
     )
     parser.add_argument(
         "--calibration-file",
         default=None,
-        help="File JSON di calibrazione locale da applicare prima di costruire il profilo.",
+        help="Local calibration JSON file to apply before building the profile.",
     )
     parser.add_argument(
         "--normalization-build-scope",
         default="all",
         choices=["all", "calibrated-only"],
         help=(
-            "Scope usato per costruire le scale: 'all' usa tutti i punti; "
-            "'calibrated-only' usa solo i punti presenti nella calibrazione locale."
+            "Scope used to build the scales: 'all' uses all points; "
+            "'calibrated-only' uses only points present in the local calibration."
         ),
     )
     parser.add_argument("--out", required=True)
@@ -72,7 +72,7 @@ def main() -> None:
     if args.normalization_build_scope == "calibrated-only":
         if not args.calibration_file:
             raise ValueError(
-                "--normalization-build-scope calibrated-only richiede --calibration-file."
+                "--normalization-build-scope calibrated-only requires --calibration-file."
             )
 
         applied_keys = {
@@ -87,7 +87,7 @@ def main() -> None:
 
         if not points:
             raise ValueError(
-                "Nessun punto disponibile per normalization-build-scope=calibrated-only."
+                "No points available for normalization-build-scope=calibrated-only."
             )
 
     num_points_after_build_scope = len(points)

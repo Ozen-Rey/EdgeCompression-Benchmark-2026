@@ -12,7 +12,10 @@ into the appropriate group below.
 from typing import Dict
 
 
-ROUTER_VERSION = "0.42.39.1"
+# Keep ROUTER_VERSION and pyproject.toml [project].version in sync.
+# They identify the same release; the dispatcher and the package
+# metadata are read by different tools but must agree on the version.
+ROUTER_VERSION = "0.42.40"
 
 
 FEATURE_GROUPS: Dict[str, Dict[str, str]] = {

@@ -187,8 +187,8 @@ def filter_points_by_codec_availability(
 
     if not filtered:
         raise ValueError(
-            "Pool vuoto dopo i filtri codec. "
-            "Controlla --available-codecs, --exclude-codecs o --exclude-neural."
+            "Empty pool after codec filters. "
+            "Check --available-codecs, --exclude-codecs or --exclude-neural."
         )
 
     return filtered, filter_report
@@ -650,7 +650,7 @@ def run_router(
     else:
         if not args.normalization_file:
             raise ValueError(
-                f"--normalization-mode {normalization_mode} richiede --normalization-file."
+                f"--normalization-mode {normalization_mode} requires --normalization-file."
             )
 
         normalization_profile = load_normalization_profile(args.normalization_file)
