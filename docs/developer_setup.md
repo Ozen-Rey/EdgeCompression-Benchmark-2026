@@ -46,20 +46,31 @@ package map.
 
 ## Unified smoke dispatcher
 
-`scripts/run_router.ps1` is a thin dispatcher that resolves a short scenario
-name to one of the existing `scripts/run_router_*.ps1` smoke scripts and
-invokes it. It does not duplicate any of the internal logic of those scripts;
-the legacy scripts remain callable directly and are unchanged.
+`scripts/run_router.ps1` is the **preferred entrypoint** for running the
+PowerShell smoke scenarios. It is a thin dispatcher that resolves a short
+scenario name to one of the existing `scripts/run_router_*.ps1` smoke scripts
+and invokes it via PowerShell with `-ExecutionPolicy Bypass`. It does not
+duplicate any of the internal logic of those scripts.
 
 ```powershell
+.\scripts\run_router.ps1 -Scenario list
 .\scripts\run_router.ps1 -Scenario v02-backends
 .\scripts\run_router.ps1 -Scenario v09-content-aware
 ```
 
-Use `.\scripts\run_router.ps1 -Scenario list` to print all known scenarios.
+`-Scenario list` prints all known scenarios with their target scripts.
 Unknown scenarios raise a clear error listing the supported names. The
 dispatcher propagates the non-zero exit code of the underlying script when the
-smoke fails.
+smoke fails, so CI wrappers and `try`/`catch` blocks see the failure exactly
+the way they do when invoking a script directly.
+
+### Legacy scripts
+
+The direct `scripts/run_router_v*.ps1` scripts are still supported for
+backwards compatibility and **have not been removed** in this release; any
+existing tooling that invokes them keeps working unchanged. New smoke
+invocations should prefer the dispatcher so that the scenario surface stays
+in a single, discoverable place.
 
 ## Backend Smoke Executables
 
