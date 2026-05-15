@@ -4,12 +4,14 @@ This repository supports editable installs for local development:
 
 ```powershell
 python -m pip install -e .
+python -m pip install -e ".[test]"
 python -m pytest -q
 ```
 
-The editable install keeps the existing `src.router` module path stable while
-making imports independent of the current working directory. Router CLIs should
-continue to be invoked with module execution:
+The `[test]` extra pulls in `pytest`; use it (or the `[dev]` alias) when working
+from a fresh environment. The editable install keeps the existing `src.router`
+module path stable while making imports independent of the current working
+directory. Router CLIs should continue to be invoked with module execution:
 
 ```powershell
 python -m src.router.rde_router --help
@@ -19,6 +21,23 @@ python -m src.router.codecs.external_codec_dry_run --help
 python -m src.router.codecs.external_codec_benchmark --help
 python -m src.router.codecs.external_codec_rde_exporter --help
 ```
+
+After an editable install, the following console entry points are also
+available on `PATH` and call the same `main()` functions as the corresponding
+`python -m` invocations:
+
+```powershell
+rde-router --help
+rde-external-codec-probe --help
+rde-external-codec-dry-run --help
+rde-external-codec-benchmark --help
+rde-external-codec-export --help
+rde-legacy-import-audit --help
+```
+
+The `python -m src.router.*` invocations remain the canonical way to run the
+router tools; the console scripts are a convenience and are not used by the
+PowerShell smoke scripts under `scripts/`.
 
 The legacy top-level wrapper modules were removed in v0.42.15. New code and
 developer scripts should import and execute router tools through their
