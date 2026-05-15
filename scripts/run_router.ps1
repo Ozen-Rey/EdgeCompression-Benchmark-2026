@@ -100,14 +100,38 @@ function Assert-LastExitCode {
 
 
 function Invoke-PytestTempCleanup {
-    Get-ChildItem -Force -Directory -Filter ".pytest_tmp*" `
-        -Path $RepoRoot -ErrorAction SilentlyContinue | ForEach-Object {
+    # Robust under Set-StrictMode -Version Latest: each pipeline item may
+    # not be a DirectoryInfo (provider-dependent or odd error paths), so
+    # never assume the .FullName property is present. Resolve the path
+    # either from a FileSystemInfo instance or by joining the raw value
+    # back onto the repo root, and re-check Test-Path before removing.
+    $candidates = Get-ChildItem -LiteralPath $RepoRoot -Directory `
+        -Filter ".pytest_tmp*" -Force -ErrorAction SilentlyContinue
+
+    if (-not $candidates) {
+        return
+    }
+
+    foreach ($item in $candidates) {
+        if ($item -is [System.IO.FileSystemInfo]) {
+            $path  = $item.FullName
+            $label = $item.Name
+        }
+        else {
+            $label = [string]$item
+            $path  = Join-Path $RepoRoot $label
+        }
+
+        if (-not (Test-Path -LiteralPath $path)) {
+            continue
+        }
+
         try {
-            Remove-Item -Recurse -Force $_.FullName -ErrorAction Stop
-            Write-Host "[run_router] cleaned : $($_.Name)"
+            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+            Write-Host "[run_router] cleaned : $label"
         }
         catch {
-            Write-Host "[run_router] skip cleanup (locked): $($_.FullName)"
+            Write-Host ("[run_router] cleanup skip: {0} ({1})" -f $path, $_.Exception.Message)
         }
     }
 }
