@@ -364,15 +364,27 @@ function Invoke-ScenarioV02Backends {
     Write-Host "Building v0.2 backend summary"
     Write-Host "============================================================"
 
-    $Rows = @()
-    function Add-BackendReportRow {
-        param([string]$CaseName, [string]$Path)
-        $r = Get-Content $Path -Raw | ConvertFrom-Json
+    # Keep summary state function-local. The pre-v0.42.39.1 inlining
+    # used a nested ``Add-BackendReportRow`` helper that wrote to a
+    # script-scoped Rows collection; under Set-StrictMode -Version
+    # Latest, reading that script-scoped variable from inside the
+    # function raised "cannot be retrieved because it has not been
+    # set." Avoid the script-scope round-trip entirely: iterate over
+    # the case table and append each row in place.
+    $summaryRows = @()
+    $BackendCases = @(
+        [pscustomobject]@{ Name = "jpeg_execute"; Path = "$OutDir\v02_backend_jpeg.json" }
+        [pscustomobject]@{ Name = "jxl_execute";  Path = "$OutDir\v02_backend_jxl.json" }
+        [pscustomobject]@{ Name = "hevc_execute"; Path = "$OutDir\v02_backend_hevc.json" }
+    )
+
+    foreach ($case in $BackendCases) {
+        $r = Get-Content $case.Path -Raw | ConvertFrom-Json
         $s = $r.decision.selected
         $p = $r.execution_plan
         $e = $r.execution_result
-        $script:Rows += [pscustomobject]@{
-            case_name           = $CaseName
+        $summaryRows += [pscustomobject]@{
+            case_name           = $case.Name
             selected_codec      = $s.codec
             selected_config     = $s.config
             decision_mode       = $r.decision.decision_mode
@@ -390,12 +402,8 @@ function Invoke-ScenarioV02Backends {
         }
     }
 
-    Add-BackendReportRow "jpeg_execute" "$OutDir\v02_backend_jpeg.json"
-    Add-BackendReportRow "jxl_execute"  "$OutDir\v02_backend_jxl.json"
-    Add-BackendReportRow "hevc_execute" "$OutDir\v02_backend_hevc.json"
-
     $SummaryPath = "$OutDir\v02_backend_summary.csv"
-    $Rows | Export-Csv -NoTypeInformation -Encoding UTF8 $SummaryPath
+    $summaryRows | Export-Csv -NoTypeInformation -Encoding UTF8 $SummaryPath
 
     Write-Host "Summary written to: $SummaryPath"
     Write-Host ""
