@@ -225,6 +225,46 @@ def test_aggregate_test_cleans_pytest_tmp_directories(
     )
 
 
+def test_pytest_temp_cleanup_is_strict_mode_safe(dispatcher_text: str) -> None:
+    """``Invoke-PytestTempCleanup`` must not assume ``.FullName`` exists.
+
+    Under ``Set-StrictMode -Version Latest``, accessing a missing property
+    on a pipeline item throws. Resolve the path either through a
+    ``FileSystemInfo`` type check or via ``Join-Path`` from the repo root.
+    """
+    cleanup_body_match = re.search(
+        r"function Invoke-PytestTempCleanup \{(?P<body>.*?)\n\}",
+        dispatcher_text,
+        re.DOTALL,
+    )
+    assert cleanup_body_match is not None, (
+        "Could not locate the body of Invoke-PytestTempCleanup"
+    )
+    body = cleanup_body_match.group("body")
+
+    assert "-LiteralPath" in body, (
+        "Cleanup must address files via -LiteralPath to avoid wildcard "
+        "and quoting surprises"
+    )
+    uses_type_check = "[System.IO.FileSystemInfo]" in body
+    uses_join_path = "Join-Path" in body
+    assert uses_type_check and uses_join_path, (
+        "Cleanup must branch on FileSystemInfo type and fall back to "
+        "Join-Path so it works whether the enumerator yields DirectoryInfo "
+        "objects or raw strings under StrictMode"
+    )
+    assert "Test-Path -LiteralPath" in body, (
+        "Cleanup must re-check Test-Path -LiteralPath before Remove-Item"
+    )
+    assert "Remove-Item -LiteralPath" in body, (
+        "Cleanup must call Remove-Item with -LiteralPath, not a bare path"
+    )
+    assert "try" in body and "catch" in body, (
+        "Cleanup must wrap Remove-Item in try/catch so locked directories "
+        "do not abort the aggregate scenario"
+    )
+
+
 def test_aggregate_smoke_runs_recommended_pair(dispatcher_text: str) -> None:
     assert "SmokeAggregateOrder" in dispatcher_text, (
         "Dispatcher must declare an explicit SmokeAggregateOrder list"
