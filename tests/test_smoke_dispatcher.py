@@ -304,6 +304,48 @@ def test_aggregate_dispatch_branch_routes_to_each_aggregate_handler(
         assert handler in dispatcher_text
 
 
+def test_dispatcher_does_not_use_script_scoped_rows_state(
+    dispatcher_text: str,
+) -> None:
+    """The pre-v0.42.39.1 v02-backends inlining wrote summary rows to
+    a script-scoped ``$script:Rows`` from inside a nested function.
+    Under ``Set-StrictMode -Version Latest`` that read raised
+    "cannot be retrieved because it has not been set." Guard against
+    the script-scope round-trip coming back in any scenario.
+    """
+    assert "$script:Rows" not in dispatcher_text, (
+        "Dispatcher must not use $script:Rows for per-scenario state; "
+        "keep summary collections function-local."
+    )
+
+
+def test_v02_backends_uses_function_local_summary_rows(
+    dispatcher_text: str,
+) -> None:
+    v02_body_match = re.search(
+        r"function Invoke-ScenarioV02Backends \{(?P<body>.*?)\n\}",
+        dispatcher_text,
+        re.DOTALL,
+    )
+    assert v02_body_match is not None, (
+        "Could not locate the body of Invoke-ScenarioV02Backends"
+    )
+    body = v02_body_match.group("body")
+
+    assert "$summaryRows = @()" in body, (
+        "Invoke-ScenarioV02Backends must initialize a function-local "
+        "$summaryRows collection before populating it"
+    )
+    assert "$summaryRows +=" in body, (
+        "Invoke-ScenarioV02Backends must append to the function-local "
+        "$summaryRows collection"
+    )
+    assert "$summaryRows | Export-Csv" in body, (
+        "Invoke-ScenarioV02Backends must export the function-local "
+        "$summaryRows collection to CSV"
+    )
+
+
 def test_developer_setup_documents_dispatcher_examples() -> None:
     text = DEVELOPER_SETUP_PATH.read_text(encoding="utf-8")
     for example in REQUIRED_DOC_EXAMPLES:
