@@ -19,6 +19,7 @@ for now and are imported lazily here to avoid a circular import.
 """
 
 import argparse
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -36,6 +37,7 @@ from src.router.calibration.calibration_bundle import (
 )
 from src.router.codecs.codec_capabilities import (
     filter_points_by_capabilities,
+    is_neural_codec,
     load_external_codec_registry,
 )
 from src.router.codecs.external_codec_registry import load_external_codec_points
@@ -77,6 +79,79 @@ def _normalize_weights(w_e: float, w_r: float, w_d: float) -> Dict[str, float]:
         "w_R": w_r / total,
         "w_D": w_d / total,
     }
+
+
+def normalize_token(text: str) -> str:
+    """Lowercase + strip accents/punctuation; used to canonicalize codec names."""
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def parse_codec_list(value: Optional[str]) -> Optional[set[str]]:
+    """Parse ``--available-codecs``/``--exclude-codecs`` CLI values.
+
+    Returns ``None`` for empty/missing values, otherwise a set of
+    canonical codec tokens normalized via :func:`normalize_token`.
+    """
+    if value is None or value.strip() == "":
+        return None
+
+    return {
+        normalize_token(item)
+        for item in value.split(",")
+        if item.strip()
+    }
+
+
+def filter_points_by_codec_availability(
+    points: List[RDEPoint],
+    available_codecs: Optional[set[str]],
+    exclude_codecs: Optional[set[str]],
+    exclude_neural: bool,
+) -> Tuple[List[RDEPoint], Dict[str, Any]]:
+    """Apply CLI codec-availability filters and return survivors + report."""
+    filtered: List[RDEPoint] = []
+
+    excluded_by_available = 0
+    excluded_by_exclude_list = 0
+    excluded_by_neural = 0
+
+    for p in points:
+        codec_norm = normalize_token(p.codec)
+
+        if available_codecs is not None and codec_norm not in available_codecs:
+            excluded_by_available += 1
+            continue
+
+        if exclude_codecs is not None and codec_norm in exclude_codecs:
+            excluded_by_exclude_list += 1
+            continue
+
+        if exclude_neural and is_neural_codec(p.codec):
+            excluded_by_neural += 1
+            continue
+
+        filtered.append(p)
+
+    filter_report = {
+        "available_codecs": sorted(available_codecs) if available_codecs is not None else None,
+        "exclude_codecs": sorted(exclude_codecs) if exclude_codecs is not None else None,
+        "exclude_neural": exclude_neural,
+        "num_before_codec_filtering": len(points),
+        "num_after_codec_filtering": len(filtered),
+        "excluded_by_available_codecs": excluded_by_available,
+        "excluded_by_exclude_codecs": excluded_by_exclude_list,
+        "excluded_by_exclude_neural": excluded_by_neural,
+    }
+
+    if not filtered:
+        raise ValueError(
+            "Pool vuoto dopo i filtri codec. "
+            "Controlla --available-codecs, --exclude-codecs o --exclude-neural."
+        )
+
+    return filtered, filter_report
 
 
 def build_weights_for_profile(
@@ -271,16 +346,17 @@ def run_router(
 ) -> None:
     """Run the router pipeline end-to-end from a parsed CLI namespace.
 
-    Imports _run_profile and the local codec-availability helpers from
-    rde_router lazily to avoid a circular module-load import. Everything
-    else (system probes, calibration bundle handling, CSV loading,
+    Imports ``_run_profile`` and ``_apply_system_aware_policy`` from
+    rde_router lazily to avoid a circular module-load import. The codec
+    availability/normalization helpers (:func:`parse_codec_list`,
+    :func:`filter_points_by_codec_availability`) live in this module so
+    they no longer participate in the lazy cycle. Everything else
+    (system probes, calibration bundle handling, CSV loading,
     normalization mode resolution, per-profile loop, single-profile
     branch, execution result printing) is orchestrated here.
     """
     from src.router.rde_router import (
         _apply_system_aware_policy,
-        _filter_points_by_codec_availability,
-        _parse_codec_list,
         _run_profile,
     )
 
@@ -612,10 +688,10 @@ def run_router(
         capability_aware_enabled=args.capability_aware,
     )
 
-    available_codecs = _parse_codec_list(args.available_codecs)
-    exclude_codecs = _parse_codec_list(args.exclude_codecs)
+    available_codecs = parse_codec_list(args.available_codecs)
+    exclude_codecs = parse_codec_list(args.exclude_codecs)
 
-    points, filter_report = _filter_points_by_codec_availability(
+    points, filter_report = filter_points_by_codec_availability(
         points=points,
         available_codecs=available_codecs,
         exclude_codecs=exclude_codecs,
