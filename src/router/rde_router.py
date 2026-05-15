@@ -23,6 +23,7 @@ from src.router.adaptation.content_classifier_model import (
 )
 from src.router.core.rde_database import RDEPoint, select_best_rde
 from src.router.pipeline import build_weights_for_profile, run_router
+from src.router.profile_runner import apply_preferred_candidate_override
 from src.router.report import build_router_report
 from src.router.core.router_config import expand_argv_with_config
 from src.router.adaptation.system_penalty import (
@@ -299,65 +300,6 @@ def _build_content_classifier_router_report(args: argparse.Namespace) -> Dict[st
     return classifier_report
 
 
-def _apply_preferred_candidate_override(
-    *,
-    report: Dict[str, Any],
-    decision: Dict[str, Any],
-    candidate_key: str,
-    label_prefix: str,
-) -> None:
-    """Resolve whether a preferred candidate (suggestion/prediction) was selected.
-
-    Shared between the content-policy and content-classifier ``apply`` paths.
-    Mutates ``report`` in place: sets ``applied``, appends to ``reasons``/
-    ``warnings``, and records ``decision_audit`` when the router falls back
-    from the preferred candidate to its own J_RDE-ranked choice. No effect
-    when the report is disabled, in report-only mode, or has no candidate.
-    """
-    if not (report.get("enabled") and report.get("mode") == "apply"):
-        return
-
-    candidate = report.get(candidate_key)
-    if not candidate:
-        return
-
-    candidate_codec = str(candidate.get("codec"))
-    candidate_config = str(candidate.get("config"))
-
-    selected = decision.get("selected", {})
-    selected_codec = str(selected.get("codec"))
-    selected_config = str(selected.get("config"))
-
-    if selected_codec == candidate_codec and selected_config == candidate_config:
-        report["applied"] = True
-        report["reasons"].append(f"{label_prefix}_{candidate_key}_selected")
-        return
-
-    report["applied"] = False
-
-    preferred_audit = (
-        decision.get("decision_trace", {}).get("preferred_candidate")
-    )
-    report["decision_audit"] = preferred_audit
-
-    if preferred_audit and preferred_audit.get("admissible") is True:
-        report["warnings"].append(
-            f"{label_prefix}_{candidate_key}_not_j_total_competitive_fallback_to_router"
-        )
-        report["reasons"].append(
-            f"{candidate_key}_admissible_but_not_competitive"
-        )
-    else:
-        report["warnings"].append(
-            f"{label_prefix}_{candidate_key}_not_admissible_fallback_to_router"
-        )
-        report["reasons"].append(
-            f"{candidate_key}_not_admissible"
-        )
-
-    report["reasons"].append("fallback_to_router_selection")
-
-
 def _run_profile(
     args: argparse.Namespace,
     router_context: RouterContext,
@@ -501,14 +443,14 @@ def _run_profile(
         preferred_reason=preferred_reason or "preferred_candidate",
     )
 
-    _apply_preferred_candidate_override(
+    apply_preferred_candidate_override(
         report=content_policy_report,
         decision=decision,
         candidate_key="suggestion",
         label_prefix="content_policy",
     )
 
-    _apply_preferred_candidate_override(
+    apply_preferred_candidate_override(
         report=content_classifier_report,
         decision=decision,
         candidate_key="prediction",
