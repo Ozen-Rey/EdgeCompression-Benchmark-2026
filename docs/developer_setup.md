@@ -44,6 +44,23 @@ developer scripts should import and execute router tools through their
 subpackage paths, as shown above. See `docs/router_architecture.md` for the
 package map.
 
+## Unified smoke dispatcher
+
+`scripts/run_router.ps1` is a thin dispatcher that resolves a short scenario
+name to one of the existing `scripts/run_router_*.ps1` smoke scripts and
+invokes it. It does not duplicate any of the internal logic of those scripts;
+the legacy scripts remain callable directly and are unchanged.
+
+```powershell
+.\scripts\run_router.ps1 -Scenario v02-backends
+.\scripts\run_router.ps1 -Scenario v09-content-aware
+```
+
+Use `.\scripts\run_router.ps1 -Scenario list` to print all known scenarios.
+Unknown scenarios raise a clear error listing the supported names. The
+dispatcher propagates the non-zero exit code of the underlying script when the
+smoke fails.
+
 ## Backend Smoke Executables
 
 Backend smoke scripts use the router with `--strict-executables`, so codecs that
