@@ -46,11 +46,12 @@ package map.
 
 ## Unified smoke dispatcher
 
-`scripts/run_router.ps1` is the **preferred entrypoint** for running the
-PowerShell smoke scenarios. It is a thin dispatcher that resolves a short
-scenario name to one of the existing `scripts/run_router_*.ps1` smoke scripts
-and invokes it via PowerShell with `-ExecutionPolicy Bypass`. It does not
-duplicate any of the internal logic of those scripts.
+`scripts/run_router.ps1` is the **only PowerShell entrypoint** for running the
+router smoke scenarios. As of v0.42.39 the legacy `scripts/run_router_v*.ps1`
+files have been removed from the repository; their operative logic is inlined
+into the dispatcher as `Invoke-Scenario<Name>` functions, one per scenario.
+Public scenario names (`v02-backends`, `v09-content-aware`, …) and their
+observable behavior are unchanged.
 
 ```powershell
 .\scripts\run_router.ps1 -Scenario list
@@ -88,13 +89,15 @@ verification flows into a single command:
   insertion order, excluding the aggregates themselves to prevent recursion.
   Longest variant, intended for full pre-release verification.
 
-### Legacy scripts
+### Legacy scripts (removed in v0.42.39)
 
-The direct `scripts/run_router_v*.ps1` scripts are still supported for
-backwards compatibility and **have not been removed** in this release; any
-existing tooling that invokes them keeps working unchanged. New smoke
-invocations should prefer the dispatcher so that the scenario surface stays
-in a single, discoverable place.
+The standalone `scripts/run_router_v*.ps1` files were removed from the
+repository in v0.42.39 once their bodies were inlined into the unified
+dispatcher. Any reference to `scripts/run_router_v02_backends.ps1`,
+`scripts/run_router_v09_content_aware.ps1`, etc. should be replaced with
+`scripts/run_router.ps1 -Scenario <name>` (same scenario names, same outputs,
+same exit-code semantics). The dispatcher remains the single source of truth
+for the supported scenario set.
 
 ## Backend Smoke Executables
 
@@ -111,9 +114,10 @@ where.exe ffmpeg
 where.exe vvencapp
 ```
 
-`scripts/run_router_v02_backends.ps1` performs a session-local PATH bootstrap for
-common WinGet installs. If `cjxl` or `ffmpeg` are not already visible through
-`where.exe`, the script searches under:
+The `v02-backends` scenario in `scripts/run_router.ps1` performs a
+session-local PATH bootstrap for common WinGet installs. If `cjxl` or
+`ffmpeg` are not already visible through `where.exe`, the scenario searches
+under:
 
 ```powershell
 $env:LOCALAPPDATA\Microsoft\WinGet\Packages
@@ -128,12 +132,12 @@ This bootstrap is only a developer smoke-script convenience. The router itself
 does not auto-install tools, does not perform implicit WinGet discovery, and
 continues to honor strict capability filtering exactly as configured.
 
-## Pytest temporary directory in smoke scripts
+## Pytest temporary directory in smoke scenarios
 
-The PowerShell smoke scripts under `scripts/run_router_*.ps1` that invoke
-pytest pass an explicit `--basetemp .pytest_tmp_<script_name>` directory local
-to the repository and remove it before and after the run. This avoids
-permission errors on the default global Windows pytest temp directory
-(`$env:LOCALAPPDATA\Temp\pytest-of-*`), and lets the scripts fail loudly via
+Each scenario in `scripts/run_router.ps1` that invokes pytest passes an
+explicit `--basetemp .pytest_tmp_run_router_<scenario>` directory local to the
+repository and removes it before and after the run. This avoids permission
+errors on the default global Windows pytest temp directory
+(`$env:LOCALAPPDATA\Temp\pytest-of-*`), and lets the scenarios fail loudly via
 `throw` when pytest returns a non-zero exit code. The local basetemp paths are
 ignored by `.gitignore` (`.pytest_tmp_*/`).

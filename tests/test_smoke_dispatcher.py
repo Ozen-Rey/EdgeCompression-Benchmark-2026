@@ -1,23 +1,25 @@
 """Static checks for ``scripts/run_router.ps1``.
 
-The dispatcher resolves short scenario names to existing
-``scripts/run_router_*.ps1`` smoke scripts. These tests do not execute
-PowerShell; they only read the dispatcher source and the developer
-setup doc and verify structural invariants:
+Since v0.42.39 the dispatcher is self-contained: each public scenario
+name maps to an ``Invoke-Scenario<Name>`` function defined inside
+``scripts/run_router.ps1`` itself, and the standalone
+``scripts/run_router_v*.ps1`` files have been removed from the
+repository.
 
-- the dispatcher exists and declares every required scenario;
-- each declared scenario points to an existing smoke script;
-- the dispatcher carries the PowerShell hygiene flags (``StrictMode``,
-  ``$ErrorActionPreference = "Stop"``, ``ExecutionPolicy Bypass``);
-- the dispatcher checks ``$LASTEXITCODE`` and propagates failures via
-  ``throw``;
-- the dispatcher exposes ``-Scenario list``;
-- the developer setup documentation shows the three canonical
-  dispatcher invocations.
+These tests do not execute PowerShell; they only read the dispatcher
+source and the developer setup doc and verify structural invariants:
 
-If a new scenario is added to the dispatcher without being added to the
-expected set here, ``test_dispatcher_has_no_unexpected_scenarios``
-fails so the test acts as a tripwire on the supported scenario surface.
+- every expected scenario is mapped to a handler function name and the
+  matching function definition is present;
+- the dispatcher does not retain delegation to the deleted legacy
+  scripts (no ``run_router_v*.ps1`` filenames as targets, no external
+  PowerShell launch of those files);
+- the dispatcher carries the PowerShell hygiene flags (StrictMode,
+  ``$ErrorActionPreference = "Stop"``, ``ExecutionPolicy Bypass`` when
+  applicable);
+- aggregate scenarios (``test``, ``smoke``, ``all``) behave as
+  documented;
+- the developer setup documentation lists the canonical invocations.
 """
 
 from __future__ import annotations
@@ -33,28 +35,35 @@ DISPATCHER_PATH = SCRIPTS_DIR / "run_router.ps1"
 DEVELOPER_SETUP_PATH = REPO_ROOT / "docs" / "developer_setup.md"
 
 EXPECTED_SCENARIOS: dict[str, str] = {
-    "v02-backends": "run_router_v02_backends.ps1",
-    "v05-config": "run_router_v05_config.ps1",
-    "v06-validation": "run_router_v06_validation.ps1",
-    "v07-experiments": "run_router_v07_experiments.ps1",
-    "v08-system-aware": "run_router_v08_system_aware.ps1",
-    "v09-content-aware": "run_router_v09_content_aware.ps1",
-    "v09-content-aware-benchmark-table": "run_router_v09_content_aware_benchmark_table.ps1",
-    "v09-content-aware-overhead": "run_router_v09_content_aware_overhead.ps1",
-    "v09-content-aware-paper-artifacts": "run_router_v09_content_aware_paper_artifacts.ps1",
-    "v09-content-classifier-model": "run_router_v09_content_classifier_model.ps1",
-    "v09-content-classifier-router": "run_router_v09_content_classifier_router.ps1",
-    "v09-content-metadata": "run_router_v09_content_metadata.ps1",
-    "v09-content-oracle": "run_router_v09_content_oracle.ps1",
-    "v09-image-features": "run_router_v09_image_features.ps1",
-    "v09-image-manifest": "run_router_v09_image_manifest.ps1",
-    "v09-metadata-policy": "run_router_v09_metadata_policy.ps1",
-    "v09-oracle-classifier": "run_router_v09_oracle_classifier.ps1",
-    "v09-oracle-classifier-sweep": "run_router_v09_oracle_classifier_sweep.ps1",
+    "v02-backends":                       "Invoke-ScenarioV02Backends",
+    "v05-config":                         "Invoke-ScenarioV05Config",
+    "v06-validation":                     "Invoke-ScenarioV06Validation",
+    "v07-experiments":                    "Invoke-ScenarioV07Experiments",
+    "v08-system-aware":                   "Invoke-ScenarioV08SystemAware",
+    "v09-content-aware":                  "Invoke-ScenarioV09ContentAware",
+    "v09-content-aware-benchmark-table":  "Invoke-ScenarioV09ContentAwareBenchmarkTable",
+    "v09-content-aware-overhead":         "Invoke-ScenarioV09ContentAwareOverhead",
+    "v09-content-aware-paper-artifacts":  "Invoke-ScenarioV09ContentAwarePaperArtifacts",
+    "v09-content-classifier-model":       "Invoke-ScenarioV09ContentClassifierModel",
+    "v09-content-classifier-router":      "Invoke-ScenarioV09ContentClassifierRouter",
+    "v09-content-metadata":               "Invoke-ScenarioV09ContentMetadata",
+    "v09-content-oracle":                 "Invoke-ScenarioV09ContentOracle",
+    "v09-image-features":                 "Invoke-ScenarioV09ImageFeatures",
+    "v09-image-manifest":                 "Invoke-ScenarioV09ImageManifest",
+    "v09-metadata-policy":                "Invoke-ScenarioV09MetadataPolicy",
+    "v09-oracle-classifier":              "Invoke-ScenarioV09OracleClassifier",
+    "v09-oracle-classifier-sweep":        "Invoke-ScenarioV09OracleClassifierSweep",
 }
 
+EXPECTED_AGGREGATE_SCENARIOS = ("test", "smoke", "all")
+
+REMOVED_LEGACY_SCRIPTS = tuple(
+    f"run_router_{name.replace('-', '_')}.ps1"
+    for name in EXPECTED_SCENARIOS
+) + ("run_router_v03_quick_calibration.ps1",)
+
 SCENARIO_ENTRY_RE = re.compile(
-    r'^\s*"(?P<scenario>v\d[\w-]*)"\s*=\s*"(?P<script>run_router_[\w_]+\.ps1)"',
+    r'^\s*"(?P<scenario>v\d[\w-]*)"\s*=\s*"(?P<handler>Invoke-Scenario\w+)"',
     re.MULTILINE,
 )
 
@@ -67,8 +76,6 @@ REQUIRED_DOC_EXAMPLES = (
     r".\scripts\run_router.ps1 -Scenario all",
 )
 
-EXPECTED_AGGREGATE_SCENARIOS = ("test", "smoke", "all")
-
 
 @pytest.fixture(scope="module")
 def dispatcher_text() -> str:
@@ -78,7 +85,7 @@ def dispatcher_text() -> str:
 @pytest.fixture(scope="module")
 def declared_scenarios(dispatcher_text: str) -> dict[str, str]:
     return {
-        m.group("scenario"): m.group("script")
+        m.group("scenario"): m.group("handler")
         for m in SCENARIO_ENTRY_RE.finditer(dispatcher_text)
     }
 
@@ -97,22 +104,21 @@ def test_dispatcher_declares_every_expected_scenario(
         f"Dispatcher must declare scenario '{scenario}' in ScenarioMap"
     )
     assert declared_scenarios[scenario] == EXPECTED_SCENARIOS[scenario], (
-        f"Scenario '{scenario}' must route to "
+        f"Scenario '{scenario}' must route to handler "
         f"'{EXPECTED_SCENARIOS[scenario]}' (got '{declared_scenarios[scenario]}')"
     )
 
 
 @pytest.mark.parametrize(
-    ("scenario", "target_script"),
+    ("scenario", "handler"),
     sorted(EXPECTED_SCENARIOS.items()),
 )
-def test_every_expected_scenario_target_exists_on_disk(
-    scenario: str, target_script: str
+def test_dispatcher_defines_handler_function(
+    scenario: str, handler: str, dispatcher_text: str
 ) -> None:
-    target_path = SCRIPTS_DIR / target_script
-    assert target_path.is_file(), (
-        f"Target smoke script '{target_script}' for scenario '{scenario}' "
-        f"does not exist on disk at {target_path}"
+    pattern = re.compile(rf"^function {re.escape(handler)} \{{", re.MULTILINE)
+    assert pattern.search(dispatcher_text), (
+        f"Dispatcher must define function '{handler}' for scenario '{scenario}'"
     )
 
 
@@ -125,6 +131,56 @@ def test_dispatcher_has_no_unexpected_scenarios(
         f"{sorted(extra)}. Either remove them or add them to "
         f"EXPECTED_SCENARIOS in this test with justification."
     )
+
+
+def test_scenario_map_contains_no_aggregate_names(
+    declared_scenarios: dict[str, str],
+) -> None:
+    for aggregate in EXPECTED_AGGREGATE_SCENARIOS:
+        assert aggregate not in declared_scenarios, (
+            f"Aggregate scenario '{aggregate}' must not appear in ScenarioMap "
+            "(it is handled separately and including it would risk recursion "
+            "from the 'all' aggregate)."
+        )
+
+
+@pytest.mark.parametrize("legacy_script", REMOVED_LEGACY_SCRIPTS)
+def test_legacy_smoke_scripts_are_removed_from_repo(legacy_script: str) -> None:
+    path = SCRIPTS_DIR / legacy_script
+    assert not path.exists(), (
+        f"Legacy smoke script '{legacy_script}' must be removed from the "
+        f"repository in v0.42.39 (still present at {path})."
+    )
+
+
+def test_dispatcher_does_not_reference_removed_legacy_scripts(
+    dispatcher_text: str,
+) -> None:
+    for legacy_script in REMOVED_LEGACY_SCRIPTS:
+        assert legacy_script not in dispatcher_text, (
+            f"Dispatcher must not reference the removed legacy script "
+            f"'{legacy_script}'. ScenarioMap targets are now handler "
+            "function names, not file paths."
+        )
+
+
+def test_dispatcher_does_not_launch_external_legacy_powershell_scripts(
+    dispatcher_text: str,
+) -> None:
+    """The pre-v0.42.39 dispatcher used ``& powershell -File <ScriptPath>``
+    to delegate to legacy scripts. After inlining, there should be no
+    PowerShell launch of any ``run_router_*.ps1`` file.
+    """
+    forbidden_patterns = (
+        re.compile(r"-File\s+\$ScriptPath"),
+        re.compile(r"powershell\s+-ExecutionPolicy\s+Bypass\s+-File\s+\.[\\/]+scripts"),
+    )
+    for pattern in forbidden_patterns:
+        match = pattern.search(dispatcher_text)
+        assert match is None, (
+            f"Dispatcher must not launch external smoke scripts; found "
+            f"pattern: '{match.group(0) if match else ''}'."
+        )
 
 
 def test_dispatcher_supports_scenario_list(dispatcher_text: str) -> None:
@@ -147,17 +203,9 @@ def test_dispatcher_sets_error_action_preference_to_stop(
     )
 
 
-def test_dispatcher_invokes_with_execution_policy_bypass(
-    dispatcher_text: str,
-) -> None:
-    assert "-ExecutionPolicy Bypass" in dispatcher_text, (
-        "Dispatcher must invoke target scripts with -ExecutionPolicy Bypass"
-    )
-
-
 def test_dispatcher_checks_last_exit_code(dispatcher_text: str) -> None:
     assert "$LASTEXITCODE" in dispatcher_text, (
-        "Dispatcher must read $LASTEXITCODE to detect target script failures"
+        "Dispatcher must read $LASTEXITCODE after native python invocations"
     )
 
 
@@ -165,24 +213,6 @@ def test_dispatcher_propagates_failure_via_throw(dispatcher_text: str) -> None:
     assert "throw" in dispatcher_text, (
         "Dispatcher must propagate failures via 'throw'"
     )
-
-
-def test_dispatcher_uses_test_path_on_target_script(
-    dispatcher_text: str,
-) -> None:
-    assert "Test-Path" in dispatcher_text, (
-        "Dispatcher must verify the target script with Test-Path before "
-        "invoking it"
-    )
-
-
-def test_developer_setup_documents_dispatcher_examples() -> None:
-    text = DEVELOPER_SETUP_PATH.read_text(encoding="utf-8")
-    for example in REQUIRED_DOC_EXAMPLES:
-        assert example in text, (
-            f"docs/developer_setup.md must document the dispatcher example "
-            f"'{example}'"
-        )
 
 
 @pytest.mark.parametrize("aggregate", EXPECTED_AGGREGATE_SCENARIOS)
@@ -198,9 +228,7 @@ def test_dispatcher_declares_aggregate_scenario(
 def test_aggregate_test_runs_required_python_steps(
     dispatcher_text: str,
 ) -> None:
-    assert "Invoke-AggregateTest" in dispatcher_text, (
-        "Dispatcher must define an Invoke-AggregateTest function"
-    )
+    assert "Invoke-AggregateTest" in dispatcher_text
     required_calls = (
         "src.router.observability.legacy_import_audit",
         '--basetemp ".pytest_tmp_dispatcher"',
@@ -217,93 +245,50 @@ def test_aggregate_test_runs_required_python_steps(
 def test_aggregate_test_cleans_pytest_tmp_directories(
     dispatcher_text: str,
 ) -> None:
-    assert "Invoke-PytestTempCleanup" in dispatcher_text, (
-        "Aggregate 'test' must call a cleanup helper for .pytest_tmp_*"
-    )
-    assert ".pytest_tmp*" in dispatcher_text, (
-        "Cleanup helper must target the .pytest_tmp* directory pattern"
-    )
+    assert "Invoke-PytestTempCleanup" in dispatcher_text
+    assert ".pytest_tmp*" in dispatcher_text
 
 
 def test_pytest_temp_cleanup_is_strict_mode_safe(dispatcher_text: str) -> None:
-    """``Invoke-PytestTempCleanup`` must not assume ``.FullName`` exists.
-
-    Under ``Set-StrictMode -Version Latest``, accessing a missing property
-    on a pipeline item throws. Resolve the path either through a
-    ``FileSystemInfo`` type check or via ``Join-Path`` from the repo root.
-    """
     cleanup_body_match = re.search(
         r"function Invoke-PytestTempCleanup \{(?P<body>.*?)\n\}",
         dispatcher_text,
         re.DOTALL,
     )
-    assert cleanup_body_match is not None, (
-        "Could not locate the body of Invoke-PytestTempCleanup"
-    )
+    assert cleanup_body_match is not None
     body = cleanup_body_match.group("body")
 
-    assert "-LiteralPath" in body, (
-        "Cleanup must address files via -LiteralPath to avoid wildcard "
-        "and quoting surprises"
-    )
-    uses_type_check = "[System.IO.FileSystemInfo]" in body
-    uses_join_path = "Join-Path" in body
-    assert uses_type_check and uses_join_path, (
-        "Cleanup must branch on FileSystemInfo type and fall back to "
-        "Join-Path so it works whether the enumerator yields DirectoryInfo "
-        "objects or raw strings under StrictMode"
-    )
-    assert "Test-Path -LiteralPath" in body, (
-        "Cleanup must re-check Test-Path -LiteralPath before Remove-Item"
-    )
-    assert "Remove-Item -LiteralPath" in body, (
-        "Cleanup must call Remove-Item with -LiteralPath, not a bare path"
-    )
-    assert "try" in body and "catch" in body, (
-        "Cleanup must wrap Remove-Item in try/catch so locked directories "
-        "do not abort the aggregate scenario"
-    )
+    assert "-LiteralPath" in body
+    assert "[System.IO.FileSystemInfo]" in body
+    assert "Join-Path" in body
+    assert "Test-Path -LiteralPath" in body
+    assert "Remove-Item -LiteralPath" in body
+    assert "try" in body and "catch" in body
 
 
 def test_aggregate_smoke_runs_recommended_pair(dispatcher_text: str) -> None:
-    assert "SmokeAggregateOrder" in dispatcher_text, (
-        "Dispatcher must declare an explicit SmokeAggregateOrder list"
-    )
-    assert '"v02-backends"' in dispatcher_text
-    assert '"v09-content-aware"' in dispatcher_text
+    assert "SmokeAggregateOrder" in dispatcher_text
     smoke_block_start = dispatcher_text.find("$SmokeAggregateOrder")
     assert smoke_block_start != -1
     smoke_block_end = dispatcher_text.find(")", smoke_block_start)
     assert smoke_block_end != -1
     smoke_block = dispatcher_text[smoke_block_start:smoke_block_end]
-    assert '"v02-backends"' in smoke_block, (
-        "SmokeAggregateOrder must include 'v02-backends'"
-    )
-    assert '"v09-content-aware"' in smoke_block, (
-        "SmokeAggregateOrder must include 'v09-content-aware'"
-    )
+    assert '"v02-backends"' in smoke_block
+    assert '"v09-content-aware"' in smoke_block
 
 
 def test_aggregate_all_iterates_over_scenario_map_only(
     dispatcher_text: str,
 ) -> None:
-    assert "Invoke-AggregateAll" in dispatcher_text, (
-        "Dispatcher must define an Invoke-AggregateAll function"
-    )
-
     all_body_match = re.search(
         r"function Invoke-AggregateAll \{(?P<body>.*?)\n\}",
         dispatcher_text,
         re.DOTALL,
     )
-    assert all_body_match is not None, (
-        "Could not locate the body of Invoke-AggregateAll"
-    )
+    assert all_body_match is not None
     all_body = all_body_match.group("body")
 
-    assert "$ScenarioMap.Keys" in all_body, (
-        "Aggregate 'all' must iterate over $ScenarioMap.Keys"
-    )
+    assert "$ScenarioMap.Keys" in all_body
     for aggregate in EXPECTED_AGGREGATE_SCENARIOS:
         assert f'"{aggregate}"' not in all_body, (
             f"Aggregate 'all' must not reference aggregate '{aggregate}' "
@@ -314,14 +299,15 @@ def test_aggregate_all_iterates_over_scenario_map_only(
 def test_aggregate_dispatch_branch_routes_to_each_aggregate_handler(
     dispatcher_text: str,
 ) -> None:
-    assert "$AggregateScenarios.Contains($Scenario)" in dispatcher_text, (
-        "Dispatcher must check $AggregateScenarios.Contains before routing"
-    )
-    for aggregate, handler in (
-        ("test", "Invoke-AggregateTest"),
-        ("smoke", "Invoke-AggregateSmoke"),
-        ("all", "Invoke-AggregateAll"),
-    ):
-        assert handler in dispatcher_text, (
-            f"Aggregate '{aggregate}' must route to handler {handler}"
+    assert "$AggregateScenarios.Contains($Scenario)" in dispatcher_text
+    for handler in ("Invoke-AggregateTest", "Invoke-AggregateSmoke", "Invoke-AggregateAll"):
+        assert handler in dispatcher_text
+
+
+def test_developer_setup_documents_dispatcher_examples() -> None:
+    text = DEVELOPER_SETUP_PATH.read_text(encoding="utf-8")
+    for example in REQUIRED_DOC_EXAMPLES:
+        assert example in text, (
+            f"docs/developer_setup.md must document the dispatcher example "
+            f"'{example}'"
         )

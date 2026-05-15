@@ -67,7 +67,7 @@ to the standard R-D-E/system-aware decision.
 The validation script checks both cases:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_router_v09_content_classifier_router.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\run_router.ps1 -Scenario v09-content-classifier-router
 ```
 
 Observed cases:
