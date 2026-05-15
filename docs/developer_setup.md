@@ -58,11 +58,35 @@ duplicate any of the internal logic of those scripts.
 .\scripts\run_router.ps1 -Scenario v09-content-aware
 ```
 
-`-Scenario list` prints all known scenarios with their target scripts.
-Unknown scenarios raise a clear error listing the supported names. The
-dispatcher propagates the non-zero exit code of the underlying script when the
-smoke fails, so CI wrappers and `try`/`catch` blocks see the failure exactly
-the way they do when invoking a script directly.
+`-Scenario list` prints both the single scenarios (with their target scripts)
+and the aggregate scenarios described below. Unknown scenarios raise a clear
+error listing the supported names. The dispatcher propagates the non-zero
+exit code of the underlying script when the smoke fails, so CI wrappers and
+`try`/`catch` blocks see the failure exactly the way they do when invoking a
+script directly.
+
+### Aggregate scenarios
+
+The dispatcher also exposes a few aggregate scenarios that bundle the common
+verification flows into a single command:
+
+```powershell
+.\scripts\run_router.ps1 -Scenario test
+.\scripts\run_router.ps1 -Scenario smoke
+.\scripts\run_router.ps1 -Scenario all
+```
+
+- `test` runs the local Python verifications: `legacy_import_audit`, `pytest`
+  with a private `--basetemp .pytest_tmp_dispatcher`, the `--help` smoke for
+  both `python -m src.router.rde_router` and the direct `src\router\rde_router.py`
+  invocation, and `py_compile` on the router core modules. After the steps
+  succeed it cleans up the local `.pytest_tmp_*` scratch directories. Fast and
+  safe to run frequently.
+- `smoke` runs the two recommended PowerShell smoke scenarios in order:
+  `v02-backends` followed by `v09-content-aware`. Stops at the first failure.
+- `all` runs every single scenario declared in the dispatcher, in deterministic
+  insertion order, excluding the aggregates themselves to prevent recursion.
+  Longest variant, intended for full pre-release verification.
 
 ### Legacy scripts
 

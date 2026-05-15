@@ -62,7 +62,12 @@ REQUIRED_DOC_EXAMPLES = (
     r".\scripts\run_router.ps1 -Scenario list",
     r".\scripts\run_router.ps1 -Scenario v02-backends",
     r".\scripts\run_router.ps1 -Scenario v09-content-aware",
+    r".\scripts\run_router.ps1 -Scenario test",
+    r".\scripts\run_router.ps1 -Scenario smoke",
+    r".\scripts\run_router.ps1 -Scenario all",
 )
+
+EXPECTED_AGGREGATE_SCENARIOS = ("test", "smoke", "all")
 
 
 @pytest.fixture(scope="module")
@@ -177,4 +182,106 @@ def test_developer_setup_documents_dispatcher_examples() -> None:
         assert example in text, (
             f"docs/developer_setup.md must document the dispatcher example "
             f"'{example}'"
+        )
+
+
+@pytest.mark.parametrize("aggregate", EXPECTED_AGGREGATE_SCENARIOS)
+def test_dispatcher_declares_aggregate_scenario(
+    aggregate: str, dispatcher_text: str
+) -> None:
+    assert f'"{aggregate}"' in dispatcher_text, (
+        f"Dispatcher must declare aggregate scenario '{aggregate}' in "
+        "AggregateScenarios"
+    )
+
+
+def test_aggregate_test_runs_required_python_steps(
+    dispatcher_text: str,
+) -> None:
+    assert "Invoke-AggregateTest" in dispatcher_text, (
+        "Dispatcher must define an Invoke-AggregateTest function"
+    )
+    required_calls = (
+        "src.router.observability.legacy_import_audit",
+        '--basetemp ".pytest_tmp_dispatcher"',
+        "src.router.rde_router --help",
+        "src\\router\\rde_router.py",
+        "py_compile",
+    )
+    for token in required_calls:
+        assert token in dispatcher_text, (
+            f"Aggregate 'test' must invoke '{token}'"
+        )
+
+
+def test_aggregate_test_cleans_pytest_tmp_directories(
+    dispatcher_text: str,
+) -> None:
+    assert "Invoke-PytestTempCleanup" in dispatcher_text, (
+        "Aggregate 'test' must call a cleanup helper for .pytest_tmp_*"
+    )
+    assert ".pytest_tmp*" in dispatcher_text, (
+        "Cleanup helper must target the .pytest_tmp* directory pattern"
+    )
+
+
+def test_aggregate_smoke_runs_recommended_pair(dispatcher_text: str) -> None:
+    assert "SmokeAggregateOrder" in dispatcher_text, (
+        "Dispatcher must declare an explicit SmokeAggregateOrder list"
+    )
+    assert '"v02-backends"' in dispatcher_text
+    assert '"v09-content-aware"' in dispatcher_text
+    smoke_block_start = dispatcher_text.find("$SmokeAggregateOrder")
+    assert smoke_block_start != -1
+    smoke_block_end = dispatcher_text.find(")", smoke_block_start)
+    assert smoke_block_end != -1
+    smoke_block = dispatcher_text[smoke_block_start:smoke_block_end]
+    assert '"v02-backends"' in smoke_block, (
+        "SmokeAggregateOrder must include 'v02-backends'"
+    )
+    assert '"v09-content-aware"' in smoke_block, (
+        "SmokeAggregateOrder must include 'v09-content-aware'"
+    )
+
+
+def test_aggregate_all_iterates_over_scenario_map_only(
+    dispatcher_text: str,
+) -> None:
+    assert "Invoke-AggregateAll" in dispatcher_text, (
+        "Dispatcher must define an Invoke-AggregateAll function"
+    )
+
+    all_body_match = re.search(
+        r"function Invoke-AggregateAll \{(?P<body>.*?)\n\}",
+        dispatcher_text,
+        re.DOTALL,
+    )
+    assert all_body_match is not None, (
+        "Could not locate the body of Invoke-AggregateAll"
+    )
+    all_body = all_body_match.group("body")
+
+    assert "$ScenarioMap.Keys" in all_body, (
+        "Aggregate 'all' must iterate over $ScenarioMap.Keys"
+    )
+    for aggregate in EXPECTED_AGGREGATE_SCENARIOS:
+        assert f'"{aggregate}"' not in all_body, (
+            f"Aggregate 'all' must not reference aggregate '{aggregate}' "
+            "in its body (would risk recursion)"
+        )
+
+
+def test_aggregate_dispatch_branch_routes_to_each_aggregate_handler(
+    dispatcher_text: str,
+) -> None:
+    assert "$AggregateScenarios.Contains($Scenario)" in dispatcher_text, (
+        "Dispatcher must check $AggregateScenarios.Contains before routing"
+    )
+    for aggregate, handler in (
+        ("test", "Invoke-AggregateTest"),
+        ("smoke", "Invoke-AggregateSmoke"),
+        ("all", "Invoke-AggregateAll"),
+    ):
+        assert handler in dispatcher_text, (
+            f"Aggregate '{aggregate}' must route to handler {handler}"
         )

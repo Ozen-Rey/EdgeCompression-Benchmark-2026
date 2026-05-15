@@ -12,7 +12,7 @@ into the appropriate group below.
 from typing import Dict
 
 
-ROUTER_VERSION = "0.42.37"
+ROUTER_VERSION = "0.42.38"
 
 
 FEATURE_GROUPS: Dict[str, Dict[str, str]] = {
