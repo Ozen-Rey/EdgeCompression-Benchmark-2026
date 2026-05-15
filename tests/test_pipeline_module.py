@@ -42,6 +42,23 @@ def test_pipeline_module_exports_extracted_helpers():
         assert callable(getattr(pipeline, name)), f"missing pipeline helper: {name}"
 
 
+def test_pipeline_module_does_not_import_from_rde_router():
+    """``pipeline.py`` must not pull anything from ``rde_router`` anymore.
+
+    The per-profile orchestration moved to :mod:`src.router.profile_runner`
+    in v0.42.34. Guarding against the textual import keeps the dependency
+    direction one-way (pipeline -> profile_runner) so the historical
+    pipeline <-> rde_router lazy cycle cannot creep back in.
+    """
+    pipeline_source = Path(pipeline.__file__).read_text(encoding="utf-8")
+    assert "from src.router.rde_router import" not in pipeline_source
+    assert "import src.router.rde_router" not in pipeline_source
+
+
+def test_run_router_is_importable_from_pipeline():
+    assert callable(run_router)
+
+
 def test_parse_codec_list_returns_none_for_missing_value():
     assert parse_codec_list(None) is None
     assert parse_codec_list("") is None
@@ -226,7 +243,9 @@ def test_apply_system_aware_policy_simulate_no_cuda_overrides_state():
 
 
 def test_normalize_weights_returns_normalized_components():
-    weights = pipeline._normalize_weights(1.0, 2.0, 1.0)
+    from src.router.profile_runner import _normalize_weights
+
+    weights = _normalize_weights(1.0, 2.0, 1.0)
 
     assert set(weights.keys()) == {"w_E", "w_R", "w_D"}
     assert weights["w_E"] == 0.25

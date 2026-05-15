@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import pytest
 
-from src.router.rde_router import _build_time_guard_report
+from src.router.profile_runner import build_time_guard_report
 
 
 @dataclass
@@ -18,7 +18,7 @@ def test_time_guard_reports_available_and_over_limit_points():
         Point("HEVC", "crf=15", 300.0),
     ]
 
-    report = _build_time_guard_report(
+    report = build_time_guard_report(
         points=points,
         max_time_ms=150.0,
         strict_time=False,
@@ -38,7 +38,7 @@ def test_time_guard_raises_when_no_time_available():
     ]
 
     with pytest.raises(ValueError, match="no time data is available"):
-        _build_time_guard_report(
+        build_time_guard_report(
             points=points,
             max_time_ms=150.0,
             strict_time=False,
@@ -52,7 +52,7 @@ def test_strict_time_raises_when_some_time_missing():
     ]
 
     with pytest.raises(ValueError, match="Strict time guard requested"):
-        _build_time_guard_report(
+        build_time_guard_report(
             points=points,
             max_time_ms=150.0,
             strict_time=True,
