@@ -223,8 +223,8 @@ def _select_configs(level: str, codecs: List[str]) -> Dict[str, List[str]]:
             selected["HEVC"] = level_configs.get("HEVC", [])
         else:
             raise ValueError(
-                f"Codec non supportato nella calibrazione v0.3: {codec_clean}. "
-                "Per ora sono supportati JPEG, JXL, HEVC."
+                f"Unsupported codec in v0.3 calibration: {codec_clean}. "
+                "Currently supported: JPEG, JXL, HEVC."
             )
 
     return selected

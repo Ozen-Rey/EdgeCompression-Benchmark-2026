@@ -140,7 +140,7 @@ def test_filter_points_by_codec_availability_drops_excluded_and_neural():
 def test_filter_points_by_codec_availability_raises_on_empty_pool():
     points = [_make_point("JPEG_AI")]
 
-    with pytest.raises(ValueError, match="Pool vuoto dopo i filtri codec"):
+    with pytest.raises(ValueError, match="Empty pool after codec filters"):
         filter_points_by_codec_availability(
             points=points,
             available_codecs=None,

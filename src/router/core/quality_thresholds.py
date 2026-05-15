@@ -79,8 +79,8 @@ def resolve_quality_floor(
     targets = domain_cfg.get("targets", {})
     if target_key not in targets:
         raise ValueError(
-            f"quality-target non valido per domain={domain_key}: {quality_target}. "
-            f"Target disponibili: {sorted(targets.keys())}"
+            f"Invalid quality-target for domain={domain_key}: {quality_target}. "
+            f"Available targets: {sorted(targets.keys())}"
         )
 
     target_floor = float(targets[target_key])

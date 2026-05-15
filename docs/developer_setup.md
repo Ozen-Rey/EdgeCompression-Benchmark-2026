@@ -53,6 +53,12 @@ into the dispatcher as `Invoke-Scenario<Name>` functions, one per scenario.
 Public scenario names (`v02-backends`, `v09-content-aware`, …) and their
 observable behavior are unchanged.
 
+For a deeper walkthrough of the dispatcher (`$ScenarioMap`,
+`Invoke-Scenario<Name>`, `Assert-LastExitCode`, `Invoke-LocalPytest`),
+how to add a new scenario, the static checks in
+`tests/test_smoke_dispatcher.py`, and the role of
+`scripts/run_router_cases.ps1`, see `docs/router_scripts.md`.
+
 ```powershell
 .\scripts\run_router.ps1 -Scenario list
 .\scripts\run_router.ps1 -Scenario v02-backends
