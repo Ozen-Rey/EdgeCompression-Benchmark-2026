@@ -18,6 +18,12 @@ freeze note.
 This document itself ships in v0.42.41, which is a documentation-only
 release on top of v0.42.40.
 
+**Active line.** v0.43.0 opens the paper / methodology track on top of
+the v0.42.40 freeze. It adds offline analysis only — specifically the
+`src.router.analysis.policy_comparison` module with paired bootstrap
+confidence intervals on the content-aware policies. The runtime router,
+the ranking score, and the operational report schema are unchanged.
+
 ## Original roadmap recap
 
 The R-D-E router was originally scoped along three parallel axes:
@@ -173,13 +179,18 @@ release will pick a small subset.
    structural freeze; v0.42.41 is a documentation-only follow-up that
    adds this roadmap status page. No further structural refactor is
    planned on the v0.42.x line.
-2. **Decide between the final paper evaluation package and a
-   context-inheritance report-only feature** as the next concrete unit
-   of work. The paper package consolidates existing artifacts under
-   `docs/content_aware_paper_notes.md` and the v09 dispatcher scenarios;
-   the context-inheritance feature adds a new report-only signal (see
-   below).
-3. **No further refactor unless required by a feature.** Post-freeze
+2. **v0.43.0 = paper / methodology package.** First step on top of the
+   freeze: ship offline analysis that makes the existing prototype
+   defensible as a paper artefact. v0.43.0 specifically adds
+   `src.router.analysis.policy_comparison` — a single comparison table
+   over the existing content-aware policies with paired bootstrap
+   confidence intervals on `mean_regret` and
+   `relative_reduction_vs_global`. No runtime changes.
+3. **Open after v0.43.0:** confidence-gated content-aware routing
+   (predictions accepted only when the classifier confidence exceeds a
+   threshold), drift detection on the feedback log, and a context
+   inheritance prior (report-only). See "Candidate next feature" below.
+4. **No further refactor unless required by a feature.** Post-freeze
    refactors should be motivated by a specific feature on the roadmap
    above, not by general code hygiene, to keep the v0.42.40 baseline
    citable.
