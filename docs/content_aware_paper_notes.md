@@ -176,6 +176,81 @@ before they can be selected), while still letting the predictor
 recover the within-pool routing opportunity. The decision explanation
 render makes this separation explicit in every decision it explains.
 
+## Predictor interpretability and class imbalance
+
+The router ships an offline interpretability audit
+(`python -m src.router.analysis.content_predictor_interpretability`)
+that opens the kNN metadata-only predictor without changing it. The
+audit is read-only against the existing pipeline artefacts (oracle
+by-image CSV, metadata/features CSV, optional classifier decisions
+CSV) and emits a single JSON report plus a handful of CSV/TXT
+artefacts.
+
+The audit answers questions that the headline regret-reduction number
+alone does not address.
+
+**Class imbalance.** The current benchmark has 96 images across
+4 datasets and 3 oracle configurations. The class distribution is
+strongly skewed (HEVC oracle-optimal cases are very few). The audit
+reports the global oracle distribution, the per-dataset distribution,
+and the LOIO/LODO prediction distributions. When at least one LODO
+training fold drops a class (e.g. the only HEVC cases are concentrated
+in a single dataset), the audit emits
+`class_missing_in_lodo_training_fold`. When a class has at most five
+global examples, it emits
+`minority_class_too_small_for_structural_claim`. Both warnings are
+intended as scope markers in the paper, not as failure indicators.
+
+**HEVC as a qualitative case study.** Because HEVC oracle-optimal
+cases are few, the structural analysis (surrogate decision tree,
+logistic regression, attribution) is performed on the binary
+JPEG-vs-JXL subproblem. HEVC rows are kept in the report as a
+qualitative case study with per-image listing (image_id, dataset,
+features, oracle codec, classifier predictions under LOIO and LODO),
+but no decision-boundary claim is made on them.
+
+**Surrogate decision tree as interpretation, not replacement.** A
+depth-sweep of decision trees (depth 1–4) is fit to imitate the kNN
+predictions on the binary subproblem. For each depth the audit
+reports `fidelity_to_knn`, `fidelity_to_oracle`, the number of
+leaves, the confusion matrices, and an `export_text` rule listing.
+The aim is to test whether a small number of interpretable thresholds
+captures the kNN behavior. Shallow surrogates with high fidelity are
+evidence that the predictor is largely explained by a small set of
+splits; if depth must grow before fidelity rises, the boundary is not
+that simple. The surrogate is never proposed as a replacement for the
+kNN in the deployable router.
+
+**Logistic regression with pairwise interactions.** A logistic
+regression on the binary subproblem with explicit interaction terms
+(`megapixels × aspect_ratio`,
+`megapixels × orientation_class`,
+`aspect_ratio × orientation_class`,
+`aspect_ratio × resolution_class`) reports the coefficients sorted by
+absolute magnitude. Coefficients are reported as descriptive
+quantities; no claim of statistical significance is made unless an
+appropriate test is performed, and none is performed here by design.
+When the logistic regression cannot be fit (collinearity, single
+class, separation), the audit records `logistic_regression_fit_failed`
+or `logistic_regression_skipped_single_class_target` in its warnings
+rather than reporting a fabricated number.
+
+**Model-agnostic feature attribution.** Two attribution methods are
+run against the surrogate's fidelity to the kNN: leave-one-feature-out
+(zero out one column at a time) and permutation (shuffle one column
+with a fixed seed). Both report `baseline_score`, `perturbed_score`,
+`delta` and `rank`. SHAP is intentionally **not** required; if it is
+installed it can be added as an optional path in a future release,
+but the default behavior is to use only the two lightweight methods
+above.
+
+**Auto-generated interpretation.** The JSON report carries an
+`interpretation` field with prudent wording (`suggests`,
+`is consistent with`, `within this benchmark`) and explicitly
+disclaims universal generalization. The audit is meant to make the
+behavior of the predictor transparent for the paper's
+predictive-methodology narrative, not to advertise it.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.
