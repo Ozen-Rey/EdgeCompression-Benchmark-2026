@@ -65,12 +65,12 @@ how to add a new scenario, the static checks in
 .\scripts\run_router.ps1 -Scenario v09-content-aware
 ```
 
-`-Scenario list` prints both the single scenarios (with their target scripts)
-and the aggregate scenarios described below. Unknown scenarios raise a clear
-error listing the supported names. The dispatcher propagates the non-zero
-exit code of the underlying script when the smoke fails, so CI wrappers and
-`try`/`catch` blocks see the failure exactly the way they do when invoking a
-script directly.
+`-Scenario list` prints both the single scenarios (with their
+`Invoke-Scenario<Name>` handler function) and the aggregate scenarios
+described below. Unknown scenarios raise a clear error listing the supported
+names. The dispatcher propagates the non-zero exit code of the underlying
+handler when the smoke fails, so CI wrappers and `try`/`catch` blocks see
+the failure exactly the way they do when invoking a scenario directly.
 
 ### Aggregate scenarios
 

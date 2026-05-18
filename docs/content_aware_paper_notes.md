@@ -86,11 +86,11 @@ Tecnick source-filtered pool:
 
 ## Suggested Paper Figures
 
-- Regret medio per metodo.
-- Riduzione relativa del regret per metodo.
-- Sensibilita rispetto a k sotto LOIO e LODO.
+- Mean regret per method.
+- Relative regret reduction per method.
+- Sensitivity to k under LOIO and LODO.
 - Oracle codec/configuration distribution.
-- Overhead delle feature rispetto al tempo di codifica.
+- Feature overhead relative to encode time.
 
 ## Suggested Paper Tables
 
