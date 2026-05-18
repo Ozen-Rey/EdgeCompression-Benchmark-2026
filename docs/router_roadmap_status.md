@@ -18,11 +18,19 @@ freeze note.
 This document itself ships in v0.42.41, which is a documentation-only
 release on top of v0.42.40.
 
-**Active line.** v0.43.0 opens the paper / methodology track on top of
-the v0.42.40 freeze. It adds offline analysis only — specifically the
-`src.router.analysis.policy_comparison` module with paired bootstrap
-confidence intervals on the content-aware policies. The runtime router,
-the ranking score, and the operational report schema are unchanged.
+**Active line.** v0.43.0 opened the paper / methodology track on top
+of the v0.42.40 freeze. It adds offline analysis only — specifically
+the `src.router.analysis.policy_comparison` module with paired
+bootstrap confidence intervals on the content-aware policies. v0.43.1
+added `src.router.observability.decision_explanation`, the
+per-decision Markdown/JSON render. v0.43.2 adds
+`src.router.analysis.content_predictor_interpretability`, a paper /
+methodology hardening pass that audits class balance, fits surrogate
+decision trees against the kNN, runs a logistic regression with
+pairwise interactions on the binary JPEG-vs-JXL subproblem, and
+produces leave-one-feature-out and permutation attribution. The
+runtime router, the ranking score, and the operational report schema
+are unchanged across all three releases.
 
 ## Original roadmap recap
 
