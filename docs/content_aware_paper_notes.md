@@ -306,6 +306,85 @@ The audit also emits `neural_inclusive_per_group_labels.csv` with
 These labels are the natural training target for a future
 neural-inclusive predictor; v0.43.3 does not train such a predictor.
 
+## Neural-inclusive predictive router evaluation
+
+v0.43.3 computed the per-image full-pool oracle and answered the
+theoretical question "where, and under which profile, are neural
+codecs oracle-optimal?". v0.43.4 answers the practical, operational
+question that follows: "can a lightweight routing policy anticipate
+those cases *before* the compression, using only training-time
+information?".
+
+The module that ships in this release is
+`src.router.analysis.neural_inclusive_predictive_router`. It is
+offline / read-only against the existing R-D-E CSV, does not change
+the router runtime, the ranking score, the operational report
+schema, or any CLI flag of `rde_router`. Five evaluation policies
+are run under both leave-one-image-out (LOIO) and
+leave-one-dataset-out (LODO):
+
+1. `robust_global_full_pool_baseline` — pick a single
+   (codec, config) from training (lowest mean J_RDE under full
+   training coverage), apply uniformly on test images.
+2. `source_aware_full_pool_majority` — per-source majority vote of
+   the per-training-image full-pool oracle; fallback to the global
+   baseline for unknown sources.
+3. `knn_metadata_full_pool` — kNN over metadata features
+   (megapixels, aspect_ratio, resolution_class, orientation_class)
+   with the per-training-image full-pool oracle label as the kNN
+   target.
+4. `classic_only_predictive_baseline` — same kNN as (3) but training
+   labels are the *classical-pool* oracle on training images.
+   Quantifies how much regret a classic-only predictor pays against
+   the full-pool oracle when neural codecs are theoretically
+   available.
+5. `full_pool_oracle` — upper-bound reference; not a router.
+
+The methodological rule of the module is strict. **The test image's
+measured R-D-E candidates are never used to choose the codec.** They
+are used only afterwards to look up the realised J_RDE of the
+predicted candidate, to compute the test image's full-pool oracle,
+and to compute regret against that oracle. A quality-floor violation
+on the test image is reported as `quality_violation=true` but never
+triggers a retroactive re-selection: that would leak target
+information into the policy and break the leave-out methodology.
+
+Outputs:
+
+- `neural_inclusive_predictive_router_decisions.csv` — one row per
+  (image, protocol, profile, floor, policy) with the predicted
+  codec/config/family, the oracle codec/config/family, the realised
+  J on the test image, the oracle J, the regret, family/exact match
+  flags, confidence (kNN vote share), fallback flag + reason,
+  quality_violation flag, and the provenance string that records
+  whether the predicted pair was present on the test image.
+- `neural_inclusive_predictive_router_summary.csv` — one row per
+  (policy, protocol, profile, floor) with mean/median/p90/max
+  regret, `relative_reduction_vs_global`, predicted
+  `neural_selection_rate`, `oracle_neural_rate`,
+  `neural_family_precision` / `neural_family_recall` against the
+  oracle, exact-match and family-match rates, fallback and
+  quality-violation rates, plus paired-bootstrap 95% CIs for
+  `mean_regret` and `relative_reduction_vs_global` (1000
+  resamples by default, deterministic under a fixed seed).
+- `neural_inclusive_predictive_router_report.json` — the full
+  structured report with inputs, codec_inventory, normalization
+  scope, profile_weights, summaries, interpretation, and the
+  provenance block that asserts
+  `policy_does_not_see_test_image_rde = true` and
+  `test_image_rde_used_only_for_realisation_and_oracle = true`.
+
+Together, v0.43.3 and v0.43.4 answer two complementary questions:
+the oracle audit (v0.43.3) describes the theoretical opportunity in
+the R-D-E space; the predictive router evaluation (v0.43.4)
+measures how much of that opportunity a lightweight metadata-only
+policy can recover under each protocol. The gap between
+`oracle_neural_rate` and predicted `neural_selection_rate` per
+(profile, floor) records where the predictor remains conservative;
+the gap between `knn_metadata_full_pool` and
+`classic_only_predictive_baseline` regret records the operational
+value of including neural codecs in the candidate pool.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.

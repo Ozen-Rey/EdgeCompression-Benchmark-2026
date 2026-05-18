@@ -29,15 +29,28 @@ methodology hardening pass that audits class balance, fits surrogate
 decision trees against the kNN, runs a logistic regression with
 pairwise interactions on the binary JPEG-vs-JXL subproblem, and
 produces leave-one-feature-out and permutation attribution. v0.43.3
-adds `src.router.analysis.neural_inclusive_oracle`, which lifts the
+added `src.router.analysis.neural_inclusive_oracle`, which lifts the
 analysis pool from the classical triple JPEG/JXL/HEVC to the full
 benchmark (classical + JPEG_AI + Ballé + Cheng + ELIC + TCM + DCAE)
 and quantifies when and where neural codecs become oracle-optimal
-under each operational profile and quality floor. v0.43.2 remains
-the canonical classic-only interpretability/class-imbalance audit;
-v0.43.3 is the neural-inclusive complement. The runtime router, the
-ranking score, and the operational report schema are unchanged
-across all four releases.
+under each operational profile and quality floor. v0.43.4 adds
+`src.router.analysis.neural_inclusive_predictive_router`, which
+turns the oracle audit into an operational evaluation: under
+leave-one-image-out and leave-one-dataset-out, five policies (robust
+global baseline, source-aware majority, full-pool kNN, classic-only
+kNN, and the full-pool oracle as upper bound) are scored against
+the per-image full-pool oracle, with paired bootstrap CIs on
+mean_regret and relative_reduction_vs_global plus neural-family
+precision/recall against the oracle's classical/neural label. The
+test image's measured R-D-E candidates are never used to choose
+the codec; they are used only afterwards to look up the realised
+J_RDE of the predicted pair and to compute regret against the
+oracle. v0.43.2 remains the canonical classic-only
+interpretability/class-imbalance audit; v0.43.3 is the
+neural-inclusive oracle complement; v0.43.4 is the
+neural-inclusive *predictive router* evaluation. The runtime
+router, the ranking score, and the operational report schema are
+unchanged across all five releases.
 
 ## Original roadmap recap
 
