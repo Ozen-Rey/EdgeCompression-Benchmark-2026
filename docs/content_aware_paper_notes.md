@@ -142,6 +142,40 @@ the bootstrap iterations, seed, CI quantiles, and an `inputs` /
 provenance section that preserves "unavailable" markers when a policy
 decisions file omits an optional column like `fallback_used`).
 
+## Decision explanation and safety framing
+
+The router ships a separate offline render
+(`python -m src.router.observability.decision_explanation`) that turns
+an existing router report JSON into a human-readable explanation of a
+single decision. See `docs/router_decision_explainability.md` for the
+full module documentation. The relevant framing for the paper is:
+
+- The content-aware layer (content policy or content classifier) is
+  **consultative**: it can suggest a codec/configuration based on
+  metadata or pixel features.
+- The router decides only **within the evaluated admissible pool**:
+  the pool that passes the quality guard and the other active hard
+  constraints (max rate / energy / time, codec availability,
+  capability filtering, system policy / penalty exclusions).
+- If the predictor's suggestion is not admissible, the router falls
+  back to its own ranked choice on the admissible pool.
+- If the predictor's suggestion is admissible but not competitive on
+  the active ranking score (`J_RDE`, or `J_total` when the system
+  penalty is applied), the router also falls back. The ranking score
+  the suggestion must beat is the one actually in use, not a softer
+  proxy.
+- Only when the suggestion is both admissible and competitive does the
+  router accept it. The decision is then recorded with selection
+  reason `content_policy_preferred_candidate` or
+  `content_classifier_preferred_candidate`.
+
+This separation between *suggestion* and *admissibility/competitiveness*
+is a deployable best practice: it caps the worst-case behavior of the
+predictor by construction (catastrophic predictions are filtered out
+before they can be selected), while still letting the predictor
+recover the within-pool routing opportunity. The decision explanation
+render makes this separation explicit in every decision it explains.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.
