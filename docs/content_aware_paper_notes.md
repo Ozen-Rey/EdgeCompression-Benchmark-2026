@@ -98,6 +98,50 @@ Tecnick source-filtered pool:
 - Overhead table.
 - Best-k sensitivity table.
 
+## Policy comparison and bootstrap uncertainty
+
+The router ships an offline analysis module
+(`python -m src.router.analysis.policy_comparison`) that consolidates the
+policies on a single comparison table and reports paired bootstrap
+confidence intervals for `mean_regret` and
+`relative_reduction_vs_global`. The module is read-only against
+artefacts already produced by the content-aware pipeline; it does not
+change the router runtime, the ranking score, or the operational report
+schema.
+
+Bootstrap is applied because the headline regret-reduction numbers are
+estimated on the current N=96 multi-source corpus. Paired resampling on
+image indices (1000 iterations by default, seedable) lets the report
+state the relative reduction as a stable point estimate with an explicit
+2.5%–97.5% interval, rather than as a single scalar that hides its own
+sampling uncertainty.
+
+The corresponding claim is therefore deliberately scoped: the regret
+reduction is reported in a *multi-source heterogeneous setting*, where
+the routing opportunity comes from the variance across sources
+(Kodak / Tecnick / CLIC / …) rather than from a large per-source count.
+The leave-one-dataset-out (LODO) protocol is the cross-source
+generalization test; bootstrap CIs quantify the within-corpus sampling
+uncertainty. No claim is made about a universal estimate over all
+natural images.
+
+Inputs consumed:
+
+- `v09_content_oracle_by_image.csv` — per-image regret for the robust
+  global baseline.
+- `v09_metadata_policy_decisions.csv` — per-image regret and paired
+  baseline for the source-aware (dataset-majority) policy.
+- (optional) `v09_oracle_classifier_decisions.csv` or
+  `v09_oracle_classifier_sweep_decisions.csv` — per-image kNN
+  predictions under LOIO and LODO; the sweep variant supports
+  `--classifier-feature-set` and `--classifier-k` filters.
+
+Outputs: `policy_comparison.csv` (flat table, one row per policy) and
+`policy_comparison.json` (same rows plus a top-level metadata block with
+the bootstrap iterations, seed, CI quantiles, and an `inputs` /
+provenance section that preserves "unavailable" markers when a policy
+decisions file omits an optional column like `fallback_used`).
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.
