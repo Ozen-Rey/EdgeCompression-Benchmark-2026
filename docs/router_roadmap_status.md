@@ -23,14 +23,21 @@ of the v0.42.40 freeze. It adds offline analysis only — specifically
 the `src.router.analysis.policy_comparison` module with paired
 bootstrap confidence intervals on the content-aware policies. v0.43.1
 added `src.router.observability.decision_explanation`, the
-per-decision Markdown/JSON render. v0.43.2 adds
+per-decision Markdown/JSON render. v0.43.2 added
 `src.router.analysis.content_predictor_interpretability`, a paper /
 methodology hardening pass that audits class balance, fits surrogate
 decision trees against the kNN, runs a logistic regression with
 pairwise interactions on the binary JPEG-vs-JXL subproblem, and
-produces leave-one-feature-out and permutation attribution. The
-runtime router, the ranking score, and the operational report schema
-are unchanged across all three releases.
+produces leave-one-feature-out and permutation attribution. v0.43.3
+adds `src.router.analysis.neural_inclusive_oracle`, which lifts the
+analysis pool from the classical triple JPEG/JXL/HEVC to the full
+benchmark (classical + JPEG_AI + Ballé + Cheng + ELIC + TCM + DCAE)
+and quantifies when and where neural codecs become oracle-optimal
+under each operational profile and quality floor. v0.43.2 remains
+the canonical classic-only interpretability/class-imbalance audit;
+v0.43.3 is the neural-inclusive complement. The runtime router, the
+ranking score, and the operational report schema are unchanged
+across all four releases.
 
 ## Original roadmap recap
 

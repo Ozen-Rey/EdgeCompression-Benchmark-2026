@@ -251,6 +251,61 @@ disclaims universal generalization. The audit is meant to make the
 behavior of the predictor transparent for the paper's
 predictive-methodology narrative, not to advertise it.
 
+## Neural-inclusive R-D-E routing audit
+
+The earlier content-aware analysis (`router_content_aware`,
+`policy_comparison`, `content_predictor_interpretability`) restricted
+the candidate pool to the deployable classical triple
+JPEG / JXL / HEVC. That subset is a **classic-only ablation**: it
+answers "given the deployable classical pool, can a lightweight
+predictor reduce regret?", but it does not answer the broader R-D-E
+question "when, and under which operational profile, do neural
+codecs become oracle-optimal once they are included in the candidate
+pool?".
+
+v0.43.3 ships a separate offline audit
+(`python -m src.router.analysis.neural_inclusive_oracle`) that uses
+the full image benchmark (classical + JPEG_AI + Ballé + Cheng + ELIC
++ TCM + DCAE) and computes per-pool / per-profile / per-floor
+oracles. The router runtime is not changed; the audit consumes only
+existing benchmark artefacts (e.g.
+`results/images/image_4dataset_RDE_paper_ready.csv`, or a metrics
+file joined on `(codec, param)` with an energy side file).
+
+Key design choices:
+
+- **Normalization is computed once on the full pool**, not separately
+  per pool. Re-normalizing per pool would break J_RDE comparability
+  between classical-only and full-pool oracles. The report records
+  `normalization.scope = full_pool_global`.
+- **Profiles come from the official router profiles** in
+  `src/router/core/profiles.py` (`balanced`, `energy-limited`,
+  `bandwidth-limited`, `quality-first`), not from ad-hoc weights.
+  The exact `(w_R, w_E, w_D)` used are written into
+  `report.profile_weights` so the analysis is self-contained.
+- **The audit framing avoids universal claims about neural codecs.**
+  The interpretation strings use scoped wording (`within this
+  benchmark`, `suggests`, `is consistent with`) and explicitly state
+  that observed wins under one profile **do not imply universal
+  dominance** of neural over classical codecs.
+
+The audit's main scientific question is asymmetric: *the classical
+pool is the deployable default*; the question is whether the neural
+pool covers a region of the R-D-E space that classical codecs do not
+reach under any tested profile, and how that region is described
+operationally (low bitrate × high energy, low energy × moderate
+quality, etc.). The output `neural_inclusive_pool_comparison.csv`
+quantifies this region: `mean_regret_classic_vs_full` per
+(profile, floor), `neural_selection_rate_in_full`,
+`mean_rate_gain_when_neural_selected`,
+`mean_energy_penalty_when_neural_selected`.
+
+The audit also emits `neural_inclusive_per_group_labels.csv` with
+`classic_pool_oracle_label`, `full_pool_oracle_label`,
+`full_pool_oracle_family`, and `regret_classic_vs_full` per group.
+These labels are the natural training target for a future
+neural-inclusive predictor; v0.43.3 does not train such a predictor.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.
