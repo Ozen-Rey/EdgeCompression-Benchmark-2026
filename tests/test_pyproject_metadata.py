@@ -41,6 +41,19 @@ def test_pyproject_declares_rde_router_console_script() -> None:
     )
 
 
+def test_pyproject_declares_rde_decision_explain_console_script() -> None:
+    data = _load_pyproject()
+    scripts = data["project"].get("scripts", {})
+    assert (
+        scripts.get("rde-decision-explain")
+        == "src.router.observability.decision_explanation:main"
+    ), (
+        "pyproject.toml must expose 'rde-decision-explain' as a "
+        "[project.scripts] entry pointing to "
+        "src.router.observability.decision_explanation:main"
+    )
+
+
 def test_pyproject_declares_test_extra() -> None:
     data = _load_pyproject()
     extras = data["project"].get("optional-dependencies", {})
