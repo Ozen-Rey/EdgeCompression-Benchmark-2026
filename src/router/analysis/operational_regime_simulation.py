@@ -706,12 +706,23 @@ def _realise_decision(
         "oracle_codec": oracle["codec"] if oracle else None,
         "oracle_config": oracle["config"] if oracle else None,
         "oracle_family": oracle["family"] if oracle else None,
+        "oracle_status": "feasible" if oracle else "infeasible",
         "selected_cost": None,
         "oracle_cost": oracle["cost"] if oracle else None,
         "regret": None,
+        "excluded_from_regret": oracle is None,
         "selected_energy": None,
         "selected_rate": None,
         "selected_quality": None,
+        "oracle_quality": oracle["quality"] if oracle else None,
+        "selected_quality_margin": None,
+        "oracle_quality_margin": (
+            oracle["quality"] - quality_floor
+            if oracle is not None and quality_floor is not None
+            else None
+        ),
+        "baseline_quality_margin": None,
+        "realized_quality_violation": False,
         "quality_violation": False,
         "exact_match": None,
         "family_match": None,
@@ -763,6 +774,18 @@ def _realise_decision(
             "selected_energy": row["energy"],
             "selected_rate": row["rate"],
             "selected_quality": row["quality"],
+            "selected_quality_margin": (
+                row["quality"] - quality_floor
+                if quality_floor is not None
+                else None
+            ),
+            "oracle_quality": oracle["quality"] if oracle else None,
+            "oracle_quality_margin": (
+                oracle["quality"] - quality_floor
+                if oracle is not None and quality_floor is not None
+                else None
+            ),
+            "realized_quality_violation": quality_violation,
             "quality_violation": quality_violation,
             "exact_match": (
                 oracle is not None
@@ -790,7 +813,8 @@ def _summarise_decisions(
     quality_floor: Optional[float],
 ) -> Dict[str, Any]:
     n = len(decisions)
-    regrets = [float(d["regret"]) for d in decisions if d.get("regret") is not None]
+    regret_eligible = [d for d in decisions if not d.get("excluded_from_regret")]
+    regrets = [float(d["regret"]) for d in regret_eligible if d.get("regret") is not None]
     objectives = [
         float(d["selected_raw_objective"])
         for d in decisions
@@ -821,6 +845,11 @@ def _summarise_decisions(
         "protocol": protocol,
         "quality_floor": quality_floor,
         "num_images": n,
+        "num_regret_eligible": len(regret_eligible),
+        "infeasible_rate": (
+            sum(1 for d in decisions if d.get("oracle_status") == "infeasible") / n
+            if n else None
+        ),
         "mean_energy": mean(energies) if energies else None,
         "energy_saving_vs_global_baseline": None,
         "mean_rate": mean(rates) if rates else None,
@@ -896,6 +925,7 @@ def _plot_data_rows(summaries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "mean_energy": s["mean_energy"],
             "mean_rate": s["mean_rate"],
             "mean_quality": s["mean_quality"],
+            "infeasible_rate": s["infeasible_rate"],
             "mean_regret": s["mean_regret"],
             "energy_saving_vs_global_baseline": s["energy_saving_vs_global_baseline"],
             "rate_reduction_vs_global_baseline": s["rate_reduction_vs_global_baseline"],
@@ -1017,6 +1047,50 @@ def _family_confusion(decisions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 }
             )
     return rows
+
+
+def _attach_baseline_quality_margins(decisions: List[Dict[str, Any]]) -> None:
+    baseline_by_key = {
+        (
+            d["image_id"],
+            d["regime"],
+            d["protocol"],
+            _quality_floor_key(d["quality_floor"]),
+        ): d
+        for d in decisions
+        if d["policy"] == "robust_global_full_pool_baseline"
+    }
+    for d in decisions:
+        baseline = baseline_by_key.get(
+            (
+                d["image_id"],
+                d["regime"],
+                d["protocol"],
+                _quality_floor_key(d["quality_floor"]),
+            )
+        )
+        if baseline is None:
+            continue
+        d["baseline_quality_margin"] = baseline.get("selected_quality_margin")
+
+
+def build_oracle_quality_contract(decisions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    oracle_rows = [d for d in decisions if d["policy"] == "full_pool_oracle"]
+    violation_count = sum(
+        1 for d in oracle_rows
+        if d.get("oracle_status") == "feasible"
+        and d.get("oracle_quality_margin") is not None
+        and float(d["oracle_quality_margin"]) < -1e-9
+    )
+    return {
+        "hard_quality_floor": True,
+        "infeasible_cases_reported_separately": True,
+        "oracle_never_violates_quality_floor": violation_count == 0,
+        "oracle_violation_count": violation_count,
+        "infeasible_case_count": sum(
+            1 for d in oracle_rows if d.get("oracle_status") == "infeasible"
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1438,6 +1512,170 @@ def _shift_relation(predicted: Optional[float], oracle: Optional[float]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Expected-quality safety gate (shadow / no target leakage)
+# ---------------------------------------------------------------------------
+
+
+def _expected_quality_stats(
+    training_rows: List[Dict[str, Any]],
+    pair: Optional[Pair],
+) -> Dict[str, Optional[float]]:
+    if pair is None:
+        return {"expected_quality_min": None, "expected_quality_p10": None}
+    values = [
+        float(r["quality"])
+        for r in training_rows
+        if r["codec"] == pair[0] and r["config"] == pair[1]
+    ]
+    if not values:
+        return {"expected_quality_min": None, "expected_quality_p10": None}
+    return {
+        "expected_quality_min": min(values),
+        "expected_quality_p10": _quantile(values, 0.10),
+    }
+
+
+def evaluate_expected_quality_gate_shadow(
+    *,
+    rows: List[Dict[str, Any]],
+    metadata_by_image: Dict[str, Dict[str, Any]],
+    quality_floors: List[Optional[float]],
+    protocols: List[str],
+    regimes: Dict[str, Dict[str, Any]],
+    k: int,
+) -> Dict[str, List[Dict[str, Any]]]:
+    candidate_index = _candidate_index(rows)
+    image_ids = sorted({r["image_id"] for r in rows})
+    image_to_dataset: Dict[str, str] = {}
+    for row in rows:
+        image_to_dataset.setdefault(row["image_id"], str(row.get("dataset")))
+
+    decisions: List[Dict[str, Any]] = []
+    summaries: List[Dict[str, Any]] = []
+
+    for protocol in protocols:
+        for regime_name in REGIME_ORDER:
+            active_regime = regimes[regime_name]
+            for floor in quality_floors:
+                oracle_by_image = {
+                    image_id: _oracle_for_image(
+                        rows,
+                        image_id=image_id,
+                        pool="full_pool",
+                        regime=active_regime,
+                        quality_floor=floor,
+                    )
+                    for image_id in image_ids
+                }
+                for gate_policy in [
+                    "policy_without_expected_quality_gate",
+                    "policy_with_expected_quality_gate_shadow",
+                ]:
+                    policy_decisions: List[Dict[str, Any]] = []
+                    for image_id in image_ids:
+                        dataset = image_to_dataset[image_id]
+                        training_rows = (
+                            _loio_training_rows(rows, image_id)
+                            if protocol == "loio"
+                            else _lodo_training_rows(rows, dataset)
+                        )
+                        test_meta = metadata_by_image.get(image_id)
+                        predicted: Optional[Pair] = None
+                        confidence: Optional[float] = None
+                        fallback = _policy_robust_global(
+                            training_rows=training_rows,
+                            pool="full_pool",
+                            regime=active_regime,
+                            quality_floor=floor,
+                        )
+                        if test_meta is not None:
+                            predicted, confidence, fallback = _policy_knn_metadata(
+                                training_rows=training_rows,
+                                metadata_by_image=metadata_by_image,
+                                pool="full_pool",
+                                regime=active_regime,
+                                quality_floor=floor,
+                                test_meta=test_meta,
+                                k=k,
+                            )
+                        selected = predicted or fallback
+                        expected = _expected_quality_stats(training_rows, predicted)
+                        fallback_used = predicted is None
+                        fallback_reason = "knn_no_training_labels" if fallback_used else ""
+                        if gate_policy == "policy_with_expected_quality_gate_shadow":
+                            expected_min = expected.get("expected_quality_min")
+                            expected_p10 = expected.get("expected_quality_p10")
+                            gate_fails = (
+                                floor is not None
+                                and (
+                                    expected_min is None
+                                    or expected_min < floor
+                                    or (expected_p10 is not None and expected_p10 < floor)
+                                )
+                            )
+                            if gate_fails:
+                                selected = fallback
+                                fallback_used = True
+                                fallback_reason = "expected_quality_gate_training_floor_failure"
+                        decision = _realise_decision(
+                            pair=selected,
+                            image_id=image_id,
+                            dataset=dataset,
+                            protocol=protocol,
+                            regime_name=regime_name,
+                            policy=gate_policy,
+                            quality_floor=floor,
+                            confidence=confidence,
+                            fallback_used=fallback_used,
+                            fallback_reason=fallback_reason,
+                            candidate_index=candidate_index,
+                            active_regime=active_regime,
+                            oracle=oracle_by_image[image_id],
+                        )
+                        decision.update(expected)
+                        policy_decisions.append(decision)
+                        decisions.append(decision)
+                    summaries.append(
+                        _summarise_decisions(
+                            policy_decisions,
+                            regime=regime_name,
+                            policy=gate_policy,
+                            protocol=protocol,
+                            quality_floor=floor,
+                        )
+                    )
+    _attach_baseline_quality_margins(decisions)
+    _attach_quality_gate_comparison_metrics(summaries)
+    return {"decisions": decisions, "summaries": summaries}
+
+
+def _attach_quality_gate_comparison_metrics(summaries: List[Dict[str, Any]]) -> None:
+    ungated_by_key = {
+        (s["regime"], s["protocol"], _quality_floor_key(s["quality_floor"])): s
+        for s in summaries
+        if s["policy"] == "policy_without_expected_quality_gate"
+    }
+    for summary in summaries:
+        summary["quality_violation_reduction_vs_ungated"] = None
+        summary["objective_gain_vs_global_baseline"] = None
+        if summary["policy"] != "policy_with_expected_quality_gate_shadow":
+            continue
+        ungated = ungated_by_key.get(
+            (summary["regime"], summary["protocol"], _quality_floor_key(summary["quality_floor"]))
+        )
+        if not ungated:
+            continue
+        summary["quality_violation_reduction_vs_ungated"] = _relative_reduction(
+            summary.get("quality_violation_rate"),
+            ungated.get("quality_violation_rate"),
+        )
+        summary["objective_gain_vs_global_baseline"] = _relative_reduction(
+            summary.get("mean_selected_objective"),
+            ungated.get("mean_selected_objective"),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Evaluation loop
 # ---------------------------------------------------------------------------
 
@@ -1532,6 +1770,7 @@ def evaluate_operational_regimes(
                         )
                     )
 
+    _attach_baseline_quality_margins(all_decisions)
     _attach_baseline_reductions(summaries)
     plot_data = _plot_data_rows(summaries)
     winners = _winner_distribution(all_decisions)
@@ -2285,7 +2524,7 @@ def _quality_metric_contract(quality_col: str) -> Dict[str, Any]:
     if metric == "ssimulacra2":
         return {
             "quality_col": quality_col,
-            "role": "preferred_perceptual_metric_for_image_routing",
+            "role": "preferred_perceptual_image_metric",
             "interpretation": (
                 "This run is aligned with the image router's perceptual quality metric."
             ),
@@ -2393,6 +2632,14 @@ def main(argv: Optional[List[str]] = None) -> None:
         protocols=protocols,
         k=args.k,
     )
+    quality_gate = evaluate_expected_quality_gate_shadow(
+        rows=rows,
+        metadata_by_image=metadata_by_image,
+        quality_floors=quality_floors,
+        protocols=protocols,
+        regimes=result["regime_definitions"],
+        k=args.k,
+    )
     switch_analysis = build_switch_analysis(
         rows=rows,
         quality_floors=quality_floors,
@@ -2432,6 +2679,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     switch_reason_path = out_dir / "switch_reason_by_rate_weight.csv"
     switch_scatter_path = out_dir / "neural_vs_classic_tradeoff_scatter.csv"
     switch_floor_path = out_dir / "quality_floor_switch_summary.csv"
+    gate_summary_path = out_dir / "quality_gate_comparison_summary.csv"
+    gate_decisions_path = out_dir / "quality_gate_comparison_decisions.csv"
     report_path = Path(args.out_json) if args.out_json else out_dir / "operational_regime_report.json"
 
     _write_csv(summary_path, result["summaries"])
@@ -2446,6 +2695,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     _write_csv(switch_reason_path, switch_reason_by_rate)
     _write_csv(switch_scatter_path, switch_analysis["tradeoff_scatter"] + _switch_tradeoff_scatter(switch_rate_by_image))
     _write_csv(switch_floor_path, switch_analysis["quality_floor_summary"])
+    _write_csv(gate_summary_path, quality_gate["summaries"])
+    _write_csv(gate_decisions_path, quality_gate["decisions"])
     _write_json(
         switch_report_path,
         {
@@ -2474,6 +2725,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         str(switch_reason_path),
         str(switch_scatter_path),
         str(switch_floor_path),
+        str(gate_summary_path),
+        str(gate_decisions_path),
     ]
     switch_plot_info = _maybe_generate_switch_plots(
         out_dir=out_dir,
@@ -2518,6 +2771,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         },
         "normalization": normalization,
         "regime_definitions": result["regime_definitions"],
+        "oracle_quality_contract": build_oracle_quality_contract(result["decisions"]),
         "rate_pressure_sweep": {
             "rate_weights": RATE_PRESSURE_GRID,
             "weight_rule": "w_R=grid_value; w_E=(1-w_R)/2; w_D=(1-w_R)/2",
@@ -2528,6 +2782,12 @@ def main(argv: Optional[List[str]] = None) -> None:
             "by_image_csv": str(switch_by_image_path),
             "report_json": str(switch_report_path),
             "rate_pressure_transition": switch_transition,
+        },
+        "expected_quality_gate": {
+            "mode": "shadow_report_only",
+            "uses_target_quality_for_decision": False,
+            "summary_csv": str(gate_summary_path),
+            "decisions_csv": str(gate_decisions_path),
         },
         "policies": POLICIES,
         "summaries": result["summaries"],
@@ -2550,6 +2810,8 @@ def main(argv: Optional[List[str]] = None) -> None:
             "switch_reason_by_rate_weight_csv": str(switch_reason_path),
             "neural_vs_classic_tradeoff_scatter_csv": str(switch_scatter_path),
             "quality_floor_switch_summary_csv": str(switch_floor_path),
+            "quality_gate_comparison_summary_csv": str(gate_summary_path),
+            "quality_gate_comparison_decisions_csv": str(gate_decisions_path),
             "report_json": str(report_path),
         },
     }
