@@ -1,0 +1,48 @@
+\subsection{Artefatti per la simulazione dei regimi operativi}
+\label{sec:artefatti-regimi-operativi}
+
+Gli artefatti della simulazione dei regimi operativi sono separati dal
+runtime router. Essi consumano CSV e JSON gia prodotti dal benchmark
+R-D-E e generano tabelle, dati di plotting e figure derivate per la
+tesi. Nessun file Python deve essere copiato nel progetto LaTeX: nella
+tesi entrano soltanto figure PNG, tabelle LaTeX e testo descrittivo.
+
+\begin{table}[t]
+\centering
+\caption{Artefatti per la simulazione dei regimi operativi e la loro integrazione nella tesi.}
+\label{tab:operational-regime-thesis-artifacts}
+\begin{tabular}{p{0.30\linewidth} p{0.58\linewidth}}
+\toprule
+Artefatto & Ruolo nella pipeline di tesi \\
+\midrule
+\texttt{operational\_regime\_simulation.py} &
+Genera gli artefatti scientifici primari della simulazione, cioe CSV e
+JSON con decisioni, summary, switch analysis, quality contract e safety
+gate. Non genera PNG nel path principale. \\
+\texttt{operational\_regime\_plots.py} &
+Legge i CSV finali della simulazione e produce figure PNG derivate. Il
+plotter e rieseguibile indipendentemente e un errore di rendering non
+invalida i CSV/JSON scientifici. \\
+\texttt{operational\_regime\_diagnostics.py} &
+Diagnostica la consistenza tra metrica di qualita, oracle, objective,
+regret e no-leakage. Il suo ruolo e interpretativo e read-only. \\
+\texttt{operational\_regime\_switch\_summary.csv} &
+Riassume, per regime e quality floor, quando vince il miglior candidato
+classico o neurale e con quale switch reason. Alimenta la Tabella
+\ref{tab:ssimulacra2-switch-summary}. \\
+\texttt{switch\_reason\_by\_rate\_weight.csv} &
+Fornisce i dati per visualizzare come cambiano le switch reason al
+crescere del peso sul rate. Alimenta la Figura
+\ref{fig:switch-reason-rate-weight}. \\
+\texttt{quality\_gate\_comparison\_summary.csv} &
+Confronta la policy predittiva senza gate e la variante shadow con
+expected-quality gate. Alimenta la Tabella
+\ref{tab:expected-quality-gate-summary}. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Questa organizzazione distingue gli artefatti scientifici primari dai
+rendering derivati. I CSV/JSON sono la base riproducibile dei risultati;
+le figure PNG sono viste grafiche rigenerabili a partire dagli stessi
+dati.
