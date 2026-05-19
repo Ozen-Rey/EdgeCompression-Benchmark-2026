@@ -79,6 +79,10 @@ active quality floor, infeasible cases are reported separately, and
 predictive realized quality violations are distinguished from oracle
 violations. It also adds a report-only expected-quality gate shadow
 comparison based only on training-fold quality statistics.
+v0.43.6.4 splits operational-regime artifact generation from plot
+rendering: the simulation writes CSV/JSON only, while
+`src.router.analysis.operational_regime_plots` renders PNGs
+best-effort from those CSVs in a separate, rerunnable step.
 
 ## Original roadmap recap
 
