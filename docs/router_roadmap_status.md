@@ -66,6 +66,13 @@ negative regret rows, objective-consistency hypotheses,
 rate-pressure transition points and winner-distribution duplicate
 appearance. The runtime router, the ranking score, and the
 operational report schema are unchanged across these releases.
+v0.43.6.2 adds objective-consistency accounting to the offline
+simulation so regret is measured against the feasible oracle in the
+same objective space, with objective gain against the global baseline
+reported separately. It also adds neural/classical switch analysis:
+per-image and aggregate comparisons of the best classical and neural
+candidates, switch reasons, rate-pressure transition points and
+plot-ready frontier data.
 
 ## Original roadmap recap
 

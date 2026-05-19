@@ -508,6 +508,49 @@ if necessary, corrected in a later change. The diagnostics write
 JSON report with recommended fix options stated as non-applied
 diagnostic guidance.
 
+## Neural/classical switch analysis
+
+v0.43.6.2 adds an explicit neural/classical switch analysis to
+`src.router.analysis.operational_regime_simulation`. The purpose is
+not to claim that one codec family dominates the other. The scientific
+question is narrower and more operational: for a given image,
+quality floor and regime, when does the bitrate or quality advantage
+of the best neural candidate compensate for its additional energy
+cost relative to the best classical candidate?
+
+For every image and regime, the analysis compares the best feasible
+classical candidate and the best feasible neural candidate under the
+same normalized R-D-E objective, the same quality floor and the same
+regime constraints. The output records the rate, quality, energy and
+objective value of both candidates, then assigns a switch reason such
+as `neural_necessary_for_quality`, `neural_rde_efficient`,
+`classical_sufficient`, or `neural_too_energy_expensive`. This makes
+the decision boundary inspectable: neural codecs can be necessary in
+some low-bitrate or high-quality regions, while classical codecs can
+remain sufficient when energy has greater weight.
+
+The switch outputs are:
+
+- `operational_regime_switch_by_image.csv` -- per-image comparison of
+  the best classical and neural candidate.
+- `operational_regime_switch_summary.csv` -- aggregate rates by
+  regime, protocol and quality floor.
+- `operational_regime_switch_report.json` -- metric contract and
+  rate-pressure transition points.
+- `switch_reason_by_rate_weight.csv`,
+  `neural_vs_classic_tradeoff_scatter.csv`, and
+  `quality_floor_switch_summary.csv` -- plot-ready views of the
+  switch boundary.
+
+The rate-pressure switch sweep identifies the first rate weight at
+which neural candidates are feasible, the first weight at which they
+win under the oracle objective, and whether the predictive neural
+shift is earlier, later or aligned with the oracle shift. This is the
+router-facing interpretation of the neural-inclusive result: the
+router exposes the frontier where rate/quality benefit and energy
+penalty trade off, rather than treating either classical or neural
+codecs as universally preferable.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.

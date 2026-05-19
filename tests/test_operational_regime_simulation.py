@@ -145,6 +145,12 @@ def _run_cli(tmp_path: Path) -> Dict[str, Path]:
         "oracle_prediction": out_dir / "operational_regime_oracle_vs_prediction.csv",
         "confusion": out_dir / "operational_regime_family_confusion.csv",
         "sweep": out_dir / "operational_regime_rate_pressure_sweep.csv",
+        "switch_summary": out_dir / "operational_regime_switch_summary.csv",
+        "switch_by_image": out_dir / "operational_regime_switch_by_image.csv",
+        "switch_report": out_dir / "operational_regime_switch_report.json",
+        "switch_reason": out_dir / "switch_reason_by_rate_weight.csv",
+        "switch_scatter": out_dir / "neural_vs_classic_tradeoff_scatter.csv",
+        "switch_floor": out_dir / "quality_floor_switch_summary.csv",
     }
 
 
@@ -196,6 +202,12 @@ def test_cli_writes_json_and_csv_artifacts(tmp_path):
         "oracle_prediction",
         "confusion",
         "sweep",
+        "switch_summary",
+        "switch_by_image",
+        "switch_report",
+        "switch_reason",
+        "switch_scatter",
+        "switch_floor",
     ]:
         assert paths[key].exists(), key
 
@@ -208,6 +220,8 @@ def test_cli_writes_json_and_csv_artifacts(tmp_path):
     assert report["provenance"]["policy_does_not_see_test_image_rde"] is True
     assert "plot_artifacts" in report
     assert report["plot_artifacts"]["plot_data_paths"]
+    assert report["quality_metric_contract"]["role"] == "rate_oriented_stress_test"
+    assert "switch_analysis" in report
     interpretation = " ".join(report["interpretation"]).lower()
     assert "prov" + "es" not in interpretation
     assert "best " + "possible" not in interpretation
@@ -241,6 +255,26 @@ def test_energy_and_regret_reductions_are_computed(tmp_path):
         float(oracle["regret_reduction_vs_global_baseline"]),
         expected_regret_reduction,
     )
+    assert "objective_gain_vs_global_baseline" in oracle
+
+
+def test_no_negative_regret_invariant_and_oracle_zero(tmp_path):
+    paths = _run_cli(tmp_path)
+    decisions = _read_csv(paths["decisions"])
+    regrets = [float(row["regret"]) for row in decisions if row["regret"]]
+    assert regrets
+    assert min(regrets) >= -1e-9
+    oracle_rows = [row for row in decisions if row["policy"] == "full_pool_oracle"]
+    assert oracle_rows
+    assert all(abs(float(row["regret"])) <= 1e-9 for row in oracle_rows if row["regret"])
+
+
+def test_oracle_is_argmin_under_same_objective(tmp_path):
+    paths = _run_cli(tmp_path)
+    decisions = _read_csv(paths["decisions"])
+    for row in decisions:
+        if row["oracle_cost"] and row["selected_cost"]:
+            assert float(row["selected_cost"]) + 1e-9 >= float(row["oracle_cost"])
 
 
 def test_plot_data_contains_scatter_metrics(tmp_path):
@@ -251,6 +285,7 @@ def test_plot_data_contains_scatter_metrics(tmp_path):
     assert "y_regret_reduction" in rows[0]
     assert "mean_energy" in rows[0]
     assert "neural_family_recall" in rows[0]
+    assert "objective_gain_vs_global_baseline" in rows[0]
 
 
 def test_winner_distribution_sums_to_one_per_group(tmp_path):
@@ -307,3 +342,70 @@ def test_optional_png_generation_does_not_block_report(tmp_path):
     assert "generated" in report["plot_artifacts"]
     if not report["plot_artifacts"]["generated"]:
         assert report["plot_artifacts"]["skipped_reason"]
+
+
+def _switch_unit_rows() -> List[Dict[str, Any]]:
+    def row(image: str, codec: str, family: str, rate: float, quality: float, energy: float, nr: float, ne: float, nd: float) -> Dict[str, Any]:
+        return {
+            "image_id": image,
+            "dataset": "d",
+            "codec": codec,
+            "config": "cfg",
+            "codec_family": family,
+            "rate": rate,
+            "quality": quality,
+            "energy": energy,
+            "norm_rate": nr,
+            "norm_energy": ne,
+            "norm_distortion": nd,
+        }
+
+    return [
+        row("necessary", "JPEG", "classical", 1.0, 20.0, 1.0, 0.2, 0.1, 0.1),
+        row("necessary", "Balle", "neural", 0.2, 35.0, 8.0, 0.1, 0.9, 0.1),
+        row("rde", "JPEG", "classical", 1.0, 35.0, 1.0, 0.8, 0.2, 0.2),
+        row("rde", "Balle", "neural", 0.2, 35.0, 1.0, 0.1, 0.1, 0.1),
+        row("expensive", "JPEG", "classical", 1.0, 35.0, 1.0, 0.2, 0.1, 0.1),
+        row("expensive", "Balle", "neural", 0.2, 35.0, 10.0, 0.1, 1.0, 0.1),
+        row("sufficient", "JPEG", "classical", 1.0, 35.0, 1.0, 0.1, 0.1, 0.1),
+        row("sufficient", "Balle", "neural", 1.2, 35.0, 2.0, 0.3, 0.2, 0.1),
+    ]
+
+
+def test_switch_reasons_cover_core_cases():
+    regime = {
+        "weights": {"w_R": 0.5, "w_E": 0.4, "w_D": 0.1},
+        "neural_allowed": True,
+        "max_norm_energy": None,
+    }
+    result = ors.build_switch_analysis(
+        rows=_switch_unit_rows(),
+        quality_floors=[30.0],
+        protocols=["loio"],
+        regimes=ors.build_regime_definitions(),
+        rate_weight=0.5,
+        rate_regime=regime,
+    )
+    by_image = {row["image_id"]: row["switch_reason"] for row in result["by_image"]}
+    assert by_image["necessary"] == "neural_necessary_for_quality"
+    assert by_image["rde"] == "neural_rde_efficient"
+    assert by_image["expensive"] == "neural_too_energy_expensive"
+    assert by_image["sufficient"] == "classical_sufficient"
+
+
+def test_switch_summary_rates_sum_to_one_and_threshold_detected(tmp_path):
+    paths = _run_cli(tmp_path)
+    rows = _read_csv(paths["switch_summary"])
+    assert rows
+    for row in rows:
+        reason_sum = (
+            float(row["neural_necessary_rate"])
+            + float(row["neural_rde_efficient_rate"])
+            + float(row["classical_sufficient_rate"])
+            + float(row["neural_too_energy_expensive_rate"])
+            + float(row["no_neural_feasible_rate"])
+            + float(row["no_classic_feasible_rate"])
+        )
+        assert reason_sum <= 1.0 + 1e-9
+    report = json.loads(paths["switch_report"].read_text(encoding="utf-8"))
+    assert "first_rate_weight_neural_feasible" in report["rate_pressure_transition"]

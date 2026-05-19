@@ -736,20 +736,34 @@ def _realise_decision(
         base["provenance"] = "predicted_pair_not_present_on_test_image"
         return base
 
-    selected_cost = _operational_cost(row, active_regime)
+    selected_raw_objective = _operational_cost(row, active_regime)
+    quality_violation = (
+        quality_floor is not None and row["quality"] < quality_floor
+    )
+    selected_cost = selected_raw_objective
+    objective_consistency_note = ""
+    # Regret is defined against the oracle over the feasible candidate set.
+    # A predictive no-leakage choice may realise below the target quality
+    # floor; in that case its raw objective can be numerically lower than the
+    # feasible oracle, but it is not an admissible improvement. Keep the raw
+    # objective for objective-gain diagnostics and clamp the comparison
+    # objective to the oracle lower bound for regret accounting.
+    if oracle is not None and selected_cost < oracle["cost"] - 1e-9:
+        selected_cost = oracle["cost"]
+        objective_consistency_note = "selected_raw_objective_below_feasible_oracle_clamped_for_regret"
     regret = None
     if oracle is not None:
         regret = selected_cost - oracle["cost"]
     base.update(
         {
             "selected_cost": selected_cost,
+            "selected_raw_objective": selected_raw_objective,
+            "objective_consistency_note": objective_consistency_note,
             "regret": regret,
             "selected_energy": row["energy"],
             "selected_rate": row["rate"],
             "selected_quality": row["quality"],
-            "quality_violation": (
-                quality_floor is not None and row["quality"] < quality_floor
-            ),
+            "quality_violation": quality_violation,
             "exact_match": (
                 oracle is not None
                 and pair[0] == oracle["codec"]
@@ -777,6 +791,11 @@ def _summarise_decisions(
 ) -> Dict[str, Any]:
     n = len(decisions)
     regrets = [float(d["regret"]) for d in decisions if d.get("regret") is not None]
+    objectives = [
+        float(d["selected_raw_objective"])
+        for d in decisions
+        if d.get("selected_raw_objective") is not None
+    ]
     energies = [float(d["selected_energy"]) for d in decisions if d.get("selected_energy") is not None]
     rates = [float(d["selected_rate"]) for d in decisions if d.get("selected_rate") is not None]
     qualities = [float(d["selected_quality"]) for d in decisions if d.get("selected_quality") is not None]
@@ -811,6 +830,8 @@ def _summarise_decisions(
             sum(1 for d in decisions if d.get("quality_violation") is True) / n
             if n else None
         ),
+        "mean_selected_objective": mean(objectives) if objectives else None,
+        "objective_gain_vs_global_baseline": None,
         "mean_regret": mean(regrets) if regrets else None,
         "median_regret": median(regrets) if regrets else None,
         "p90_regret": _quantile(regrets, 0.90) if regrets else None,
@@ -858,6 +879,10 @@ def _attach_baseline_reductions(summaries: List[Dict[str, Any]]) -> None:
         row["regret_reduction_vs_global_baseline"] = _relative_reduction(
             row.get("mean_regret"), baseline.get("mean_regret")
         )
+        row["objective_gain_vs_global_baseline"] = _relative_reduction(
+            row.get("mean_selected_objective"),
+            baseline.get("mean_selected_objective"),
+        )
 
 
 def _plot_data_rows(summaries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -876,6 +901,8 @@ def _plot_data_rows(summaries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "rate_reduction_vs_global_baseline": s["rate_reduction_vs_global_baseline"],
             "regret_reduction_vs_global_baseline": s["regret_reduction_vs_global_baseline"],
             "quality_violation_rate": s["quality_violation_rate"],
+            "mean_selected_objective": s["mean_selected_objective"],
+            "objective_gain_vs_global_baseline": s["objective_gain_vs_global_baseline"],
             "neural_selection_rate": s["neural_selection_rate"],
             "oracle_neural_rate": s["oracle_neural_rate"],
             "neural_family_precision": s["neural_family_precision"],
@@ -990,6 +1017,424 @@ def _family_confusion(decisions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 }
             )
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Neural/classical switch analysis
+# ---------------------------------------------------------------------------
+
+
+SWITCH_REASONS = [
+    "neural_necessary_for_quality",
+    "neural_rde_efficient",
+    "classical_sufficient",
+    "neural_too_energy_expensive",
+    "no_neural_feasible",
+    "no_classic_feasible",
+    "no_feasible_candidate",
+]
+
+
+def _best_family_candidate(
+    rows: List[Dict[str, Any]],
+    *,
+    image_id: str,
+    family: str,
+    regime: Dict[str, Any],
+    quality_floor: Optional[float],
+) -> Optional[Dict[str, Any]]:
+    candidates = [
+        r for r in rows
+        if r["image_id"] == image_id
+        and r["codec_family"] == family
+        and _row_allowed_by_regime(r, regime)
+        and (quality_floor is None or r["quality"] >= quality_floor)
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda r: (_operational_cost(r, regime), r["codec"], r["config"]))
+
+
+def _best_family_candidate_ignoring_floor(
+    rows: List[Dict[str, Any]],
+    *,
+    image_id: str,
+    family: str,
+    regime: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    candidates = [
+        r for r in rows
+        if r["image_id"] == image_id
+        and r["codec_family"] == family
+        and _row_allowed_by_regime(r, regime)
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda r: (_operational_cost(r, regime), r["codec"], r["config"]))
+
+
+def _switch_reason(
+    *,
+    best_classic: Optional[Dict[str, Any]],
+    best_neural: Optional[Dict[str, Any]],
+    floorless_classic: Optional[Dict[str, Any]],
+    floorless_neural: Optional[Dict[str, Any]],
+) -> str:
+    if best_classic is None and best_neural is None:
+        if floorless_classic is not None and floorless_neural is not None:
+            return "no_feasible_candidate"
+        if floorless_neural is None and floorless_classic is not None:
+            return "no_neural_feasible"
+        if floorless_classic is None and floorless_neural is not None:
+            return "no_classic_feasible"
+        return "no_feasible_candidate"
+    if best_classic is None:
+        return "neural_necessary_for_quality"
+    if best_neural is None:
+        return "no_neural_feasible"
+
+    delta_rate = best_neural["rate"] - best_classic["rate"]
+    delta_energy = best_neural["energy"] - best_classic["energy"]
+    delta_j = _operational_cost(best_neural, best_neural["active_regime"]) - _operational_cost(
+        best_classic, best_classic["active_regime"]
+    )
+    if delta_j < -1e-12:
+        return "neural_rde_efficient"
+    if delta_rate < 0 and delta_energy > 0 and delta_j >= -1e-12:
+        return "neural_too_energy_expensive"
+    return "classical_sufficient"
+
+
+def build_switch_analysis(
+    *,
+    rows: List[Dict[str, Any]],
+    quality_floors: List[Optional[float]],
+    protocols: List[str],
+    regimes: Dict[str, Dict[str, Any]],
+    rate_weight: Optional[float] = None,
+    rate_regime: Optional[Dict[str, Any]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    image_ids = sorted({r["image_id"] for r in rows})
+    image_to_dataset: Dict[str, str] = {}
+    for row in rows:
+        image_to_dataset.setdefault(row["image_id"], str(row.get("dataset")))
+
+    by_image: List[Dict[str, Any]] = []
+    regime_items = (
+        [("rate_pressure", rate_regime)]
+        if rate_regime is not None
+        else [(name, regimes[name]) for name in REGIME_ORDER]
+    )
+    for protocol in protocols:
+        for regime_name, regime in regime_items:
+            assert regime is not None
+            for floor in quality_floors:
+                for image_id in image_ids:
+                    best_classic = _best_family_candidate(
+                        rows,
+                        image_id=image_id,
+                        family="classical",
+                        regime=regime,
+                        quality_floor=floor,
+                    )
+                    best_neural = _best_family_candidate(
+                        rows,
+                        image_id=image_id,
+                        family="neural",
+                        regime=regime,
+                        quality_floor=floor,
+                    )
+                    floorless_classic = _best_family_candidate_ignoring_floor(
+                        rows,
+                        image_id=image_id,
+                        family="classical",
+                        regime=regime,
+                    )
+                    floorless_neural = _best_family_candidate_ignoring_floor(
+                        rows,
+                        image_id=image_id,
+                        family="neural",
+                        regime=regime,
+                    )
+                    # Carry the active regime on the row references so the
+                    # reason helper can compare the same objective without
+                    # changing the public row schema.
+                    if best_classic is not None:
+                        best_classic = {**best_classic, "active_regime": regime}
+                    if best_neural is not None:
+                        best_neural = {**best_neural, "active_regime": regime}
+                    reason = _switch_reason(
+                        best_classic=best_classic,
+                        best_neural=best_neural,
+                        floorless_classic=floorless_classic,
+                        floorless_neural=floorless_neural,
+                    )
+                    winner = best_neural if reason in {
+                        "neural_necessary_for_quality",
+                        "neural_rde_efficient",
+                    } else best_classic
+                    if reason == "no_classic_feasible":
+                        winner = best_neural
+                    if reason in {"no_neural_feasible", "no_feasible_candidate"}:
+                        winner = best_classic
+                    row = _switch_row(
+                        image_id=image_id,
+                        dataset=image_to_dataset[image_id],
+                        protocol=protocol,
+                        regime=regime_name,
+                        quality_floor=floor,
+                        rate_weight=rate_weight,
+                        best_classic=best_classic,
+                        best_neural=best_neural,
+                        winner=winner,
+                        switch_reason=reason,
+                    )
+                    by_image.append(row)
+    return {
+        "by_image": by_image,
+        "summary": _switch_summary(by_image),
+        "reason_by_rate_weight": _switch_reason_by_rate_weight(by_image),
+        "tradeoff_scatter": _switch_tradeoff_scatter(by_image),
+        "quality_floor_summary": _quality_floor_switch_summary(by_image),
+    }
+
+
+def _switch_row(
+    *,
+    image_id: str,
+    dataset: str,
+    protocol: str,
+    regime: str,
+    quality_floor: Optional[float],
+    rate_weight: Optional[float],
+    best_classic: Optional[Dict[str, Any]],
+    best_neural: Optional[Dict[str, Any]],
+    winner: Optional[Dict[str, Any]],
+    switch_reason: str,
+) -> Dict[str, Any]:
+    classic_j = _operational_cost(best_classic, best_classic["active_regime"]) if best_classic else None
+    neural_j = _operational_cost(best_neural, best_neural["active_regime"]) if best_neural else None
+    classic_rate = best_classic["rate"] if best_classic else None
+    neural_rate = best_neural["rate"] if best_neural else None
+    classic_quality = best_classic["quality"] if best_classic else None
+    neural_quality = best_neural["quality"] if best_neural else None
+    classic_energy = best_classic["energy"] if best_classic else None
+    neural_energy = best_neural["energy"] if best_neural else None
+    return {
+        "image_id": image_id,
+        "dataset": dataset,
+        "regime": regime,
+        "protocol": protocol,
+        "quality_floor": quality_floor,
+        "rate_weight": rate_weight,
+        "best_classic_codec": best_classic["codec"] if best_classic else None,
+        "best_classic_config": best_classic["config"] if best_classic else None,
+        "best_classic_rate": classic_rate,
+        "best_classic_quality": classic_quality,
+        "best_classic_energy": classic_energy,
+        "best_classic_J": classic_j,
+        "best_neural_codec": best_neural["codec"] if best_neural else None,
+        "best_neural_config": best_neural["config"] if best_neural else None,
+        "best_neural_rate": neural_rate,
+        "best_neural_quality": neural_quality,
+        "best_neural_energy": neural_energy,
+        "best_neural_J": neural_j,
+        "delta_rate_neural_minus_classic": (
+            neural_rate - classic_rate
+            if neural_rate is not None and classic_rate is not None
+            else None
+        ),
+        "bitrate_reduction_neural_vs_classic": (
+            classic_rate - neural_rate
+            if neural_rate is not None and classic_rate is not None
+            else None
+        ),
+        "delta_quality_neural_minus_classic": (
+            neural_quality - classic_quality
+            if neural_quality is not None and classic_quality is not None
+            else None
+        ),
+        "delta_energy_neural_minus_classic": (
+            neural_energy - classic_energy
+            if neural_energy is not None and classic_energy is not None
+            else None
+        ),
+        "delta_J_neural_minus_classic": (
+            neural_j - classic_j
+            if neural_j is not None and classic_j is not None
+            else None
+        ),
+        "winner_family": winner["codec_family"] if winner else None,
+        "winner_codec": winner["codec"] if winner else None,
+        "switch_reason": switch_reason,
+    }
+
+
+def _switch_summary(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    grouped: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[(row["regime"], row["protocol"], row["quality_floor"], row["rate_weight"])].append(row)
+    out: List[Dict[str, Any]] = []
+    for (regime, protocol, floor, rate_weight), items in sorted(grouped.items(), key=lambda x: str(x[0])):
+        n = len(items)
+        reason_counts = Counter(item["switch_reason"] for item in items)
+        neural_wins = sum(1 for item in items if item.get("winner_family") == "neural")
+        classic_wins = sum(1 for item in items if item.get("winner_family") == "classical")
+        neural_win_items = [i for i in items if i.get("winner_family") == "neural"]
+        neural_lose_items = [i for i in items if i.get("winner_family") != "neural"]
+        out.append(
+            {
+                "regime": regime,
+                "protocol": protocol,
+                "quality_floor": floor,
+                "rate_weight": rate_weight,
+                "num_images": n,
+                "neural_win_rate": neural_wins / n if n else None,
+                "classic_win_rate": classic_wins / n if n else None,
+                "neural_necessary_rate": reason_counts["neural_necessary_for_quality"] / n if n else None,
+                "neural_rde_efficient_rate": reason_counts["neural_rde_efficient"] / n if n else None,
+                "classical_sufficient_rate": reason_counts["classical_sufficient"] / n if n else None,
+                "neural_too_energy_expensive_rate": reason_counts["neural_too_energy_expensive"] / n if n else None,
+                "no_neural_feasible_rate": reason_counts["no_neural_feasible"] / n if n else None,
+                "no_classic_feasible_rate": reason_counts["no_classic_feasible"] / n if n else None,
+                "mean_bitrate_reduction_when_neural_wins": _mean_field(neural_win_items, "bitrate_reduction_neural_vs_classic"),
+                "mean_energy_penalty_when_neural_wins": _mean_field(neural_win_items, "delta_energy_neural_minus_classic"),
+                "mean_quality_delta_when_neural_wins": _mean_field(neural_win_items, "delta_quality_neural_minus_classic"),
+                "mean_bitrate_reduction_when_neural_loses": _mean_field(neural_lose_items, "bitrate_reduction_neural_vs_classic"),
+                "mean_energy_penalty_when_neural_loses": _mean_field(neural_lose_items, "delta_energy_neural_minus_classic"),
+                "mean_quality_delta_when_neural_loses": _mean_field(neural_lose_items, "delta_quality_neural_minus_classic"),
+            }
+        )
+    return out
+
+
+def _mean_field(rows: List[Dict[str, Any]], field: str) -> Optional[float]:
+    values = [float(r[field]) for r in rows if r.get(field) is not None]
+    return mean(values) if values else None
+
+
+def _switch_reason_by_rate_weight(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    grouped: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if row.get("rate_weight") is None:
+            continue
+        grouped[(row["protocol"], row["quality_floor"], row["rate_weight"])].append(row)
+    out: List[Dict[str, Any]] = []
+    for (protocol, floor, rate_weight), items in sorted(grouped.items(), key=lambda x: str(x[0])):
+        n = len(items)
+        counts = Counter(item["switch_reason"] for item in items)
+        for reason in SWITCH_REASONS:
+            out.append(
+                {
+                    "protocol": protocol,
+                    "quality_floor": floor,
+                    "rate_weight": rate_weight,
+                    "switch_reason": reason,
+                    "count": counts[reason],
+                    "share": counts[reason] / n if n else None,
+                }
+            )
+    return out
+
+
+def _switch_tradeoff_scatter(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "image_id": row["image_id"],
+            "dataset": row["dataset"],
+            "regime": row["regime"],
+            "protocol": row["protocol"],
+            "quality_floor": row["quality_floor"],
+            "rate_weight": row["rate_weight"],
+            "bitrate_reduction_neural_vs_classic": row["bitrate_reduction_neural_vs_classic"],
+            "delta_energy_neural_minus_classic": row["delta_energy_neural_minus_classic"],
+            "delta_quality_neural_minus_classic": row["delta_quality_neural_minus_classic"],
+            "winner_family": row["winner_family"],
+            "switch_reason": row["switch_reason"],
+        }
+        for row in rows
+        if row["bitrate_reduction_neural_vs_classic"] is not None
+        and row["delta_energy_neural_minus_classic"] is not None
+    ]
+
+
+def _quality_floor_switch_summary(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    grouped: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if row.get("rate_weight") is not None:
+            continue
+        grouped[(row["quality_floor"], row["protocol"])].append(row)
+    out: List[Dict[str, Any]] = []
+    for (floor, protocol), items in sorted(grouped.items(), key=lambda x: str(x[0])):
+        n = len(items)
+        neural_necessary = sum(1 for i in items if i["switch_reason"] == "neural_necessary_for_quality")
+        neural_wins = sum(1 for i in items if i.get("winner_family") == "neural")
+        out.append(
+            {
+                "quality_metric": "input_quality_col",
+                "quality_floor": floor,
+                "protocol": protocol,
+                "neural_necessary_rate": neural_necessary / n if n else None,
+                "neural_win_rate": neural_wins / n if n else None,
+            }
+        )
+    return out
+
+
+def _rate_pressure_switch_transition(
+    *,
+    switch_summary: List[Dict[str, Any]],
+    rate_pressure_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    weights = sorted({float(r["rate_weight"]) for r in switch_summary if r.get("rate_weight") is not None})
+    first_feasible = None
+    first_neural_wins = None
+    for weight in weights:
+        rows_at = [r for r in switch_summary if r.get("rate_weight") == weight]
+        if first_feasible is None and any((r.get("no_neural_feasible_rate") or 0.0) < 1.0 for r in rows_at):
+            first_feasible = weight
+        if first_neural_wins is None and any((r.get("neural_win_rate") or 0.0) > 0.0 for r in rows_at):
+            first_neural_wins = weight
+
+    predicted_rates: Dict[float, float] = defaultdict(float)
+    oracle_rates: Dict[float, float] = defaultdict(float)
+    for row in rate_pressure_rows:
+        if row.get("policy") != "metadata_plus_system_full_pool":
+            continue
+        weight = float(row["rate_weight"])
+        if row.get("selected_family") == "neural":
+            predicted_rates[weight] = max(predicted_rates[weight], float(row.get("selection_rate") or 0.0))
+        oracle_rates[weight] = max(oracle_rates[weight], float(row.get("oracle_neural_rate") or 0.0))
+    first_pred = _first_weight_positive(predicted_rates)
+    first_oracle = _first_weight_positive(oracle_rates)
+    return {
+        "first_rate_weight_neural_feasible": first_feasible,
+        "first_rate_weight_neural_wins": first_neural_wins,
+        "first_rate_weight_predicted_neural_wins": first_pred,
+        "first_rate_weight_oracle_neural_wins": first_oracle,
+        "predicted_shift_vs_oracle": _shift_relation(first_pred, first_oracle),
+    }
+
+
+def _first_weight_positive(values: Dict[float, float]) -> Optional[float]:
+    for weight in sorted(values):
+        if values[weight] > 0.0:
+            return weight
+    return None
+
+
+def _shift_relation(predicted: Optional[float], oracle: Optional[float]) -> str:
+    if predicted is None and oracle is None:
+        return "no_shift_observed"
+    if predicted is None:
+        return "late_or_absent"
+    if oracle is None:
+        return "early_without_oracle_shift"
+    if predicted < oracle:
+        return "early"
+    if predicted > oracle:
+        return "late"
+    return "aligned"
 
 
 # ---------------------------------------------------------------------------
@@ -1386,6 +1831,131 @@ def _maybe_generate_plots(
     return {"generated": True, "plot_paths": plot_paths, "skipped_reason": None}
 
 
+def _maybe_generate_switch_plots(
+    *,
+    out_dir: Path,
+    reason_by_rate: List[Dict[str, Any]],
+    tradeoff_scatter: List[Dict[str, Any]],
+    quality_floor_summary: List[Dict[str, Any]],
+    switch_rate_summary: List[Dict[str, Any]],
+    rate_pressure: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    try:
+        import matplotlib.pyplot as plt  # type: ignore
+    except Exception:
+        return {
+            "generated": False,
+            "plot_paths": [],
+            "skipped_reason": "matplotlib_unavailable",
+        }
+
+    plot_paths: List[str] = []
+
+    def save(name: str) -> None:
+        path = out_dir / name
+        plt.tight_layout()
+        plt.savefig(path, dpi=150)
+        plt.close()
+        plot_paths.append(str(path))
+
+    try:
+        _plot_switch_reason_by_rate(plt, reason_by_rate)
+        save("switch_reason_by_rate_weight.png")
+        _plot_neural_classic_tradeoff(plt, tradeoff_scatter)
+        save("neural_vs_classic_tradeoff_scatter.png")
+        _plot_quality_floor_neural_necessity(plt, quality_floor_summary)
+        save("quality_floor_vs_neural_necessity.png")
+        _plot_rate_weight_switch_boundary(plt, switch_rate_summary, rate_pressure)
+        save("rate_weight_switch_boundary.png")
+    except Exception as exc:
+        return {
+            "generated": False,
+            "plot_paths": plot_paths,
+            "skipped_reason": f"switch_plot_generation_failed:{type(exc).__name__}",
+        }
+
+    return {"generated": True, "plot_paths": plot_paths, "skipped_reason": None}
+
+
+def _plot_switch_reason_by_rate(plt: Any, rows: List[Dict[str, Any]]) -> None:
+    filtered = [r for r in rows if r["protocol"] == "loio"] or rows
+    weights = sorted({float(r["rate_weight"]) for r in filtered})
+    bottoms = [0.0 for _ in weights]
+    plt.figure(figsize=(8, 5))
+    for reason in SWITCH_REASONS:
+        values = [
+            sum(
+                float(r.get("share") or 0.0)
+                for r in filtered
+                if float(r["rate_weight"]) == weight and r["switch_reason"] == reason
+            )
+            for weight in weights
+        ]
+        plt.bar(weights, values, bottom=bottoms, width=0.06, label=reason)
+        bottoms = [b + v for b, v in zip(bottoms, values)]
+    plt.xlabel("Rate weight")
+    plt.ylabel("Share")
+    plt.legend(fontsize=6)
+
+
+def _plot_neural_classic_tradeoff(plt: Any, rows: List[Dict[str, Any]]) -> None:
+    plt.figure(figsize=(7, 5))
+    for row in rows:
+        x = row.get("bitrate_reduction_neural_vs_classic")
+        y = row.get("delta_energy_neural_minus_classic")
+        if x is None or y is None:
+            continue
+        size = 30 + 60 * abs(float(row.get("delta_quality_neural_minus_classic") or 0.0))
+        plt.scatter(float(x), float(y), s=size, alpha=0.65, label=row.get("switch_reason"))
+    plt.xlabel("Bitrate reduction neural vs classic")
+    plt.ylabel("Delta energy neural minus classic")
+
+
+def _plot_quality_floor_neural_necessity(plt: Any, rows: List[Dict[str, Any]]) -> None:
+    filtered = [r for r in rows if r["protocol"] == "loio"] or rows
+    floors = sorted({float(r["quality_floor"]) for r in filtered if r.get("quality_floor") is not None})
+    necessity = []
+    wins = []
+    for floor in floors:
+        matches = [r for r in filtered if float(r["quality_floor"]) == floor]
+        necessity.append(mean(float(r.get("neural_necessary_rate") or 0.0) for r in matches))
+        wins.append(mean(float(r.get("neural_win_rate") or 0.0) for r in matches))
+    plt.figure(figsize=(7, 5))
+    plt.plot(floors, necessity, marker="o", label="neural_necessary_rate")
+    plt.plot(floors, wins, marker="s", label="neural_win_rate")
+    plt.xlabel("Quality floor")
+    plt.ylabel("Rate")
+    plt.legend()
+
+
+def _plot_rate_weight_switch_boundary(
+    plt: Any,
+    switch_rows: List[Dict[str, Any]],
+    rate_pressure: List[Dict[str, Any]],
+) -> None:
+    weights = sorted({float(r["rate_weight"]) for r in switch_rows if r.get("rate_weight") is not None})
+    neural_win = []
+    predicted = []
+    oracle = []
+    for weight in weights:
+        sw = [r for r in switch_rows if float(r["rate_weight"]) == weight]
+        neural_win.append(mean(float(r.get("neural_win_rate") or 0.0) for r in sw) if sw else 0.0)
+        rp = [
+            r for r in rate_pressure
+            if float(r["rate_weight"]) == weight
+            and r["policy"] == "metadata_plus_system_full_pool"
+        ]
+        predicted.append(max([float(r.get("neural_selection_rate") or 0.0) for r in rp] or [0.0]))
+        oracle.append(max([float(r.get("oracle_neural_rate") or 0.0) for r in rp] or [0.0]))
+    plt.figure(figsize=(8, 5))
+    plt.plot(weights, neural_win, marker="o", label="switch_neural_win_rate")
+    plt.plot(weights, predicted, marker="s", label="predicted_neural_rate")
+    plt.plot(weights, oracle, marker="^", label="oracle_neural_rate")
+    plt.xlabel("Rate weight")
+    plt.ylabel("Rate")
+    plt.legend()
+
+
 def _main_plot_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [
         r for r in rows
@@ -1710,6 +2280,31 @@ def build_interpretation(
     return _sanitize_interpretation(notes)
 
 
+def _quality_metric_contract(quality_col: str) -> Dict[str, Any]:
+    metric = str(quality_col).strip().lower()
+    if metric == "ssimulacra2":
+        return {
+            "quality_col": quality_col,
+            "role": "preferred_perceptual_metric_for_image_routing",
+            "interpretation": (
+                "This run is aligned with the image router's perceptual quality metric."
+            ),
+        }
+    if metric == "psnr":
+        return {
+            "quality_col": quality_col,
+            "role": "rate_oriented_stress_test",
+            "interpretation": (
+                "PSNR30 is a useful rate-pressure stress test but does not guarantee perceptual quality."
+            ),
+        }
+    return {
+        "quality_col": quality_col,
+        "role": "custom_quality_metric",
+        "interpretation": "Interpret quality floors according to the supplied metric contract.",
+    }
+
+
 def _sanitize_interpretation(notes: List[str]) -> List[str]:
     banned = [
         "prov" + "es",
@@ -1798,6 +2393,31 @@ def main(argv: Optional[List[str]] = None) -> None:
         protocols=protocols,
         k=args.k,
     )
+    switch_analysis = build_switch_analysis(
+        rows=rows,
+        quality_floors=quality_floors,
+        protocols=protocols,
+        regimes=result["regime_definitions"],
+    )
+    switch_rate_by_image: List[Dict[str, Any]] = []
+    switch_rate_summary: List[Dict[str, Any]] = []
+    switch_reason_by_rate: List[Dict[str, Any]] = []
+    for rate_weight in RATE_PRESSURE_GRID:
+        rate_switch = build_switch_analysis(
+            rows=rows,
+            quality_floors=quality_floors,
+            protocols=protocols,
+            regimes=result["regime_definitions"],
+            rate_weight=rate_weight,
+            rate_regime=_rate_pressure_regime(rate_weight),
+        )
+        switch_rate_by_image.extend(rate_switch["by_image"])
+        switch_rate_summary.extend(rate_switch["summary"])
+        switch_reason_by_rate.extend(rate_switch["reason_by_rate_weight"])
+    switch_transition = _rate_pressure_switch_transition(
+        switch_summary=switch_rate_summary,
+        rate_pressure_rows=rate_pressure,
+    )
 
     summary_path = Path(args.out_summary_csv) if args.out_summary_csv else out_dir / "operational_regime_summary.csv"
     decisions_path = Path(args.out_decisions_csv) if args.out_decisions_csv else out_dir / "operational_regime_decisions.csv"
@@ -1806,6 +2426,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     oracle_pred_path = out_dir / "operational_regime_oracle_vs_prediction.csv"
     confusion_path = out_dir / "operational_regime_family_confusion.csv"
     sweep_path = out_dir / "operational_regime_rate_pressure_sweep.csv"
+    switch_summary_path = out_dir / "operational_regime_switch_summary.csv"
+    switch_by_image_path = out_dir / "operational_regime_switch_by_image.csv"
+    switch_report_path = out_dir / "operational_regime_switch_report.json"
+    switch_reason_path = out_dir / "switch_reason_by_rate_weight.csv"
+    switch_scatter_path = out_dir / "neural_vs_classic_tradeoff_scatter.csv"
+    switch_floor_path = out_dir / "quality_floor_switch_summary.csv"
     report_path = Path(args.out_json) if args.out_json else out_dir / "operational_regime_report.json"
 
     _write_csv(summary_path, result["summaries"])
@@ -1815,6 +2441,21 @@ def main(argv: Optional[List[str]] = None) -> None:
     _write_csv(oracle_pred_path, result["oracle_vs_prediction"])
     _write_csv(confusion_path, result["family_confusion"])
     _write_csv(sweep_path, rate_pressure)
+    _write_csv(switch_summary_path, switch_analysis["summary"])
+    _write_csv(switch_by_image_path, switch_analysis["by_image"])
+    _write_csv(switch_reason_path, switch_reason_by_rate)
+    _write_csv(switch_scatter_path, switch_analysis["tradeoff_scatter"] + _switch_tradeoff_scatter(switch_rate_by_image))
+    _write_csv(switch_floor_path, switch_analysis["quality_floor_summary"])
+    _write_json(
+        switch_report_path,
+        {
+            "schema_version": "operational_regime_switch_analysis_v1",
+            "quality_metric": args.quality_col,
+            "metric_contract": _quality_metric_contract(args.quality_col),
+            "rate_pressure_transition": switch_transition,
+            "switch_reasons": SWITCH_REASONS,
+        },
+    )
 
     plot_info = _maybe_generate_plots(
         out_dir=out_dir,
@@ -1830,7 +2471,21 @@ def main(argv: Optional[List[str]] = None) -> None:
         str(oracle_pred_path),
         str(confusion_path),
         str(sweep_path),
+        str(switch_reason_path),
+        str(switch_scatter_path),
+        str(switch_floor_path),
     ]
+    switch_plot_info = _maybe_generate_switch_plots(
+        out_dir=out_dir,
+        reason_by_rate=switch_reason_by_rate,
+        tradeoff_scatter=switch_analysis["tradeoff_scatter"] + _switch_tradeoff_scatter(switch_rate_by_image),
+        quality_floor_summary=switch_analysis["quality_floor_summary"],
+        switch_rate_summary=switch_rate_summary,
+        rate_pressure=rate_pressure,
+    )
+    if switch_plot_info["plot_paths"]:
+        plot_info["plot_paths"].extend(switch_plot_info["plot_paths"])
+        plot_info["generated"] = plot_info["generated"] or switch_plot_info["generated"]
 
     report = {
         "schema_version": "operational_regime_simulation_v1",
@@ -1867,6 +2522,13 @@ def main(argv: Optional[List[str]] = None) -> None:
             "rate_weights": RATE_PRESSURE_GRID,
             "weight_rule": "w_R=grid_value; w_E=(1-w_R)/2; w_D=(1-w_R)/2",
         },
+        "quality_metric_contract": _quality_metric_contract(args.quality_col),
+        "switch_analysis": {
+            "summary_csv": str(switch_summary_path),
+            "by_image_csv": str(switch_by_image_path),
+            "report_json": str(switch_report_path),
+            "rate_pressure_transition": switch_transition,
+        },
         "policies": POLICIES,
         "summaries": result["summaries"],
         "interpretation": build_interpretation(
@@ -1882,6 +2544,12 @@ def main(argv: Optional[List[str]] = None) -> None:
             "oracle_vs_prediction_csv": str(oracle_pred_path),
             "family_confusion_csv": str(confusion_path),
             "rate_pressure_sweep_csv": str(sweep_path),
+            "switch_summary_csv": str(switch_summary_path),
+            "switch_by_image_csv": str(switch_by_image_path),
+            "switch_report_json": str(switch_report_path),
+            "switch_reason_by_rate_weight_csv": str(switch_reason_path),
+            "neural_vs_classic_tradeoff_scatter_csv": str(switch_scatter_path),
+            "quality_floor_switch_summary_csv": str(switch_floor_path),
             "report_json": str(report_path),
         },
     }
