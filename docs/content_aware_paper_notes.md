@@ -385,6 +385,83 @@ the gap between `knn_metadata_full_pool` and
 `classic_only_predictive_baseline` regret records the operational
 value of including neural codecs in the candidate pool.
 
+## Operational regime simulation
+
+v0.43.6 adds the offline module
+`src.router.analysis.operational_regime_simulation`. The purpose is
+paper/demo-facing: the analysis does not only ask whether a predictor
+can recover oracle labels, but how routing decisions move under
+operational regimes such as `normal`, `bandwidth_limited`,
+`energy_saving`, `battery_pressure`, `thermal_pressure`, `no_cuda`,
+and `low_memory_or_vram_pressure`.
+
+The module is read-only against an existing image R-D-E CSV. It does
+not execute codecs, regenerate benchmarks, change `J_RDE`, alter the
+runtime router report schema, or add CLI flags to `rde_router`. Each
+regime is written explicitly to the JSON report with `(w_R, w_E,
+w_D)`, neural admissibility, any neural/system penalty, optional
+energy pressure, and a textual description. Regimes that are offline
+stress simulations rather than one-to-one runtime policies are marked
+with `simulation_only=true`. The memory/VRAM regime is explicitly
+proxy-based when no RAM/VRAM measurements are available.
+
+The policies form a predictive factor ablation:
+
+1. `robust_global_full_pool_baseline` -- a global full-pool baseline.
+2. `metadata_only_full_pool` -- content metadata without system
+   context.
+3. `system_only_full_pool` -- system/regime context without metadata
+   prediction.
+4. `metadata_plus_system_full_pool` -- combined content and system
+   context.
+5. `metadata_only_classic_pool` -- metadata prediction with neural
+   candidates excluded.
+6. `full_pool_oracle` -- an upper-bound reference, not a deployable
+   router.
+
+The no-leakage rule remains central: the predictive policy does not
+use the target image's measured R-D-E candidates to choose a codec.
+Those rows are used only afterwards to realise the selected
+codec/configuration and compute energy, rate, quality, quality-floor
+violations and regret against the active-regime oracle. The report
+records `policy_does_not_see_test_image_rde=true`.
+
+The main summary metrics are `energy_saving_vs_global_baseline`,
+`regret_reduction_vs_global_baseline`, `quality_violation_rate`, and
+`neural_selection_rate`, alongside mean energy, rate, quality and
+regret. These quantities support statements of the form: in a given
+regime, the router reduces energy or regret while preserving the
+quality floor. They should still be interpreted within the benchmark
+considered, not as universal claims about all natural images or all
+codec implementations.
+
+The module emits plot-ready CSVs for the main paper/demo views:
+
+- `operational_regime_plot_data.csv` for the energy-saving vs regret
+  reduction scatter.
+- `operational_regime_winner_distribution.csv` for stacked bars of
+  selected codec/configuration winners by regime.
+- `operational_regime_oracle_vs_prediction.csv` for oracle-family vs
+  predicted-family rates.
+- `operational_regime_family_confusion.csv` for classical/neural
+  confusion heatmaps.
+- `operational_regime_rate_pressure_sweep.csv` for the rate-weight
+  sweep that shows how family and codec selections change as bitrate
+  pressure increases.
+
+When `matplotlib` is available, the audit also writes PNGs such as
+`energy_saving_vs_regret_reduction.png`,
+`neural_selection_rate_by_regime.png`,
+`winner_family_by_regime.png`, `winner_codec_by_regime.png`,
+`oracle_vs_predicted_neural_rate.png`,
+`family_confusion_heatmap.png`,
+`rate_pressure_family_shift.png`,
+`rate_pressure_codec_shift.png`,
+`rate_reduction_vs_energy_penalty_sweep.png`, and
+`quality_violation_by_regime.png`. Plot generation is optional: if
+`matplotlib` is unavailable, the CLI still writes all CSV/JSON
+artifacts and records the skip reason in `plot_artifacts`.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.

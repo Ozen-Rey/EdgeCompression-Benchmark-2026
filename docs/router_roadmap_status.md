@@ -45,12 +45,22 @@ precision/recall against the oracle's classical/neural label. The
 test image's measured R-D-E candidates are never used to choose
 the codec; they are used only afterwards to look up the realised
 J_RDE of the predicted pair and to compute regret against the
-oracle. v0.43.2 remains the canonical classic-only
-interpretability/class-imbalance audit; v0.43.3 is the
-neural-inclusive oracle complement; v0.43.4 is the
-neural-inclusive *predictive router* evaluation. The runtime
-router, the ranking score, and the operational report schema are
-unchanged across all five releases.
+oracle. v0.43.5 integrates these predictive and neural-inclusive
+results into thesis-facing text for Chapters 5 and 6. v0.43.6 adds
+`src.router.analysis.operational_regime_simulation`, an offline
+operational-regime simulation and predictive factor ablation that
+compares global, metadata-only, system-only, metadata-plus-system,
+classic-only and oracle policies across normal, bandwidth-limited,
+energy-saving, battery/thermal, no-CUDA and memory/VRAM-pressure
+regimes. It also emits paper/demo plot data and optional PNGs for
+energy saving vs regret reduction, neural selection rate, winner
+distributions, family confusion and rate-pressure sweeps. v0.43.2
+remains the canonical classic-only interpretability/class-imbalance
+audit; v0.43.3 is the neural-inclusive oracle complement; v0.43.4 is
+the neural-inclusive predictive-router evaluation; v0.43.6 is the
+operational-regime simulation layer. The runtime router, the ranking
+score, and the operational report schema are unchanged across these
+releases.
 
 ## Original roadmap recap
 
