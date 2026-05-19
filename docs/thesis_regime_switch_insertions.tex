@@ -1,0 +1,92 @@
+\subsection{Routing predittivo e frontiera classico-neurale}
+\label{sec:routing-predittivo-frontiera-classico-neurale}
+
+Il router R-D-E non stabilisce una superiorita assoluta dei codec neurali
+o dei codec classici. La valutazione operativa descrive invece una
+frontiera di switch: per ogni immagine, profilo e vincolo di qualita, il
+router confronta il miglior candidato classico e il miglior candidato
+neurale nello stesso spazio rate-distortion-energy. I codec neurali
+diventano convenienti solo quando il vantaggio di rate o qualita
+compensa la penalita energetica. I codec classici restano sufficienti
+quando il peso dell'energia, i vincoli percettivi o i vincoli di sistema
+dominano la decisione.
+
+\subsubsection{Regimi operativi simulati}
+
+\input{tables/routing_regime/table_regime_summary_core}
+
+La simulazione operativa usa la policy
+\texttt{metadata\_plus\_system\_full\_pool} per osservare come la scelta
+predittiva cambia al variare del regime. Nel benchmark considerato, il
+regime \texttt{bandwidth\_limited} e quello in cui la selezione neurale
+rimane piu visibile; nei regimi orientati a energia, pressione termica,
+assenza di CUDA o pressione di memoria, il sistema tende invece a
+sopprimere o penalizzare i candidati neurali. Questo comportamento non
+implica dominanza universale di una famiglia di codec, ma indica che il
+profilo operativo modifica in modo sostanziale la convenienza R-D-E.
+
+\subsubsection{Contratto di qualita dell'oracle}
+
+L'oracle minimizza il costo R-D-E solo tra candidati che soddisfano il
+quality floor attivo. Se nessun candidato soddisfa il floor, il caso e
+marcato come \texttt{infeasible} e non viene trasformato in una scelta
+oracle a bassa qualita. Le violation delle policy predittive sono
+quindi \emph{realized ex-post violations}: descrivono la qualita
+ottenuta dopo che la policy ha scelto senza osservare le misure R-D-E
+della target image, e non sono oracle violations.
+
+The oracle is not a low-quality selector: it minimizes the R-D-E
+objective only over candidates satisfying the active quality floor, or
+reports infeasibility.
+
+\subsubsection{Switch analysis con SSIMULACRA2}
+
+\input{tables/routing_regime/table_ssimulacra2_switch_summary}
+
+Con SSIMULACRA2, i codec neurali vincono solo nel regime
+\texttt{bandwidth\_limited} e in una regione ristretta del benchmark.
+Al crescere del floor da 60 a 80, \texttt{neural\_win\_rate} passa da
+13.54\% a 2.08\%. In tutti questi casi
+\texttt{neural\_necessary\_rate} e pari a 0: nel benchmark considerato i
+codec neurali non sono necessari per superare la soglia percettiva, ma
+sono R-D-E efficienti in una frazione limitata dei casi.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/routing_regime/switch_reason_by_rate_weight.png}
+  \caption{Distribution of neural/classical switch reasons as the rate weight increases.}
+  \label{fig:switch-reason-rate-weight}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/routing_regime/neural_vs_classic_tradeoff_scatter.png}
+  \caption{Neural versus classical trade-off between bitrate reduction and energy penalty.}
+  \label{fig:neural-classic-tradeoff}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/routing_regime/quality_floor_vs_neural_necessity.png}
+  \caption{Effect of the SSIMULACRA2 quality floor on neural usefulness and necessity.}
+  \label{fig:quality-floor-neural-necessity}
+\end{figure}
+
+\subsubsection{Expected-quality gate}
+
+\input{tables/routing_regime/table_expected_quality_gate_summary}
+
+Il gate shadow elimina le violation ex-post nel run SSIMULACRA2, ma al
+costo di una policy piu conservativa: aumenta il fallback, sopprime le
+selezioni neurali e puo aumentare il regret medio. Per questo motivo non
+viene presentato come policy finale, ma come diagnostica di
+safety/adaptivity: mostra come ridurre le violation senza leakage,
+usando solo statistiche di qualita stimate dal training fold.
+
+\subsubsection{PSNR30 come stress test}
+
+PSNR30 viene usato solo come stress test rate-oriented. Non e il claim
+finale di qualita percettiva e non sostituisce la valutazione basata su
+SSIMULACRA2. Nel regime \texttt{bandwidth\_limited}, PSNR30 mostra uno
+switch piu netto verso i codec neurali, ma la valutazione principale per
+il dominio immagine usa SSIMULACRA2 come metrica percettiva.

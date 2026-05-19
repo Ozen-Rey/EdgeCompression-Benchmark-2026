@@ -5,6 +5,36 @@ in particolare nel Capitolo 5 e nel Capitolo 6. Il contenuto non introduce
 nuovi esperimenti: riorganizza e contestualizza i risultati v0.43.0-v0.43.4
 gia prodotti dagli artefatti offline del router.
 
+## Integrazione esterna della tesi
+
+La tesi non vive in questo repository router. Il progetto LaTeX esterno e:
+
+```text
+C:\Projects\TesiUnipd
+```
+
+Per la linea v0.43.7, i file testuali finali da copiare o innestare nel
+manoscritto sono:
+
+- `docs/thesis_regime_switch_insertions.tex`
+- `docs/thesis_regime_artifacts_insertions.tex`
+
+Le figure derivate dal run SSIMULACRA2 sono state esportate in:
+
+```text
+C:\Projects\TesiUnipd\figures\routing_regime
+```
+
+Le tabelle LaTeX generate dai CSV finali sono state esportate in:
+
+```text
+C:\Projects\TesiUnipd\tables\routing_regime
+```
+
+La tesi deve includere solo PNG, tabelle LaTeX e testo LaTeX. I moduli
+Python restano nel repository router come artefatti software descritti,
+ma non devono essere copiati nel progetto della tesi.
+
 ## Capitolo 5 - Routing R-D-E predittivo
 
 ### Benchmark R-D-E come base decisionale
