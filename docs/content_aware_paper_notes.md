@@ -462,6 +462,52 @@ When `matplotlib` is available, the audit also writes PNGs such as
 `matplotlib` is unavailable, the CLI still writes all CSV/JSON
 artifacts and records the skip reason in `plot_artifacts`.
 
+## Operational regime diagnostics
+
+v0.43.6.1 adds the read-only module
+`src.router.analysis.operational_regime_diagnostics`. It is a
+diagnostic companion to the operational-regime simulation, not a
+behavioral fix. The module inspects the simulation outputs and the
+source R-D-E CSV to explain three classes of anomalies observed in
+real runs: non-zero realized quality violations, negative regret, and
+apparent duplicate winner rows.
+
+The PSNR>=30 run is useful as a stress test of rate-pressure behavior,
+especially for observing whether the rate-pressure sweep moves from
+classical to neural selections as the rate weight increases. It should
+not be treated as a replacement for the image pipeline's perceptual
+quality contract. The main image configs use `ssimulacra2`,
+`quality_constraint_stat=min`, safe mode, and high-quality thresholds
+from `configs/quality_thresholds.json`; in that contract, the high
+image target resolves to SSIMULACRA2 80. The diagnostics therefore
+compare PSNR floor 30 against SSIMULACRA2 floors 60, 70 and 80.
+
+The predictive simulation follows a no-leakage rule: the policy does
+not inspect the target image's measured R-D-E candidates before
+choosing a codec/configuration. It can therefore measure realized
+quality only ex post. A `quality_violation=true` row in the simulation
+means that the predicted choice, once realized on the target image,
+falls below the chosen floor. This should be interpreted as a realized
+violation of the predictive offline policy, not as a direct failure of
+the runtime router quality guard. The runtime router filters an
+already measured candidate pool before ranking; the predictive
+simulation intentionally withholds target R-D-E information until
+after selection.
+
+Negative regret is also treated as a diagnostic signal. It indicates
+that the selected row and the oracle row may not have been compared
+under an identical effective objective, candidate pool, system penalty
+or quality gate. Such rows should not be cited as final performance
+results until the objective/quality contract has been explained and,
+if necessary, corrected in a later change. The diagnostics write
+`negative_regret_rows.csv`, `quality_violation_rows.csv`,
+`metric_comparison_summary.csv`,
+`objective_consistency_summary.csv`,
+`rate_pressure_transition_diagnostics.csv`, and
+`winner_distribution_duplicate_diagnostics.csv`, plus a structured
+JSON report with recommended fix options stated as non-applied
+diagnostic guidance.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.
