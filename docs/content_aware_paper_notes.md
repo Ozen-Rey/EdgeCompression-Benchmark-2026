@@ -551,6 +551,50 @@ router exposes the frontier where rate/quality benefit and energy
 penalty trade off, rather than treating either classical or neural
 codecs as universally preferable.
 
+## Oracle quality contract and predictive safety gate
+
+v0.43.6.3 makes the oracle quality contract explicit in the
+operational-regime simulation. The oracle is computed only over
+candidates that satisfy the active quality floor for higher-is-better
+metrics such as PSNR and SSIMULACRA2. If no candidate satisfies the
+floor, the case is reported as `oracle_status=infeasible`; the module
+does not silently choose the best low-quality candidate as an oracle.
+Such rows are excluded from regret accounting rather than converted
+into low-quality oracle wins.
+
+This distinction matters for interpreting quality violations. A
+predictive policy may still select a codec/configuration that, once
+realized on the target image, falls below the floor. That is a
+realized ex-post prediction error under the no-leakage protocol, not
+an oracle violation. The simulation therefore reports
+`realized_quality_violation`, `selected_quality_margin`,
+`oracle_quality_margin`, and, when available,
+`baseline_quality_margin`. The oracle contract itself is summarized in
+the JSON report under `oracle_quality_contract`, including whether any
+feasible oracle violates the floor.
+
+The image claim should remain SSIMULACRA2-first. A PSNR>=30 run is a
+useful rate-oriented stress test for studying the rate-pressure
+transition, but it does not replace the perceptual quality guard used
+by the main image router configs. When `quality_col=ssimulacra2`, the
+simulation report marks the metric as the preferred perceptual image
+metric; when `quality_col=psnr`, it marks the run as a
+rate-oriented stress test.
+
+v0.43.6.3 also adds a report-only `expected_quality_gate` shadow
+comparison. For each fold, the gate estimates expected quality for a
+predicted codec/configuration from the training split only, using
+training-set minimum and p10 quality. If the predicted candidate is
+not expected to satisfy the active floor, the shadow policy falls back
+to a training-safe baseline. This is the appropriate way to reduce
+realized violations without looking at target-image R-D-E measurements
+before selection. The outputs
+`quality_gate_comparison_summary.csv` and
+`quality_gate_comparison_decisions.csv` compare the ungated predictive
+policy with the shadow-gated policy in terms of regret, realized
+quality violation rate, fallback rate, neural selection rate and
+objective gain.
+
 ## Caveats
 
 The current benchmark has 96 images across 4 datasets. The classifier is intentionally simple and should be presented as a lightweight baseline, not as the final possible predictor.

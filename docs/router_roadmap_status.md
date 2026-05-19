@@ -73,6 +73,12 @@ reported separately. It also adds neural/classical switch analysis:
 per-image and aggregate comparisons of the best classical and neural
 candidates, switch reasons, rate-pressure transition points and
 plot-ready frontier data.
+v0.43.6.3 makes the oracle quality contract explicit in the
+operational-regime simulation: feasible oracles must satisfy the
+active quality floor, infeasible cases are reported separately, and
+predictive realized quality violations are distinguished from oracle
+violations. It also adds a report-only expected-quality gate shadow
+comparison based only on training-fold quality statistics.
 
 ## Original roadmap recap
 
