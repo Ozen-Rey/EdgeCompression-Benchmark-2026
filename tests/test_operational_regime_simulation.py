@@ -222,8 +222,10 @@ def test_cli_writes_json_and_csv_artifacts(tmp_path):
 
     report = json.loads(paths["report"].read_text(encoding="utf-8"))
     assert report["provenance"]["policy_does_not_see_test_image_rde"] is True
-    assert "plot_artifacts" in report
-    assert report["plot_artifacts"]["plot_data_paths"]
+    assert report["plot_generation"]["generated_by_simulation"] is False
+    assert report["plot_generation"]["plotter_module"] == "src.router.analysis.operational_regime_plots"
+    assert report["plot_generation"]["plot_inputs_written"] is True
+    assert report["plot_generation"]["plot_data_paths"]
     assert report["quality_metric_contract"]["role"] == "rate_oriented_stress_test"
     assert "switch_analysis" in report
     assert report["oracle_quality_contract"]["hard_quality_floor"] is True
@@ -420,12 +422,14 @@ def test_rate_pressure_sweep_contains_grid_and_shift(tmp_path):
     assert max(mean_values := [sum(v) / len(v) for v in by_weight.values()]) > min(mean_values)
 
 
-def test_optional_png_generation_does_not_block_report(tmp_path):
+def test_simulation_does_not_generate_png(tmp_path):
     paths = _run_cli(tmp_path)
-    report = json.loads(paths["report"].read_text(encoding="utf-8"))
-    assert "generated" in report["plot_artifacts"]
-    if not report["plot_artifacts"]["generated"]:
-        assert report["plot_artifacts"]["skipped_reason"]
+    assert not list(paths["out_dir"].glob("*.png"))
+
+
+def test_simulation_main_path_does_not_import_matplotlib():
+    source = Path(ors.__file__).read_text(encoding="utf-8")
+    assert "matplotlib" not in source
 
 
 def _switch_unit_rows() -> List[Dict[str, Any]]:

@@ -449,18 +449,28 @@ The module emits plot-ready CSVs for the main paper/demo views:
   sweep that shows how family and codec selections change as bitrate
   pressure increases.
 
-When `matplotlib` is available, the audit also writes PNGs such as
-`energy_saving_vs_regret_reduction.png`,
-`neural_selection_rate_by_regime.png`,
-`winner_family_by_regime.png`, `winner_codec_by_regime.png`,
-`oracle_vs_predicted_neural_rate.png`,
-`family_confusion_heatmap.png`,
-`rate_pressure_family_shift.png`,
-`rate_pressure_codec_shift.png`,
-`rate_reduction_vs_energy_penalty_sweep.png`, and
-`quality_violation_by_regime.png`. Plot generation is optional: if
-`matplotlib` is unavailable, the CLI still writes all CSV/JSON
-artifacts and records the skip reason in `plot_artifacts`.
+From v0.43.6.4 onward, CSV/JSON generation and PNG rendering are
+separate steps. The simulation module writes only scientific
+artifacts: CSV decision tables, plot-data CSVs, and JSON reports.
+PNG files are derived renderings produced by
+`python -m src.router.analysis.operational_regime_plots` from the
+CSV files that already exist. This separation keeps the scientific
+outputs valid even if a figure render is interrupted or a plotting
+backend is unavailable.
+
+For reproducibility, the recommended order is:
+
+1. run `src.router.analysis.operational_regime_simulation` to produce
+   the CSV/JSON artifacts;
+2. run `src.router.analysis.operational_regime_plots --plot-mode basic`
+   for the standard paper/demo figures;
+3. use `--plot-mode all` only when preparing the full figure set.
+
+If a plot run is interrupted, the incomplete plot output directory can
+be removed and regenerated from the existing CSVs. If the simulation
+itself was interrupted before all CSV/JSON artifacts were written,
+rerun the simulation first, then rerun the plotter. The PNGs should be
+treated as visualizations of the CSVs, not as primary evidence.
 
 ## Operational regime diagnostics
 
