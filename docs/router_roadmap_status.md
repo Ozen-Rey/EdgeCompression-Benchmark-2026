@@ -58,9 +58,14 @@ distributions, family confusion and rate-pressure sweeps. v0.43.2
 remains the canonical classic-only interpretability/class-imbalance
 audit; v0.43.3 is the neural-inclusive oracle complement; v0.43.4 is
 the neural-inclusive predictive-router evaluation; v0.43.6 is the
-operational-regime simulation layer. The runtime router, the ranking
-score, and the operational report schema are unchanged across these
-releases.
+operational-regime simulation layer. v0.43.6.1 adds
+`src.router.analysis.operational_regime_diagnostics`, a read-only
+diagnostic pass before any objective/quality fix. It inspects PSNR vs
+SSIMULACRA2 metric contracts, no-leakage realized quality violations,
+negative regret rows, objective-consistency hypotheses,
+rate-pressure transition points and winner-distribution duplicate
+appearance. The runtime router, the ranking score, and the
+operational report schema are unchanged across these releases.
 
 ## Original roadmap recap
 
