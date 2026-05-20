@@ -368,6 +368,80 @@ def _summary_report(manifest: DatasetManifest | Mapping[str, Any]) -> dict[str, 
     }
 
 
+def build_dataset_manifest_template(domain: str) -> dict[str, Any]:
+    domain = domain.strip().lower()
+    if domain == "image":
+        return {
+            "schema_version": "dataset_manifest_v1",
+            "dataset_id": "my_images",
+            "display_name": "My Image Dataset",
+            "domain": "image",
+            "root": "datasets/my_images",
+            "items": [
+                {
+                    "item_id": "img001",
+                    "path": "img001.png",
+                    "width": 768,
+                    "height": 512,
+                    "metadata": {"source": "template"},
+                }
+            ],
+            "splits": {"all": ["img001"], "test": ["img001"]},
+            "metadata": {"description": "Template image dataset manifest."},
+            "license": "TODO",
+            "source_url": "TODO",
+            "notes": "Paths are examples; validate with --check-files when files exist.",
+        }
+    if domain == "audio":
+        return {
+            "schema_version": "dataset_manifest_v1",
+            "dataset_id": "my_audio",
+            "display_name": "My Audio Dataset",
+            "domain": "audio",
+            "root": "datasets/my_audio",
+            "items": [
+                {
+                    "item_id": "aud001",
+                    "path": "aud001.wav",
+                    "duration_s": 3.5,
+                    "sample_rate": 48000,
+                    "channels": 2,
+                    "metadata": {"source": "template"},
+                }
+            ],
+            "splits": {"all": ["aud001"], "test": ["aud001"]},
+            "metadata": {"description": "Template audio dataset manifest."},
+            "license": "TODO",
+            "source_url": "TODO",
+            "notes": "Paths are examples; validate with --check-files when files exist.",
+        }
+    if domain == "video":
+        return {
+            "schema_version": "dataset_manifest_v1",
+            "dataset_id": "my_video",
+            "display_name": "My Video Dataset",
+            "domain": "video",
+            "root": "datasets/my_video",
+            "items": [
+                {
+                    "item_id": "vid001",
+                    "path": "vid001.y4m",
+                    "width": 1920,
+                    "height": 1080,
+                    "fps": 30.0,
+                    "num_frames": 120,
+                    "metadata": {"source": "template"},
+                }
+            ],
+            "splits": {"all": ["vid001"], "test": ["vid001"]},
+            "metadata": {"description": "Template video dataset manifest."},
+            "license": "TODO",
+            "source_url": "TODO",
+            "notes": "Paths are examples; validate with --check-files when files exist.",
+        }
+    raise ValueError(f"Unsupported dataset template domain: {domain}")
+
+
 def _json_ready_report(report: Mapping[str, Any]) -> str:
     return json.dumps(report, indent=2, sort_keys=True)
 
@@ -380,6 +454,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--validate", action="store_true")
     parser.add_argument("--check-files", action="store_true")
     parser.add_argument("--to-csv", default=None, help="Write an item table CSV.")
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="Output path for --new-template.",
+    )
+    parser.add_argument(
+        "--new-template",
+        choices=["image", "audio", "video"],
+        default=None,
+        help="Write a starter DatasetManifest JSON template.",
+    )
     parser.add_argument("--print-summary", action="store_true")
     parser.add_argument("--domain-spec", default=None, help="DomainSpec builtin or JSON path.")
     parser.add_argument("--validate-domain", action="store_true")
@@ -389,6 +474,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> dict[str, Any]:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+
+    if args.new_template is not None:
+        if args.out is None:
+            parser.error("--new-template requires --out")
+        template = build_dataset_manifest_template(args.new_template)
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(template, indent=2), encoding="utf-8")
+        report = validate_dataset_manifest(template)
+        report["template_out"] = str(out_path)
+        print(_json_ready_report(report))
+        return report
 
     if args.manifest is None:
         parser.print_help()

@@ -204,3 +204,14 @@ researcher add a new dataset by supplying a manifest and measurements CSV
 instead of editing Python code.
 
 See `docs/router_dataset_ingestion.md` for an end-to-end example.
+
+v0.44.4 adds researcher onboarding helpers around DomainSpec. Measurement
+templates are generated from the selected domain spec, so the CSV starts with
+the expected dataset, item id, codec, config, rate, quality, energy, and
+`time_ms` columns:
+
+```bash
+python -m src.router.core.dataset_ingestion \
+  --new-measurements-template audio_visqol \
+  --out audio_measurements_template.csv
+```
