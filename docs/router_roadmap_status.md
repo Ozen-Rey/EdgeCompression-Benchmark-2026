@@ -83,6 +83,11 @@ v0.43.6.4 splits operational-regime artifact generation from plot
 rendering: the simulation writes CSV/JSON only, while
 `src.router.analysis.operational_regime_plots` renders PNGs
 best-effort from those CSVs in a separate, rerunnable step.
+v0.44.0 adds the `DomainSpec` foundation for generalized image/audio/video
+R-D-E schemas: built-in metric/domain specs, offline spec and CSV validation,
+and a minimal CLI for inspecting and validating schema contracts. The core
+`J_RDE` formula, ranking behavior, benchmark data, execution backend,
+external codec system and historical reports remain unchanged.
 
 ## Original roadmap recap
 
