@@ -160,14 +160,53 @@ def plot_energy_bar(df_avg: pd.DataFrame) -> None:
     plt.close(fig)
 
 
+_VIDEO_BUBBLE_SIZE_MIN = 30.0
+_VIDEO_BUBBLE_SIZE_MAX = 900.0
+
+
+def _video_bubble_size_log(energy, e_min, e_max):
+    energy = np.asarray(energy, dtype=float)
+    denom = np.log10(e_max / e_min) if e_max > e_min else 1.0
+    frac = np.log10(np.clip(energy, e_min, e_max) / e_min) / denom
+    return _VIDEO_BUBBLE_SIZE_MIN + (_VIDEO_BUBBLE_SIZE_MAX - _VIDEO_BUBBLE_SIZE_MIN) * frac
+
+
+def _add_video_bubble_legend(ax, e_min: float, e_max: float, unit: str,
+                             decades: int = 4) -> None:
+    exponents = np.linspace(np.log10(e_min), np.log10(e_max), decades)
+    refs = [10 ** round(e) for e in exponents]
+    refs = sorted({float(f"{r:.2g}") for r in refs})
+
+    handles = []
+    labels = []
+    for ref in refs:
+        size = float(_video_bubble_size_log(np.array([ref]), e_min, e_max)[0])
+        handle = ax.scatter([], [], s=size, color="gray", alpha=0.55,
+                            edgecolors="black", linewidths=0.5)
+        handles.append(handle)
+        labels.append(f"{ref:g} {unit}" if ref >= 1 else f"{ref:.2g} {unit}")
+    ax.add_artist(
+        ax.legend(
+            handles, labels,
+            loc="lower right", title=f"Energy [{unit}]",
+            frameon=True, fontsize=8, title_fontsize=8, labelspacing=1.2,
+        )
+    )
+
+
 def plot_rde_bubble(df_avg: pd.DataFrame) -> None:
-    fig, ax = plt.subplots(figsize=(7.4, 5.2))
+    fig, ax = plt.subplots(figsize=(8.4, 5.6))
 
     energy = df_avg["energy_total_kj"].to_numpy()
-    e_min = np.nanmin(energy)
-    e_max = np.nanmax(energy)
+    e_min = float(np.nanmin(energy))
+    e_max = float(np.nanmax(energy))
 
-    sizes = 40 + 260 * (energy - e_min) / max(e_max - e_min, 1e-9)
+    # Previously linear: sizes = 40 + 260 * (E - e_min) / (e_max - e_min).
+    # With DCVC-DC ≈ 68 kJ as outlier and x264/x265/SVT-AV1 < 0.8 kJ,
+    # everything except DCVC-DC collapsed to the same minimum size.
+    # Log mapping spreads the energy axis across the full marker-area
+    # dynamic range so that 0.1 kJ vs 10 kJ vs 60 kJ are visually distinct.
+    sizes = _video_bubble_size_log(energy, e_min, e_max)
 
     for codec in CODEC_ORDER:
         g = df_avg[df_avg["codec_label"] == codec].sort_values("actual_mbps")
@@ -182,6 +221,8 @@ def plot_rde_bubble(df_avg: pd.DataFrame) -> None:
             s=sizes[df_avg.index.get_indexer(idx)],
             marker=MARKERS.get(codec, "o"),
             alpha=0.75,
+            edgecolors="black",
+            linewidths=0.4,
             label=codec,
         )
 
@@ -189,7 +230,10 @@ def plot_rde_bubble(df_avg: pd.DataFrame) -> None:
     ax.set_xlabel("Bitrate [Mbps]")
     ax.set_ylabel("VMAF")
     ax.set_title("Rate--distortion--energy operating space")
-    ax.legend(ncol=2, frameon=True)
+
+    codec_legend = ax.legend(ncol=2, frameon=True, loc="upper left")
+    ax.add_artist(codec_legend)
+    _add_video_bubble_legend(ax, e_min, e_max, unit="kJ/seq")
 
     fig.tight_layout()
     fig.savefig(OUT / "rde_bubble_vmaf_energy.pdf", bbox_inches="tight")
@@ -397,6 +441,10 @@ def plot_heatmap(
     ax.set_ylabel("Baseline codec")
     ax.set_title(title)
 
+    # Track clipped BD-rate cells so the caption / colorbar reader knows
+    # which numbers exceed the [-max_abs, +max_abs] colormap range.
+    clipped_any = False
+
     for i in range(len(labels)):
         for j in range(len(labels)):
             if i == j or not np.isfinite(mat[i, j]):
@@ -406,13 +454,21 @@ def plot_heatmap(
 
             if is_epsilon:
                 color = "white" if v > text_threshold else "black"
+                cell_text = fmt.format(v)
             else:
                 color = "white" if abs(v) > text_threshold else "black"
+                # Mark cells whose value exceeds the colormap clip so the
+                # reader does not mistake "saturated red" for "exactly at
+                # the colorbar maximum".
+                is_clipped = is_bd and abs(v) > max_abs
+                cell_text = fmt.format(v) + ("*" if is_clipped else "")
+                if is_clipped:
+                    clipped_any = True
 
             ax.text(
                 j,
                 i,
-                fmt.format(v),
+                cell_text,
                 ha="center",
                 va="center",
                 fontsize=7,
@@ -421,6 +477,17 @@ def plot_heatmap(
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(cbar_label)
+
+    if clipped_any:
+        # Surface the clip explicitly under the heatmap so a reader cannot
+        # miss it when scanning the figure.
+        ax.text(
+            0.5, -0.18,
+            f"* value exceeds colorbar range (|BD-rate| > {max_abs:g}%); "
+            "see numeric cell for actual value",
+            transform=ax.transAxes,
+            ha="center", va="top", fontsize=8, style="italic",
+        )
 
     fig.tight_layout()
     fig.savefig(OUT / out_name, bbox_inches="tight")
