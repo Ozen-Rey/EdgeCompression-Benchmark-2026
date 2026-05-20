@@ -21,6 +21,7 @@ pipeline -> profile_runner without a back-edge.
 """
 
 import argparse
+import csv
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -43,6 +44,7 @@ from src.router.codecs.codec_capabilities import (
 )
 from src.router.codecs.external_codec_registry import load_external_codec_points
 from src.router.context import RouterContext
+from src.router.core.domain_spec import resolve_builtin_domain_spec_for_metric
 from src.router.core.normalization_profile import load_normalization_profile
 from src.router.core.profiles import available_profiles
 from src.router.core.quality_thresholds import resolve_quality_floor
@@ -91,6 +93,49 @@ def parse_codec_list(value: Optional[str]) -> Optional[set[str]]:
         for item in value.split(",")
         if item.strip()
     }
+
+
+def _read_csv_headers(csv_path: str | Path) -> set[str]:
+    with Path(csv_path).open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return set(reader.fieldnames or [])
+
+
+def apply_domain_spec_column_defaults(
+    args: argparse.Namespace,
+    csv_path: str | Path,
+) -> None:
+    """Resolve safe column defaults from a built-in domain spec.
+
+    This is intentionally conservative for v0.44.0: a spec can fill an
+    omitted router column only when the requested domain/quality metric
+    maps to a built-in spec and the exact column is present in the CSV.
+    Legacy alias detection remains responsible for every other case.
+    """
+    spec = resolve_builtin_domain_spec_for_metric(
+        args.domain,
+        args.quality_metric or args.quality_col,
+    )
+    if spec is None:
+        return
+
+    headers = _read_csv_headers(csv_path)
+    defaults = {
+        "codec_col": spec.codec_column,
+        "config_col": spec.config_column,
+        "rate_col": spec.rate_column,
+        "quality_col": spec.quality_column,
+        "energy_col": spec.energy_column,
+        "time_col": spec.time_column,
+    }
+
+    for attr, column in defaults.items():
+        if (
+            getattr(args, attr, None) is None
+            and column is not None
+            and column in headers
+        ):
+            setattr(args, attr, column)
 
 
 def apply_system_aware_policy(
@@ -493,6 +538,8 @@ def run_router(
     router_context.calibration_bundle_validation_report = (
         calibration_bundle_validation_report
     )
+
+    apply_domain_spec_column_defaults(args, effective_csv_path)
 
     points, csv_row_diagnostics = load_rde_points_with_diagnostics(
         csv_path=effective_csv_path,

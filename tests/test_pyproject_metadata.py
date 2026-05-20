@@ -54,6 +54,15 @@ def test_pyproject_declares_rde_decision_explain_console_script() -> None:
     )
 
 
+def test_pyproject_declares_rde_domain_spec_console_script() -> None:
+    data = _load_pyproject()
+    scripts = data["project"].get("scripts", {})
+    assert scripts.get("rde-domain-spec") == "src.router.core.domain_spec:main", (
+        "pyproject.toml must expose 'rde-domain-spec' as a [project.scripts] "
+        "entry pointing to src.router.core.domain_spec:main"
+    )
+
+
 def test_pyproject_declares_test_extra() -> None:
     data = _load_pyproject()
     extras = data["project"].get("optional-dependencies", {})
