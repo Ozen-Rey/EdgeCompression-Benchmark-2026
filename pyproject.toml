@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edgecompression-benchmark-2026"
-version = "0.44.2"
+version = "0.44.3"
 description = "Edge compression benchmark and R-D-E router tooling."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,6 +20,7 @@ rde-legacy-import-audit = "src.router.observability.legacy_import_audit:main"
 rde-decision-explain = "src.router.observability.decision_explanation:main"
 rde-domain-spec = "src.router.core.domain_spec:main"
 rde-dataset-manifest = "src.router.core.dataset_manifest:main"
+rde-dataset-ingest = "src.router.core.dataset_ingestion:main"
 
 [project.optional-dependencies]
 test = ["pytest"]

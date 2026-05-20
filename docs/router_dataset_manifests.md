@@ -172,3 +172,13 @@ python -m src.router.rde_router \
 
 Real audio/video benchmark execution, compression, and automatic R-D-E row
 generation remain future work.
+
+## Manifest-Driven R-D-E Ingestion
+
+v0.44.3 adds `src.router.core.dataset_ingestion`, which consumes a
+`DatasetManifest`, a measurements CSV, and a `DomainSpec` to produce a
+router-ready R-D-E CSV. The manifest still describes source items; ingestion
+does the join and column mapping needed to turn measured codec rows into the
+schema expected by the router.
+
+See `docs/router_dataset_ingestion.md` for the full workflow.

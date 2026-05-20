@@ -97,6 +97,11 @@ fixtures. The router can validate fixture R-D-E rows through `DomainSpec` and
 produce offline decisions for `audio_visqol` and `video_vmaf`, while FAD is
 validated as a lower-is-better schema only. This release still does not add
 real audio/video benchmarking, compression, or runtime ranking changes.
+v0.44.3 adds manifest-driven R-D-E dataset ingestion: a `DatasetManifest`,
+measurements CSV, and `DomainSpec` can be joined into a validated router-ready
+R-D-E CSV with an audit report. This prepares pluggable datasets without
+changing ranking, runtime decision logic, benchmark data, or external codec
+execution.
 
 ## Original roadmap recap
 

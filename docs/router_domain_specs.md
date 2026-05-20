@@ -194,3 +194,13 @@ python -m src.router.rde_router \
 Lower-is-better metrics such as `audio_fad` are validated at the schema level
 in v0.44.2. Runtime ranking remains higher-is-better and FAD runtime support is
 left for a future compatibility pass.
+
+## Manifest-Driven Ingestion
+
+v0.44.3 uses `DomainSpec` during dataset ingestion. The ingestion CLI maps raw
+measurement columns into the selected domain schema, writes a normalized R-D-E
+CSV, and validates the result before it is handed to the router. This lets a
+researcher add a new dataset by supplying a manifest and measurements CSV
+instead of editing Python code.
+
+See `docs/router_dataset_ingestion.md` for an end-to-end example.
