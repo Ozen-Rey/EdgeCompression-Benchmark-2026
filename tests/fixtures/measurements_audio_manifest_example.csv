@@ -1,0 +1,4 @@
+item_id,codec,param,bitrate_kbps,visqol,energy_j_per_second,time_ms
+aud001,OPUS,opus_64,64,4.25,0.090,12.0
+aud001,AAC,aac_96,96,4.55,0.060,10.0
+aud001,MP3,mp3_48,48,3.75,0.030,7.0

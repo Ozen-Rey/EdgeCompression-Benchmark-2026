@@ -76,6 +76,15 @@ def test_pyproject_declares_rde_dataset_manifest_console_script() -> None:
     )
 
 
+def test_pyproject_declares_rde_dataset_ingest_console_script() -> None:
+    data = _load_pyproject()
+    scripts = data["project"].get("scripts", {})
+    assert scripts.get("rde-dataset-ingest") == "src.router.core.dataset_ingestion:main", (
+        "pyproject.toml must expose 'rde-dataset-ingest' as a "
+        "[project.scripts] entry pointing to src.router.core.dataset_ingestion:main"
+    )
+
+
 def test_pyproject_declares_test_extra() -> None:
     data = _load_pyproject()
     extras = data["project"].get("optional-dependencies", {})

@@ -1,0 +1,4 @@
+item_id,codec,param,bitrate_kbps,vmaf,energy_kj_per_sequence,time_ms
+vid001,AV1,av1_crf30,900,93.5,1.80,1200
+vid001,HEVC,hevc_crf28,1200,95.0,1.20,850
+vid001,H264,h264_crf25,700,85.0,0.70,500
