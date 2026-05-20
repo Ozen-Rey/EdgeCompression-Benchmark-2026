@@ -1,0 +1,7 @@
+dataset,codec,param,sequence,bitrate_kbps,vmaf,energy_kj_per_sequence,time_ms
+ugc_demo,AV1,av1_crf30,seq001,900,93.5,1.80,1200
+ugc_demo,HEVC,hevc_crf28,seq001,1200,95.0,1.20,850
+ugc_demo,H264,h264_crf25,seq001,700,85.0,0.70,500
+sports_demo,AV1,av1_crf30,seq002,1100,92.5,1.90,1280
+sports_demo,HEVC,hevc_crf28,seq002,1400,94.0,1.25,900
+sports_demo,H264,h264_crf25,seq002,850,84.0,0.75,540

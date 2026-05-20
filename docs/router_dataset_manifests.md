@@ -146,3 +146,29 @@ To add a dataset:
 This release stops at description and validation. Benchmarking, compression,
 codec probing, energy measurement, and R-D-E CSV generation remain separate
 steps.
+
+## Multi-Domain Router Smoke
+
+v0.44.2 connects the two schema layers in smoke tests:
+
+- `DatasetManifest` describes the input items, paths, splits, and media
+  metadata that future ingestion can use.
+- `DomainSpec` describes how an already measured R-D-E CSV should be read.
+
+The v0.44.2 fixture CSVs under `tests/fixtures/` are not generated from real
+benchmarks. They only prove that the router can read audio/video R-D-E rows and
+produce offline decisions when columns are supplied by `--domain-spec`.
+
+Example:
+
+```bash
+python -m src.router.rde_router \
+  --csv tests/fixtures/rde_audio_visqol.csv \
+  --domain-spec audio_visqol \
+  --profile balanced \
+  --out tmp/audio_report.json \
+  --summary-out tmp/audio_summary.csv
+```
+
+Real audio/video benchmark execution, compression, and automatic R-D-E row
+generation remain future work.

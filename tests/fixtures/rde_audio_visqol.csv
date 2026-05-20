@@ -1,0 +1,7 @@
+dataset,codec,param,item_id,bitrate_kbps,visqol,energy_j_per_second,time_ms
+speech_demo,OPUS,opus_64,aud001,64,4.25,0.090,12.0
+speech_demo,AAC,aac_96,aud001,96,4.55,0.060,10.0
+speech_demo,MP3,mp3_48,aud001,48,3.75,0.030,7.0
+music_demo,OPUS,opus_64,aud002,64,4.15,0.085,12.5
+music_demo,AAC,aac_96,aud002,96,4.45,0.058,10.5
+music_demo,MP3,mp3_48,aud002,48,3.65,0.028,7.5

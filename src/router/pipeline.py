@@ -44,7 +44,11 @@ from src.router.codecs.codec_capabilities import (
 )
 from src.router.codecs.external_codec_registry import load_external_codec_points
 from src.router.context import RouterContext
-from src.router.core.domain_spec import resolve_builtin_domain_spec_for_metric
+from src.router.core.domain_spec import (
+    domain_spec_to_dict,
+    resolve_builtin_domain_spec_for_metric,
+    resolve_domain_spec,
+)
 from src.router.core.normalization_profile import load_normalization_profile
 from src.router.core.profiles import available_profiles
 from src.router.core.quality_thresholds import resolve_quality_floor
@@ -104,7 +108,7 @@ def _read_csv_headers(csv_path: str | Path) -> set[str]:
 def apply_domain_spec_column_defaults(
     args: argparse.Namespace,
     csv_path: str | Path,
-) -> None:
+) -> Dict[str, Any]:
     """Resolve safe column defaults from a built-in domain spec.
 
     This is intentionally conservative for v0.44.0: a spec can fill an
@@ -112,12 +116,20 @@ def apply_domain_spec_column_defaults(
     maps to a built-in spec and the exact column is present in the CSV.
     Legacy alias detection remains responsible for every other case.
     """
-    spec = resolve_builtin_domain_spec_for_metric(
-        args.domain,
-        args.quality_metric or args.quality_col,
-    )
+    spec_name = getattr(args, "domain_spec", None)
+    if spec_name:
+        spec = resolve_domain_spec(spec_name)
+    else:
+        spec = resolve_builtin_domain_spec_for_metric(
+            args.domain,
+            args.quality_metric or args.quality_col,
+        )
+
     if spec is None:
-        return
+        return {
+            "enabled": False,
+            "name": None,
+        }
 
     headers = _read_csv_headers(csv_path)
     defaults = {
@@ -129,6 +141,32 @@ def apply_domain_spec_column_defaults(
         "time_col": spec.time_column,
     }
 
+    if spec_name:
+        required_columns = {
+            "codec_column": spec.codec_column,
+            "config_column": spec.config_column,
+            "rate_column": spec.rate_column,
+            "quality_column": spec.quality_column,
+            "energy_column": spec.energy_column,
+        }
+        if spec.time_column is not None:
+            required_columns["time_column"] = spec.time_column
+
+        missing = [
+            f"{role}:{column}"
+            for role, column in required_columns.items()
+            if column not in headers
+        ]
+        if missing:
+            raise ValueError(
+                "DomainSpec CSV column mismatch for "
+                f"{spec_name}: missing " + ", ".join(missing)
+            )
+
+        args.domain = spec.domain
+        if args.quality_metric is None:
+            args.quality_metric = spec.quality_column
+
     for attr, column in defaults.items():
         if (
             getattr(args, attr, None) is None
@@ -136,6 +174,28 @@ def apply_domain_spec_column_defaults(
             and column in headers
         ):
             setattr(args, attr, column)
+
+    report = domain_spec_to_dict(spec)
+    report.update(
+        {
+            "enabled": True,
+            "name": spec_name,
+            "resolved_from": "explicit" if spec_name else "inferred",
+        }
+    )
+    return report
+
+
+def apply_domain_spec_cli_defaults(args: argparse.Namespace) -> None:
+    """Apply domain/metric defaults before quality-threshold resolution."""
+    spec_name = getattr(args, "domain_spec", None)
+    if not spec_name:
+        return
+
+    spec = resolve_domain_spec(spec_name)
+    args.domain = spec.domain
+    if args.quality_metric is None:
+        args.quality_metric = spec.quality_column
 
 
 def apply_system_aware_policy(
@@ -462,6 +522,8 @@ def run_router(
             "do not combine it with --all-profiles."
         )
 
+    apply_domain_spec_cli_defaults(args)
+
     if args.safe_mode:
         if args.quality_constraint_stat is None:
             args.quality_constraint_stat = "p10"
@@ -539,7 +601,10 @@ def run_router(
         calibration_bundle_validation_report
     )
 
-    apply_domain_spec_column_defaults(args, effective_csv_path)
+    router_context.domain_spec_report = apply_domain_spec_column_defaults(
+        args,
+        effective_csv_path,
+    )
 
     points, csv_row_diagnostics = load_rde_points_with_diagnostics(
         csv_path=effective_csv_path,
@@ -865,6 +930,9 @@ def run_router(
         if args.export_topk:
             topk_path = out_path.with_name(out_path.stem + "_topk.csv")
             write_topk_csv(topk_rows_from_report(report), topk_path)
+
+        if args.summary_out is not None:
+            write_summary_csv([summary_row_from_report(report)], Path(args.summary_out))
 
         print_single_decision(report, out_path)
 

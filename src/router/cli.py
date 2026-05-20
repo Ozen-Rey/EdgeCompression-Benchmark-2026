@@ -98,6 +98,15 @@ def build_router_arg_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--domain-spec",
+        default=None,
+        help=(
+            "Built-in DomainSpec name or JSON path used to resolve R-D-E "
+            "column defaults without changing the ranking formula."
+        ),
+    )
+
+    parser.add_argument(
         "--profile",
         default="balanced",
         choices=available_profiles(),

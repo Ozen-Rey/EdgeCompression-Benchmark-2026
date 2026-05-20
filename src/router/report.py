@@ -345,6 +345,10 @@ def build_router_report(
             context.router_config_report,
             {"enabled": False},
         ),
+        "domain_spec": _coalesce(
+            context.domain_spec_report,
+            {"enabled": False, "name": None},
+        ),
         "run_manifest": _coalesce(
             context.run_manifest,
             {"enabled": False},
