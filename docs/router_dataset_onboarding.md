@@ -243,6 +243,12 @@ The onboarding report includes a `codec_onboarding` block when `--codec-spec`
 is provided. See `docs/router_codec_onboarding.md` for the codec-specific
 workflow.
 
+The complete pluggability claim is exercised in
+`docs/router_full_pluggability_proof.md`: manifest plus measurements CSV plus
+`DomainSpec` becomes a validated R-D-E CSV and a router decision without router
+code changes. That proof validates the data contract, not the scientific
+correctness of the measurements themselves.
+
 ## Common errors
 
 `missing_measurement_columns:<name>` means the CSV does not contain a column

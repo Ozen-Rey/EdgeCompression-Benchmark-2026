@@ -7,6 +7,13 @@ from src.router.core.dataset_onboarding import main as dataset_onboarding_main
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SAMPLE_REPORT = (
+    ROOT / "docs" / "examples" / "full_pluggability_proof_report.example.json"
+)
+IMAGE_MANIFEST = ROOT / "configs" / "datasets" / "example_image_dataset.json"
+IMAGE_REAL_CODEC_MEASUREMENTS = (
+    ROOT / "tests" / "fixtures" / "measurements_image_manifest_example.csv"
+)
 
 
 CASES = [
@@ -52,6 +59,14 @@ CASES = [
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def _candidate_codecs(router_report_path: Path) -> set[str]:
+    router_report = json.loads(router_report_path.read_text(encoding="utf-8"))
+    return {
+        row["codec"]
+        for row in router_report["decision"]["scored_candidate_pool"]
+    }
 
 
 def test_full_dataset_codec_pluggability_proof_image_audio_video(
@@ -117,12 +132,8 @@ def test_full_dataset_codec_pluggability_proof_image_audio_video(
         ingested_csv = Path(onboarding_report["outputs"]["ingested_rde_csv"])
         router_report_path = Path(onboarding_report["outputs"]["router_report"])
         router_summary = Path(onboarding_report["outputs"]["router_summary"])
-        router_report = json.loads(router_report_path.read_text(encoding="utf-8"))
         ingested_rows = _read_csv(ingested_csv)
-        candidate_codecs = {
-            row["codec"]
-            for row in router_report["decision"]["scored_candidate_pool"]
-        }
+        candidate_codecs = _candidate_codecs(router_report_path)
 
         assert codec_report["valid"] is True
         assert onboarding_report["valid"] is True
@@ -162,22 +173,44 @@ def test_full_dataset_codec_pluggability_proof_image_audio_video(
             }
         )
 
+    valid = all(
+        case["manifest_valid"]
+        and case["codec_measurements_valid"]
+        and case["ingestion_valid"]
+        and case["domain_spec_validation_valid"]
+        and case["router_decision_valid"]
+        and case["selected_codec"]
+        and case["selected_config"]
+        and case["new_codec_in_candidate_pool"]
+        for case in proof_cases
+    )
     proof_report = {
-        "valid": all(
-            case["manifest_valid"]
-            and case["codec_measurements_valid"]
-            and case["ingestion_valid"]
-            and case["domain_spec_validation_valid"]
-            and case["router_decision_valid"]
-            and case["selected_codec"]
-            and case["selected_config"]
-            and case["new_codec_in_candidate_pool"]
-            for case in proof_cases
-        ),
+        "valid": valid,
+        "proof_mode": "pytest_tmp_generated",
+        "pluggability_status": "proven" if valid else "failed",
         "claim": (
             "new dataset + new codec/model measurements + DomainSpec -> "
             "R-D-E CSV -> router decision without router code changes"
         ),
+        "manifest_valid": all(case["manifest_valid"] for case in proof_cases),
+        "codec_measurements_valid": all(
+            case["codec_measurements_valid"] for case in proof_cases
+        ),
+        "ingestion_valid": all(case["ingestion_valid"] for case in proof_cases),
+        "domain_spec_valid": all(
+            case["domain_spec_validation_valid"] for case in proof_cases
+        ),
+        "router_decision_valid": all(
+            case["router_decision_valid"] for case in proof_cases
+        ),
+        "selected_codec": {
+            case["domain"]: case["selected_codec"] for case in proof_cases
+        },
+        "selected_config": {
+            case["domain"]: case["selected_config"] for case in proof_cases
+        },
+        "warnings": [],
+        "errors": [],
         "cases": proof_cases,
     }
     proof_report_path = tmp_path / "full_pluggability_proof_report.json"
@@ -189,6 +222,73 @@ def test_full_dataset_codec_pluggability_proof_image_audio_video(
     persisted = json.loads(proof_report_path.read_text(encoding="utf-8"))
     assert persisted["valid"] is True
     assert {case["domain"] for case in persisted["cases"]} == {
+        "image",
+        "audio",
+        "video",
+    }
+
+
+def test_full_pluggability_proof_with_real_jpeg_codec(tmp_path: Path) -> None:
+    work_dir = tmp_path / "real_jpeg"
+    report = dataset_onboarding_main(
+        [
+            "--manifest",
+            str(IMAGE_MANIFEST),
+            "--measurements-csv",
+            str(IMAGE_REAL_CODEC_MEASUREMENTS),
+            "--domain-spec",
+            "image_ssimulacra2",
+            "--work-dir",
+            str(work_dir),
+            "--item-id-col",
+            "item_id",
+            "--codec-col",
+            "codec",
+            "--config-col",
+            "param",
+            "--rate-col",
+            "bpp",
+            "--quality-col",
+            "ssimulacra2",
+            "--energy-col",
+            "energy_per_image_j",
+            "--time-col",
+            "time_ms",
+            "--router-profile",
+            "balanced",
+        ]
+    )
+    ingested_csv = Path(report["outputs"]["ingested_rde_csv"])
+    router_report_path = Path(report["outputs"]["router_report"])
+    router_summary = Path(report["outputs"]["router_summary"])
+    ingested_codecs = {row["codec"] for row in _read_csv(ingested_csv)}
+
+    assert report["valid"] is True
+    assert report["manifest_valid"] is True
+    assert report["ingestion_valid"] is True
+    assert report["domain_spec_valid"] is True
+    assert report["router_decision_valid"] is True
+    assert report["selected_codec"]
+    assert report["selected_config"]
+    assert "JPEG" in ingested_codecs
+    assert "JPEG" in _candidate_codecs(router_report_path)
+    assert router_summary.exists()
+
+
+def test_full_pluggability_sample_report_shape_is_consistent() -> None:
+    payload = json.loads(SAMPLE_REPORT.read_text(encoding="utf-8"))
+
+    assert payload["manifest_valid"] is True
+    assert payload["ingestion_valid"] is True
+    assert payload["domain_spec_valid"] is True
+    assert payload["router_decision_valid"] is True
+    assert payload["selected_codec"]
+    assert payload["selected_config"]
+    assert payload["proof_mode"] == "static_documentation_example"
+    assert payload["pluggability_status"] == "proven"
+    assert isinstance(payload["warnings"], list)
+    assert isinstance(payload["errors"], list)
+    assert {case["domain"] for case in payload["cases"]} == {
         "image",
         "audio",
         "video",

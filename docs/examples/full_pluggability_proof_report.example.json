@@ -1,0 +1,85 @@
+{
+  "cases": [
+    {
+      "codec_measurements_valid": true,
+      "domain": "image",
+      "domain_spec": "image_ssimulacra2",
+      "domain_spec_validation_valid": true,
+      "ingestion_valid": true,
+      "manifest_valid": true,
+      "new_codec": "example_neural_image_codec",
+      "new_codec_in_candidate_pool": true,
+      "outputs": {
+        "codec_measurements_report": "<pytest-tmp>/image/codec_measurements_report.json",
+        "ingested_rde_csv": "<pytest-tmp>/image/ingested_rde.csv",
+        "onboarding_report": "<pytest-tmp>/image/onboarding_report.json",
+        "router_report": "<pytest-tmp>/image/router_report.json",
+        "router_summary": "<pytest-tmp>/image/router_summary.csv"
+      },
+      "router_decision_valid": true,
+      "selected_codec": "example_neural_image_codec",
+      "selected_config": "latent_q4"
+    },
+    {
+      "codec_measurements_valid": true,
+      "domain": "audio",
+      "domain_spec": "audio_visqol",
+      "domain_spec_validation_valid": true,
+      "ingestion_valid": true,
+      "manifest_valid": true,
+      "new_codec": "example_audio_codec",
+      "new_codec_in_candidate_pool": true,
+      "outputs": {
+        "codec_measurements_report": "<pytest-tmp>/audio/codec_measurements_report.json",
+        "ingested_rde_csv": "<pytest-tmp>/audio/ingested_rde.csv",
+        "onboarding_report": "<pytest-tmp>/audio/onboarding_report.json",
+        "router_report": "<pytest-tmp>/audio/router_report.json",
+        "router_summary": "<pytest-tmp>/audio/router_summary.csv"
+      },
+      "router_decision_valid": true,
+      "selected_codec": "example_audio_codec",
+      "selected_config": "mode_a"
+    },
+    {
+      "codec_measurements_valid": true,
+      "domain": "video",
+      "domain_spec": "video_vmaf",
+      "domain_spec_validation_valid": true,
+      "ingestion_valid": true,
+      "manifest_valid": true,
+      "new_codec": "example_video_codec",
+      "new_codec_in_candidate_pool": true,
+      "outputs": {
+        "codec_measurements_report": "<pytest-tmp>/video/codec_measurements_report.json",
+        "ingested_rde_csv": "<pytest-tmp>/video/ingested_rde.csv",
+        "onboarding_report": "<pytest-tmp>/video/onboarding_report.json",
+        "router_report": "<pytest-tmp>/video/router_report.json",
+        "router_summary": "<pytest-tmp>/video/router_summary.csv"
+      },
+      "router_decision_valid": true,
+      "selected_codec": "example_video_codec",
+      "selected_config": "preset_a"
+    }
+  ],
+  "claim": "new dataset + new codec/model measurements + DomainSpec -> R-D-E CSV -> router decision without router code changes",
+  "codec_measurements_valid": true,
+  "domain_spec_valid": true,
+  "errors": [],
+  "ingestion_valid": true,
+  "manifest_valid": true,
+  "pluggability_status": "proven",
+  "proof_mode": "static_documentation_example",
+  "router_decision_valid": true,
+  "selected_codec": {
+    "audio": "example_audio_codec",
+    "image": "example_neural_image_codec",
+    "video": "example_video_codec"
+  },
+  "selected_config": {
+    "audio": "mode_a",
+    "image": "latent_q4",
+    "video": "preset_a"
+  },
+  "valid": true,
+  "warnings": []
+}

@@ -115,6 +115,10 @@ end-to-end test that validates dataset manifests, new codec measurements,
 ingestion, DomainSpec validation and router dry decisions, confirming that
 new datasets and codec/model measurements can reach the router without router
 code changes.
+v0.44.6.1 hardens the full pluggability proof with a committed sample report,
+an explicit boundary statement on what schema validation does not prove, and a
+real JPEG image smoke that exercises the same manifest -> measurements ->
+R-D-E CSV -> router path with a benchmark codec name.
 
 ## Original roadmap recap
 
