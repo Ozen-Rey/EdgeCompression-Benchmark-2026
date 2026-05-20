@@ -1,0 +1,34 @@
+{
+  "schema_version": "dataset_manifest_v1",
+  "dataset_id": "example_audio",
+  "display_name": "Example Audio Dataset",
+  "domain": "audio",
+  "root": "datasets/example_audio",
+  "items": [
+    {
+      "item_id": "aud001",
+      "path": "aud001.wav",
+      "duration_s": 3.5,
+      "sample_rate": 48000,
+      "channels": 2,
+      "metadata": {
+        "source": "example"
+      }
+    }
+  ],
+  "splits": {
+    "all": [
+      "aud001"
+    ],
+    "test": [
+      "aud001"
+    ]
+  },
+  "metadata": {
+    "synthetic_paths": true,
+    "description": "Example manifest only; file paths are placeholders."
+  },
+  "license": null,
+  "source_url": null,
+  "notes": "Used for schema validation examples without requiring real files."
+}
