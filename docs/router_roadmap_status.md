@@ -106,6 +106,10 @@ v0.44.4 adds a researcher onboarding workflow for pluggable datasets: manifest
 and measurements templates, a one-command onboarding validator that runs
 manifest validation, ingestion, DomainSpec validation and a router dry
 decision, plus a practical "How to add a new dataset" guide.
+v0.44.5 adds codec onboarding integration: measured-only codec rows and
+optional external codec specs can be checked against `DomainSpec`, included in
+manifest-driven ingestion, and consumed by the router without changing Python
+code or ranking logic.
 
 ## Original roadmap recap
 

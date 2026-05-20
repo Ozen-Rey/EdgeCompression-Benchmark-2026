@@ -94,6 +94,15 @@ def test_pyproject_declares_rde_dataset_onboard_console_script() -> None:
     )
 
 
+def test_pyproject_declares_rde_codec_onboard_console_script() -> None:
+    data = _load_pyproject()
+    scripts = data["project"].get("scripts", {})
+    assert scripts.get("rde-codec-onboard") == "src.router.core.codec_onboarding:main", (
+        "pyproject.toml must expose 'rde-codec-onboard' as a "
+        "[project.scripts] entry pointing to src.router.core.codec_onboarding:main"
+    )
+
+
 def test_pyproject_declares_test_extra() -> None:
     data = _load_pyproject()
     extras = data["project"].get("optional-dependencies", {})

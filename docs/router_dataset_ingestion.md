@@ -113,3 +113,11 @@ checks, ingestion, DomainSpec validation, and a router dry decision. It writes
 `router_summary.csv` to a chosen work directory.
 
 See `docs/router_dataset_onboarding.md` for the step-by-step guide.
+
+## Codec Measurements
+
+v0.44.5 adds `src.router.core.codec_onboarding` for measured-only codec rows
+and optional external codec specs. Dataset ingestion does not need to know how
+the codec is implemented; it only maps codec/config/rate/quality/energy
+measurements into the selected `DomainSpec`. See
+`docs/router_codec_onboarding.md` for the codec workflow.

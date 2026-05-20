@@ -1,0 +1,67 @@
+{
+  "schema_version": "external_codec_spec_v1",
+  "codec_id": "example_neural_image_codec",
+  "display_name": "Example Neural Image Codec",
+  "domain": "image",
+  "family": "neural",
+  "runtime": {
+    "type": "external_command",
+    "max_runtime_seconds": 30
+  },
+  "version_probe": {
+    "command_template": [
+      "example-neural-image-codec",
+      "--version"
+    ]
+  },
+  "encode": {
+    "command_template": [
+      "example-neural-image-codec",
+      "--input",
+      "{input}",
+      "--output",
+      "{output}"
+    ]
+  },
+  "decode": {
+    "command_template": [
+      "example-neural-image-codec",
+      "--decode",
+      "{input}",
+      "--output",
+      "{output}"
+    ]
+  },
+  "parameters": [
+    {
+      "name": "quality",
+      "type": "integer",
+      "values": [
+        40,
+        60,
+        80
+      ]
+    }
+  ],
+  "output": {
+    "extension": ".enc"
+  },
+  "rate": {
+    "metric": "bpp"
+  },
+  "quality": {
+    "metric": "ssimulacra2",
+    "direction": "higher_is_better"
+  },
+  "measurement": {
+    "time": "wall_clock"
+  },
+  "requirements": {
+    "binaries": [
+      "example-neural-image-codec"
+    ]
+  },
+  "security": {
+    "allow_shell": false
+  }
+}
