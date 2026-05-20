@@ -110,6 +110,11 @@ v0.44.5 adds codec onboarding integration: measured-only codec rows and
 optional external codec specs can be checked against `DomainSpec`, included in
 manifest-driven ingestion, and consumed by the router without changing Python
 code or ranking logic.
+v0.44.6 adds the full pluggability proof: a documented image/audio/video
+end-to-end test that validates dataset manifests, new codec measurements,
+ingestion, DomainSpec validation and router dry decisions, confirming that
+new datasets and codec/model measurements can reach the router without router
+code changes.
 
 ## Original roadmap recap
 
