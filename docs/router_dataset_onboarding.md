@@ -201,6 +201,48 @@ The work directory receives:
 
 The workflow is ready when all step booleans are true and `errors` is empty.
 
+## Adding a new codec to a new dataset
+
+For a measured-only codec, add the codec rows directly to the measurements CSV.
+The router does not need codec-specific Python code; it needs valid R-D-E rows.
+
+Validate the codec measurements first:
+
+```bash
+python -m src.router.core.codec_onboarding \
+  --measurements-csv audio_measurements_template.csv \
+  --domain-spec audio_visqol \
+  --codec-col codec \
+  --config-col param \
+  --rate-col bitrate_kbps \
+  --quality-col visqol \
+  --energy-col energy_j_per_second \
+  --report-out .pytest_tmp_onboard/codec_report.json
+```
+
+Then run ingestion and the onboarding workflow as usual. If you also have an
+external codec spec, pass it to the one-command workflow:
+
+```bash
+python -m src.router.core.dataset_onboarding \
+  --manifest configs/datasets/my_images.json \
+  --measurements-csv measurements_template.csv \
+  --domain-spec image_ssimulacra2 \
+  --work-dir .pytest_tmp_onboard \
+  --item-id-col image_id \
+  --codec-col codec \
+  --config-col config \
+  --rate-col bpp \
+  --quality-col ssimulacra2 \
+  --energy-col energy_per_image_j \
+  --time-col time_ms \
+  --codec-spec tests/fixtures/external_codec_image_spec.json
+```
+
+The onboarding report includes a `codec_onboarding` block when `--codec-spec`
+is provided. See `docs/router_codec_onboarding.md` for the codec-specific
+workflow.
+
 ## Common errors
 
 `missing_measurement_columns:<name>` means the CSV does not contain a column

@@ -215,3 +215,8 @@ python -m src.router.core.dataset_ingestion \
   --new-measurements-template audio_visqol \
   --out audio_measurements_template.csv
 ```
+
+v0.44.5 uses the same DomainSpec contract for codec onboarding. A measured-only
+codec is acceptable when its measurements CSV provides the mapped codec,
+config, rate, quality, and energy columns with numeric R-D-E values. Optional
+external codec specs are checked against the same domain.

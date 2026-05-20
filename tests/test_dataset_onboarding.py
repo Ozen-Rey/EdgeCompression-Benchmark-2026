@@ -204,6 +204,7 @@ def test_onboarding_report_contains_all_steps(tmp_path: Path) -> None:
         "ingestion",
         "domain_spec",
         "router_decision",
+        "codec_onboarding",
     }
     assert persisted["manifest_valid"] is True
     assert persisted["ingestion_valid"] is True

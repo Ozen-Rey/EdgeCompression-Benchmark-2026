@@ -8,6 +8,15 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from src.router.codecs.external_codec_spec import (
+    load_external_codec_spec,
+    validate_external_codec_spec,
+)
+from src.router.core.codec_onboarding import (
+    build_codec_onboarding_summary,
+    validate_codec_domain_compatibility,
+    validate_codec_measurements_compatibility,
+)
 from src.router.core.dataset_ingestion import (
     build_rde_csv,
     join_manifest_measurements,
@@ -77,6 +86,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--energy-col", required=True)
     parser.add_argument("--time-col", default=None)
     parser.add_argument("--router-profile", default="balanced")
+    parser.add_argument("--codec-spec", default=None)
     return parser
 
 
@@ -92,6 +102,12 @@ def run_onboarding(args: argparse.Namespace) -> dict[str, Any]:
     errors: list[str] = []
     selected_codec = None
     selected_config = None
+    codec_onboarding_report: dict[str, Any] = {
+        "enabled": False,
+        "valid": True,
+        "errors": [],
+        "warnings": [],
+    }
 
     manifest = load_dataset_manifest(args.manifest)
     domain_spec = resolve_domain_spec(args.domain_spec)
@@ -129,6 +145,39 @@ def run_onboarding(args: argparse.Namespace) -> dict[str, Any]:
         "energy": args.energy_col,
         "time": args.time_col,
     }
+
+    if args.codec_spec is not None:
+        codec_spec = load_external_codec_spec(args.codec_spec)
+        codec_spec_report = validate_external_codec_spec(codec_spec)
+        codec_spec_report["enabled"] = True
+        codec_domain_report = validate_codec_domain_compatibility(
+            codec_spec,
+            domain_spec,
+        )
+        codec_domain_report["enabled"] = True
+        codec_measurements_report = validate_codec_measurements_compatibility(
+            measurements,
+            domain_spec,
+            codec_id=codec_spec.get("codec_id"),
+            column_mapping={
+                "codec": args.codec_col,
+                "config": args.config_col,
+                "rate": args.rate_col,
+                "quality": args.quality_col,
+                "energy": args.energy_col,
+            },
+        )
+        codec_measurements_report["enabled"] = True
+        codec_onboarding_report = build_codec_onboarding_summary(
+            domain_spec=domain_spec,
+            codec_spec=codec_spec,
+            codec_spec_report=codec_spec_report,
+            domain_report=codec_domain_report,
+            measurements_report=codec_measurements_report,
+        )
+        codec_onboarding_report["enabled"] = True
+        warnings.extend(codec_onboarding_report.get("warnings", []))
+        errors.extend(codec_onboarding_report.get("errors", []))
 
     ingestion_valid = False
     domain_spec_valid = False
@@ -231,7 +280,9 @@ def run_onboarding(args: argparse.Namespace) -> dict[str, Any]:
                 "selected_codec": selected_codec,
                 "selected_config": selected_config,
             },
+            "codec_onboarding": codec_onboarding_report,
         },
+        "codec_onboarding": codec_onboarding_report,
         "warnings": sorted(set(str(warning) for warning in warnings)),
         "errors": sorted(set(str(error) for error in errors)),
     }
