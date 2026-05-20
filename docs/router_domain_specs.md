@@ -150,3 +150,47 @@ Use `DatasetManifest` to describe source media files, item ids, splits, and
 media metadata. Use `DomainSpec` to describe the resulting R-D-E table columns,
 metrics, directions, and units. A dataset manifest does not contain codec
 results; a domain spec does not enumerate source files.
+
+## Multi-Domain Router Smoke
+
+v0.44.2 adds fixture-level router smoke coverage for audio and video R-D-E
+CSVs. This does not run real audio/video benchmarks and does not compress
+media. It demonstrates that already measured CSVs can be interpreted through
+`DomainSpec` without assuming image-only columns such as `bpp`,
+`ssimulacra2`, or `energy_per_image_j`.
+
+Validate audio and video fixture CSVs:
+
+```bash
+python -m src.router.core.domain_spec \
+  --csv tests/fixtures/rde_audio_visqol.csv \
+  --builtin audio_visqol \
+  --validate-csv
+
+python -m src.router.core.domain_spec \
+  --csv tests/fixtures/rde_video_vmaf.csv \
+  --builtin video_vmaf \
+  --validate-csv
+```
+
+Run offline router decisions on measured fixture rows:
+
+```bash
+python -m src.router.rde_router \
+  --csv tests/fixtures/rde_audio_visqol.csv \
+  --domain-spec audio_visqol \
+  --profile balanced \
+  --out tmp/audio_report.json \
+  --summary-out tmp/audio_summary.csv
+
+python -m src.router.rde_router \
+  --csv tests/fixtures/rde_video_vmaf.csv \
+  --domain-spec video_vmaf \
+  --profile balanced \
+  --out tmp/video_report.json \
+  --summary-out tmp/video_summary.csv
+```
+
+Lower-is-better metrics such as `audio_fad` are validated at the schema level
+in v0.44.2. Runtime ranking remains higher-is-better and FAD runtime support is
+left for a future compatibility pass.

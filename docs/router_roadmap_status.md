@@ -92,6 +92,11 @@ v0.44.1 adds `DatasetManifest`, a JSON schema and validator for pluggable
 image/audio/video datasets. It records source item ids, relative paths,
 splits and media metadata, exports a flat item table, and validates domain
 compatibility against `DomainSpec` without changing router runtime behavior.
+v0.44.2 adds multi-domain router smoke coverage for measured audio/video CSV
+fixtures. The router can validate fixture R-D-E rows through `DomainSpec` and
+produce offline decisions for `audio_visqol` and `video_vmaf`, while FAD is
+validated as a lower-is-better schema only. This release still does not add
+real audio/video benchmarking, compression, or runtime ranking changes.
 
 ## Original roadmap recap
 
