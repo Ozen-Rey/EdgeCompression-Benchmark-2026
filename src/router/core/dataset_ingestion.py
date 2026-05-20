@@ -278,6 +278,35 @@ def _write_rows_csv(rows: list[dict[str, Any]], path: str | Path) -> None:
         writer.writerows(rows)
 
 
+def build_measurements_template(domain_spec: DomainSpec | str) -> list[dict[str, Any]]:
+    spec = resolve_domain_spec(domain_spec) if isinstance(domain_spec, str) else domain_spec
+    item_column = spec.item_id_columns[0] if spec.item_id_columns else "item_id"
+    example_item_id = (
+        "img001"
+        if spec.domain == "image"
+        else "aud001"
+        if spec.domain == "audio"
+        else "vid001"
+    )
+    row: dict[str, Any] = {
+        spec.dataset_column: f"example_{spec.domain}",
+        item_column: example_item_id,
+        spec.codec_column: "example_codec",
+        spec.config_column: "example_config",
+        spec.rate_column: 1.0 if spec.rate_unit == "bpp" else 64,
+        spec.quality_column: (
+            82.0
+            if spec.domain == "image"
+            else 4.2
+            if spec.domain == "audio"
+            else 92.0
+        ),
+        spec.energy_column: 0.1,
+        "time_ms": 10.0,
+    }
+    return [row]
+
+
 def write_ingestion_report(report: Mapping[str, Any], path: str | Path) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(
@@ -348,18 +377,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Ingest DatasetManifest + measurements CSV into router-ready R-D-E CSV."
     )
-    parser.add_argument("--manifest", required=True)
-    parser.add_argument("--measurements-csv", required=True)
-    parser.add_argument("--domain-spec", required=True)
-    parser.add_argument("--out-csv", required=True)
-    parser.add_argument("--report-out", required=True)
-    parser.add_argument("--item-id-col", required=True)
+    parser.add_argument("--new-measurements-template", default=None)
+    parser.add_argument("--out", default=None)
+    parser.add_argument("--manifest", default=None)
+    parser.add_argument("--measurements-csv", default=None)
+    parser.add_argument("--domain-spec", default=None)
+    parser.add_argument("--out-csv", default=None)
+    parser.add_argument("--report-out", default=None)
+    parser.add_argument("--item-id-col", default=None)
     parser.add_argument("--dataset-col", default=None)
-    parser.add_argument("--codec-col", required=True)
-    parser.add_argument("--config-col", required=True)
-    parser.add_argument("--rate-col", required=True)
-    parser.add_argument("--quality-col", required=True)
-    parser.add_argument("--energy-col", required=True)
+    parser.add_argument("--codec-col", default=None)
+    parser.add_argument("--config-col", default=None)
+    parser.add_argument("--rate-col", default=None)
+    parser.add_argument("--quality-col", default=None)
+    parser.add_argument("--energy-col", default=None)
     parser.add_argument("--time-col", default=None)
     parser.add_argument("--allow-missing-items", type=_parse_bool, default=False)
     parser.add_argument("--strict", type=_parse_bool, default=True)
@@ -369,6 +400,41 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> dict[str, Any]:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+
+    if args.new_measurements_template is not None:
+        if args.out is None:
+            parser.error("--new-measurements-template requires --out")
+        rows = build_measurements_template(args.new_measurements_template)
+        _write_rows_csv(rows, args.out)
+        report = {
+            "valid": True,
+            "errors": [],
+            "warnings": [],
+            "template_out": str(args.out),
+            "columns": _csv_columns(rows),
+            "domain_spec": domain_spec_to_dict(
+                resolve_domain_spec(args.new_measurements_template)
+            ),
+        }
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return report
+
+    required = [
+        "manifest",
+        "measurements_csv",
+        "domain_spec",
+        "out_csv",
+        "report_out",
+        "item_id_col",
+        "codec_col",
+        "config_col",
+        "rate_col",
+        "quality_col",
+        "energy_col",
+    ]
+    missing = [name for name in required if getattr(args, name) in (None, "")]
+    if missing:
+        parser.error("missing required ingestion arguments: " + ", ".join(missing))
 
     manifest = load_dataset_manifest(args.manifest)
     domain_spec = resolve_domain_spec(args.domain_spec)

@@ -102,6 +102,10 @@ measurements CSV, and `DomainSpec` can be joined into a validated router-ready
 R-D-E CSV with an audit report. This prepares pluggable datasets without
 changing ranking, runtime decision logic, benchmark data, or external codec
 execution.
+v0.44.4 adds a researcher onboarding workflow for pluggable datasets: manifest
+and measurements templates, a one-command onboarding validator that runs
+manifest validation, ingestion, DomainSpec validation and a router dry
+decision, plus a practical "How to add a new dataset" guide.
 
 ## Original roadmap recap
 

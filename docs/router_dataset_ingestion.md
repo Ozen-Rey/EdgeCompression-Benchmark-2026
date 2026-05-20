@@ -103,3 +103,13 @@ The ingestion report records:
 
 This report is intended to make dataset ingestion auditable before any router
 decision is made.
+
+## Onboarding Workflow
+
+v0.44.4 adds `src.router.core.dataset_onboarding`, which runs the practical
+researcher workflow in one command: manifest validation, measurement column
+checks, ingestion, DomainSpec validation, and a router dry decision. It writes
+`onboarding_report.json`, `ingested_rde.csv`, `router_report.json`, and
+`router_summary.csv` to a chosen work directory.
+
+See `docs/router_dataset_onboarding.md` for the step-by-step guide.

@@ -182,3 +182,14 @@ does the join and column mapping needed to turn measured codec rows into the
 schema expected by the router.
 
 See `docs/router_dataset_ingestion.md` for the full workflow.
+
+v0.44.4 also adds manifest template generation:
+
+```bash
+python -m src.router.core.dataset_manifest --new-template image --out my_images.json
+python -m src.router.core.dataset_manifest --new-template audio --out my_audio.json
+python -m src.router.core.dataset_manifest --new-template video --out my_video.json
+```
+
+The generated manifests validate without `--check-files` and are intended as
+starting points for external researchers.
