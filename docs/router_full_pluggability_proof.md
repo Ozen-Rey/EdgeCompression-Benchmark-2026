@@ -1,7 +1,9 @@
 # Router Full Pluggability Proof
 
 v0.44.6 adds a documented proof that the multi-domain onboarding pieces fit
-together without requiring router code changes.
+together without requiring router code changes. v0.44.6.1 hardens that proof
+with a static sample report, an explicit boundary statement, and an image smoke
+test that uses the real benchmark codec name `JPEG`.
 
 The proof covers this path:
 
@@ -38,6 +40,17 @@ full_pluggability_proof_report.json
 
 That report records the domain, `DomainSpec`, new codec id, validation flags,
 selected codec/config and the generated artifact paths for each proof case.
+
+A static reference copy is committed at
+`docs/examples/full_pluggability_proof_report.example.json`. It is only a
+documentation artifact for reading and review: the runtime never reads it, tests
+do not treat it as a source of truth, and fresh pytest runs still generate their
+own equivalent report in `tmp_path`.
+
+v0.44.6.1 also adds `test_full_pluggability_proof_with_real_jpeg_codec`, which
+uses the existing image manifest and a small JPEG/JXL/AVIF measurements fixture.
+That smoke proves the image path works for a real codec name already used by
+the benchmark, not only for synthetic codec ids.
 
 ## Proof Fixtures
 
@@ -79,11 +92,22 @@ python -m pytest -q --basetemp ".pytest_tmp_refactor"
 The temporary proof report is generated under pytest's temp directory during
 the test run. It is not committed because it is a generated example artifact.
 
-## Boundary
+## Boundary Of The Proof
 
-v0.44.6 does not benchmark real audio or video codecs, run external codec
-executables, add automatic dataset discovery, or add a router plugin API. Those
-remain future work. The release proves the current contract:
+This proof does not validate the scientific correctness of the measurements
+themselves. A misreported energy value in the CSV would still pass ingestion if
+it satisfies the `DomainSpec` schema. Scientific validation of measurements
+remains the responsibility of the benchmarking pipeline and the measurement
+protocol.
+
+Ingestion validates structure, required columns, numeric convertibility and
+domain compatibility. It does not prove that a codec implementation is correct,
+measure energy, execute arbitrary models automatically, or certify that the
+reported R-D-E values are physically accurate.
+
+v0.44.6 and v0.44.6.1 do not benchmark real audio or video codecs, run external
+codec executables, add automatic dataset discovery, or add a router plugin API.
+Those remain future work. The release proves the current contract:
 
 ```text
 manifest + measurements CSV + DomainSpec -> validated R-D-E CSV -> router decision
