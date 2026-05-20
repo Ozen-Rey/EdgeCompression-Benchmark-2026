@@ -1,0 +1,35 @@
+{
+  "schema_version": "dataset_manifest_v1",
+  "dataset_id": "example_video",
+  "display_name": "Example Video Dataset",
+  "domain": "video",
+  "root": "datasets/example_video",
+  "items": [
+    {
+      "item_id": "vid001",
+      "path": "vid001.y4m",
+      "width": 1920,
+      "height": 1080,
+      "fps": 30.0,
+      "num_frames": 120,
+      "metadata": {
+        "source": "example"
+      }
+    }
+  ],
+  "splits": {
+    "all": [
+      "vid001"
+    ],
+    "test": [
+      "vid001"
+    ]
+  },
+  "metadata": {
+    "synthetic_paths": true,
+    "description": "Example manifest only; file paths are placeholders."
+  },
+  "license": null,
+  "source_url": null,
+  "notes": "Used for schema validation examples without requiring real files."
+}

@@ -88,6 +88,10 @@ R-D-E schemas: built-in metric/domain specs, offline spec and CSV validation,
 and a minimal CLI for inspecting and validating schema contracts. The core
 `J_RDE` formula, ranking behavior, benchmark data, execution backend,
 external codec system and historical reports remain unchanged.
+v0.44.1 adds `DatasetManifest`, a JSON schema and validator for pluggable
+image/audio/video datasets. It records source item ids, relative paths,
+splits and media metadata, exports a flat item table, and validates domain
+compatibility against `DomainSpec` without changing router runtime behavior.
 
 ## Original roadmap recap
 

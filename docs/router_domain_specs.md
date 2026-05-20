@@ -142,3 +142,11 @@ To add a new schema:
 Runtime integration should stay conservative: validate the schema offline
 first, then use it to supply column defaults only when the CSV actually
 contains those columns.
+
+## Relationship To Dataset Manifests
+
+v0.44.1 adds `DatasetManifest` in `src/router/core/dataset_manifest.py`.
+Use `DatasetManifest` to describe source media files, item ids, splits, and
+media metadata. Use `DomainSpec` to describe the resulting R-D-E table columns,
+metrics, directions, and units. A dataset manifest does not contain codec
+results; a domain spec does not enumerate source files.

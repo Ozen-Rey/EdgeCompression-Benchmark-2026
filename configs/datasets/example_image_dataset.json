@@ -1,0 +1,33 @@
+{
+  "schema_version": "dataset_manifest_v1",
+  "dataset_id": "example_images",
+  "display_name": "Example Image Dataset",
+  "domain": "image",
+  "root": "datasets/example_images",
+  "items": [
+    {
+      "item_id": "img001",
+      "path": "img001.png",
+      "width": 768,
+      "height": 512,
+      "metadata": {
+        "source": "example"
+      }
+    }
+  ],
+  "splits": {
+    "all": [
+      "img001"
+    ],
+    "test": [
+      "img001"
+    ]
+  },
+  "metadata": {
+    "synthetic_paths": true,
+    "description": "Example manifest only; file paths are placeholders."
+  },
+  "license": null,
+  "source_url": null,
+  "notes": "Used for schema validation examples without requiring real files."
+}
