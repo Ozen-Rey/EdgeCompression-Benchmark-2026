@@ -182,9 +182,16 @@ def plot_energy_components(df_op: pd.DataFrame):
 
     fig, ax = plt.subplots(figsize=(10.8, 6.2))
     x = np.arange(len(summary))
+    width = 0.4
 
-    ax.bar(x, summary["cpu"], label="CPU")
-    ax.bar(x, summary["gpu"], bottom=summary["cpu"], label="GPU")
+    # Grouped (side-by-side) bars instead of stacked: stacking is invalid
+    # under a logarithmic y-axis because log(cpu+gpu) != log(cpu)+log(gpu),
+    # so the visual height of the stacked bar would not represent the sum.
+    # CPU-only codecs (gpu == 0) are drawn at a small visible floor to avoid
+    # the log(0) gap that would otherwise hide the zero contribution.
+    gpu_plot = summary["gpu"].clip(lower=1e-3)
+    ax.bar(x - width / 2, summary["cpu"], width=width, label="CPU")
+    ax.bar(x + width / 2, gpu_plot, width=width, label="GPU")
 
     ax.set_yscale("log")
     ax.set_xticks(x)
@@ -196,18 +203,66 @@ def plot_energy_components(df_op: pd.DataFrame):
     savefig("image_energy_components_4dataset.pdf")
 
 
+_BUBBLE_SIZE_MIN = 30.0
+_BUBBLE_SIZE_MAX = 1600.0
+
+
+def _bubble_size_log(energy, e_min, e_max):
+    """Map energy → marker area (points^2) on a log scale.
+
+    The wider [30, 1600] range (compared to the previous [70, 620]) gives
+    the eye a perceptible √(1600/30) ≈ 7× radius dynamic, which is the
+    largest the page width can host while keeping the smallest bubbles
+    legible. Lookups outside [e_min, e_max] are clipped.
+    """
+    energy = np.asarray(energy, dtype=float)
+    denom = np.log10(e_max / e_min) if e_max > e_min else 1.0
+    frac = np.log10(np.clip(energy, e_min, e_max) / e_min) / denom
+    return _BUBBLE_SIZE_MIN + (_BUBBLE_SIZE_MAX - _BUBBLE_SIZE_MIN) * frac
+
+
+def _add_bubble_size_legend(ax, e_min, e_max, unit: str, decades: int = 4):
+    """Add a secondary legend with reference bubble sizes.
+
+    Reads the same log mapping used by the scatter so the reader can
+    associate a marker area with an absolute energy value.
+    """
+    # Pick reference values spanning the observed range with round powers
+    # of 10 when possible.
+    exponents = np.linspace(np.log10(e_min), np.log10(e_max), decades)
+    refs = [10 ** round(e) for e in exponents]
+    refs = sorted({float(f"{r:.2g}") for r in refs})
+
+    handles = []
+    labels = []
+    for ref in refs:
+        size = float(_bubble_size_log(np.array([ref]), e_min, e_max)[0])
+        handle = ax.scatter([], [], s=size, color="gray", alpha=0.55,
+                            edgecolors="black", linewidths=0.5)
+        handles.append(handle)
+        if ref >= 1:
+            labels.append(f"{ref:g} {unit}")
+        else:
+            labels.append(f"{ref:.2g} {unit}")
+    ax.add_artist(
+        ax.legend(
+            handles, labels,
+            loc="lower right", title=f"Energy [{unit}]",
+            frameon=True, fontsize=8, title_fontsize=8, labelspacing=1.2,
+        )
+    )
+
+
 def plot_rde_bubble(df_op: pd.DataFrame):
     fig, ax = plt.subplots(figsize=(10.8, 6.8))
 
     energies = df_op["energy_per_image_j"].to_numpy(dtype=float)
-    e_min = np.nanmin(energies)
-    e_max = np.nanmax(energies)
+    e_min = float(np.nanmin(energies))
+    e_max = float(np.nanmax(energies))
 
-    # Bubble area scaled logarithmically to keep the plot readable.
     df_op = df_op.copy()
-    df_op["bubble_size"] = 70 + 550 * (
-        np.log10(df_op["energy_per_image_j"] / e_min + 1e-12)
-        / np.log10(e_max / e_min + 1e-12)
+    df_op["bubble_size"] = _bubble_size_log(
+        df_op["energy_per_image_j"].to_numpy(dtype=float), e_min, e_max
     )
 
     for codec in CODEC_ORDER:
@@ -221,6 +276,8 @@ def plot_rde_bubble(df_op: pd.DataFrame):
             s=sub["bubble_size"],
             marker=MARKERS.get(codec, "o"),
             alpha=0.70,
+            edgecolors="black",
+            linewidths=0.4,
             label=codec,
         )
 
@@ -228,7 +285,14 @@ def plot_rde_bubble(df_op: pd.DataFrame):
     ax.set_xlabel("Bitrate [bpp]")
     ax.set_ylabel("SSIMULACRA 2")
     ax.set_title("Rate--distortion--energy operating space, images")
-    ax.legend(ncol=3, frameon=True)
+
+    # Primary legend (codec). Stored explicitly so the bubble-size legend
+    # below does not overwrite it.
+    codec_legend = ax.legend(ncol=3, frameon=True, loc="upper left")
+    ax.add_artist(codec_legend)
+
+    # Secondary legend: bubble-size reference.
+    _add_bubble_size_legend(ax, e_min, e_max, unit="J/img")
 
     savefig("image_rde_bubble_ssimulacra2_energy_4dataset.pdf")
 

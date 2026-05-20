@@ -207,25 +207,41 @@ def _plot_oracle_predicted(plt: Any, data: Dict[str, Any], out_path: Path, max_p
 
 
 def _plot_rate_switch_boundary(plt: Any, data: Dict[str, Any], out_path: Path, max_plot_points: int, seed: int) -> Dict[str, Any]:
-    rows = data["switch_summary"]
-    weights = sorted({_float(r.get("rate_weight")) for r in rows if _float(r.get("rate_weight")) is not None})
-    neural_win = [_mean_metric([r for r in rows if _float(r.get("rate_weight")) == w], "neural_win_rate") for w in weights]
+    # ``operational_regime_switch_summary.csv`` aggregates by
+    # (regime, protocol, quality_floor); its rate_weight column is empty.
+    # The actual rate_weight sweep lives in
+    # ``operational_regime_rate_pressure_sweep.csv``, so we take the weight
+    # axis from there. switch_summary still provides the neural_win_rate,
+    # which is constant in rate_weight by construction (the switch analysis
+    # is computed once per quality floor), so we plot it as a horizontal
+    # reference line per quality floor.
     rp = data["rate_pressure"]
+    rs = data["switch_summary"]
+    weights = sorted({w for w in (_float(r.get("rate_weight")) for r in rp) if w is not None})
+    if not weights:
+        return {"sampled": False, "input_rows": len(rp), "plotted_rows": 0, "skipped": "no rate_weight values in rate_pressure CSV"}
+
     predicted = []
     oracle = []
     for w in weights:
         matches = [r for r in rp if _float(r.get("rate_weight")) == w and r.get("policy") == "metadata_plus_system_full_pool"]
         predicted.append(max([_float(r.get("neural_selection_rate")) or 0.0 for r in matches] or [0.0]))
         oracle.append(max([_float(r.get("oracle_neural_rate")) or 0.0 for r in matches] or [0.0]))
+
+    floors = sorted({f for f in (_float(r.get("quality_floor")) for r in rs) if f is not None})
+
     plt.figure(figsize=(8, 5))
-    plt.plot(weights, neural_win, marker="o", label="switch_neural_win_rate")
     plt.plot(weights, predicted, marker="s", label="predicted_neural_rate")
     plt.plot(weights, oracle, marker="^", label="oracle_neural_rate")
+    for floor in floors:
+        floor_rows = [r for r in rs if _float(r.get("quality_floor")) == floor]
+        win_rate = _mean_metric(floor_rows, "neural_win_rate")
+        plt.axhline(win_rate, linestyle="--", alpha=0.5, label=f"switch_neural_win_rate (Q≥{floor:g})")
     plt.xlabel("Rate weight")
-    plt.ylabel("Rate")
-    plt.legend()
+    plt.ylabel("Neural selection / win rate")
+    plt.legend(fontsize=8)
     _save(plt, out_path)
-    return {"sampled": False, "input_rows": len(rows), "plotted_rows": len(weights)}
+    return {"sampled": False, "input_rows": len(rp), "plotted_rows": len(weights)}
 
 
 def _plot_switch_reason(plt: Any, data: Dict[str, Any], out_path: Path, max_plot_points: int, seed: int) -> Dict[str, Any]:
@@ -257,9 +273,28 @@ def _plot_quality_floor(plt: Any, data: Dict[str, Any], out_path: Path, max_plot
     floors = sorted({_float(r.get("quality_floor")) for r in rows if _float(r.get("quality_floor")) is not None})
     necessity = [_mean_metric([r for r in rows if _float(r.get("quality_floor")) == f], "neural_necessary_rate") for f in floors]
     wins = [_mean_metric([r for r in rows if _float(r.get("quality_floor")) == f], "neural_win_rate") for f in floors]
+
+    # Guard: skip the plot when both series are degenerate (constant) — a
+    # flat line at 0 across 3 points is misleading and adds no information.
+    # The summary table is the authoritative artifact in that case.
+    necessity_varies = len(set(round(v, 6) for v in necessity)) > 1
+    wins_varies = len(set(round(v, 6) for v in wins)) > 1
+    if not (necessity_varies or wins_varies):
+        return {
+            "sampled": False,
+            "input_rows": len(rows),
+            "plotted_rows": 0,
+            "skipped": (
+                "both neural_necessary_rate and neural_win_rate are constant "
+                "across quality floors; rendering would mislead"
+            ),
+        }
+
     plt.figure(figsize=(7, 5))
-    plt.plot(floors, necessity, marker="o", label="neural_necessary_rate")
-    plt.plot(floors, wins, marker="s", label="neural_win_rate")
+    if necessity_varies:
+        plt.plot(floors, necessity, marker="o", label="neural_necessary_rate")
+    if wins_varies:
+        plt.plot(floors, wins, marker="s", label="neural_win_rate")
     plt.xlabel("Quality floor")
     plt.ylabel("Rate")
     plt.legend()
@@ -299,14 +334,35 @@ def _plot_tradeoff(plt: Any, data: Dict[str, Any], out_path: Path, max_plot_poin
             continue
         valid.append(row)
     rows, sampled = _sample_rows(valid, max_plot_points=max_plot_points, seed=seed)
-    plt.figure(figsize=(7, 5))
-    for row in rows:
-        x = _float(row.get("bitrate_reduction_neural_vs_classic"))
-        y = _float(row.get("delta_energy_neural_minus_classic"))
-        q = abs(_float(row.get("delta_quality_neural_minus_classic")) or 0.0)
-        plt.scatter(x, y, s=max(10.0, min(120.0, 20.0 + 20.0 * q)), alpha=0.55)
-    plt.xlabel("Bitrate reduction neural vs classic")
-    plt.ylabel("Delta energy neural minus classic")
+
+    xs = [_float(r.get("bitrate_reduction_neural_vs_classic")) for r in rows]
+    ys = [_float(r.get("delta_energy_neural_minus_classic")) for r in rows]
+    qs = [_float(r.get("delta_quality_neural_minus_classic")) or 0.0 for r in rows]
+    sizes = [max(15.0, min(120.0, 20.0 + 20.0 * abs(q))) for q in qs]
+
+    # Single vectorized call so every point gets a deterministic color from
+    # the colormap (driven by the quality delta) instead of a different
+    # cycler color per iteration, which produced the rainbow scatter.
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    scatter = ax.scatter(xs, ys, s=sizes, c=qs, cmap="coolwarm", alpha=0.65,
+                         edgecolors="none")
+    cbar = fig.colorbar(scatter, ax=ax)
+    cbar.set_label("Delta quality (neural - classic)")
+
+    # Clip y-axis to the 95th percentile to keep the bulk of the points
+    # readable; outliers (e.g. ~1200 J on one image) are kept off-axis and
+    # noted in the caption rather than allowed to crush the plot.
+    finite_ys = [y for y in ys if y is not None and math.isfinite(y)]
+    if finite_ys:
+        sorted_ys = sorted(finite_ys)
+        p95 = sorted_ys[int(0.95 * (len(sorted_ys) - 1))]
+        if p95 > 0:
+            ax.set_ylim(top=p95 * 1.1)
+
+    ax.axhline(0, color="black", linewidth=0.6, alpha=0.4)
+    ax.axvline(0, color="black", linewidth=0.6, alpha=0.4)
+    ax.set_xlabel("Bitrate reduction neural vs classic")
+    ax.set_ylabel("Delta energy neural minus classic")
     _save(plt, out_path)
     return {"sampled": sampled, "input_rows": len(valid), "plotted_rows": len(rows)}
 
