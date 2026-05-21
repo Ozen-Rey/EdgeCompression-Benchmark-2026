@@ -122,6 +122,11 @@ R-D-E CSV -> router path with a benchmark codec name.
 v0.44.6.2 identifies that onboarding proof contract as `rde_manifest_v1`,
 propagates the contract id to onboarding reports, and asserts that the generated
 and committed proof reports carry the same stable identifier.
+v0.45.0 adds real audio/video R-D-E router validation from existing measured
+benchmark rows: it builds router-ready audio ViSQOL and video VMAF CSVs,
+validates them with `DomainSpec`, runs the router across operational profiles,
+and emits offline oracle/baseline/regret diagnostics without modifying Chapter
+4 results or inventing missing measurements.
 
 ## Original roadmap recap
 
