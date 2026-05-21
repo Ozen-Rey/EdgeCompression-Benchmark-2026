@@ -37,6 +37,11 @@ decisions: it records which candidates are feasible, which candidate is
 selected under a profile, and how that selection compares with an offline
 oracle or a robust baseline.
 
+R-D-E is treated here as an adopted evaluation perspective, not as a newly
+invented concept. The contribution is the operationalization of this
+perspective for codec evaluation, routing, and reproducibility across measured
+image, audio, and video settings.
+
 ## 3. Contribution A - R-D-E metrology
 
 The methodological contribution is the shift from R-D comparison to R-D-E
