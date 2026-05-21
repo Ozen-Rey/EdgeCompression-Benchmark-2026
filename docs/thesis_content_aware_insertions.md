@@ -10,7 +10,7 @@ gia prodotti dagli artefatti offline del router.
 La tesi non vive in questo repository router. Il progetto LaTeX esterno e:
 
 ```text
-C:\Projects\TesiUnipd
+<thesis-root>
 ```
 
 Per la linea v0.43.7, i file testuali finali da copiare o innestare nel
@@ -22,13 +22,13 @@ manoscritto sono:
 Le figure derivate dal run SSIMULACRA2 sono state esportate in:
 
 ```text
-C:\Projects\TesiUnipd\figures\routing_regime
+<thesis-root>\figures\routing_regime
 ```
 
 Le tabelle LaTeX generate dai CSV finali sono state esportate in:
 
 ```text
-C:\Projects\TesiUnipd\tables\routing_regime
+<thesis-root>\tables\routing_regime
 ```
 
 La tesi deve includere solo PNG, tabelle LaTeX e testo LaTeX. I moduli

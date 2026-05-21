@@ -6,7 +6,7 @@ content-aware routing extension.
 
 ## Overview
 
-This repository contains the code, results, and routing infrastructure
+This repository contains the code, configuration, documentation, and routing infrastructure
 underlying the master's thesis _"Compressione dei Dati: Un'Analisi
 Comparativa tra Metodi Tradizionali e Approcci basati su Intelligenza
 Artificiale"_ (Università degli Studi di Padova, AA 2025-2026).
@@ -64,11 +64,9 @@ Per-domain benchmark scripts live under `src/benchmark/`:
 - `src/benchmark/video/` — per-codec encode/decode and quality scripts
 - `src/benchmark/benchmark_audio_*.py` — audio benchmark and ViSQOL / FAD
 
-Ground-truth numbers used in the manuscript are stored in
-`results/images/image_thesis_numbers.json` and
-`results/video/video_thesis_numbers.json`. Thesis figures are regenerated
-from the corresponding CSVs by the scripts under `src/utils/` and
-`src/plots/`.
+Benchmark outputs are generated locally under `results/`, `plots/`, and
+`figures/`. Those directories are ignored in the public repository layout and
+are not redistributed as part of the source license.
 
 ## R-D-E router
 
@@ -133,8 +131,8 @@ src/
   plots/           thesis plot generators
 configs/           router configs, codec catalogs, quality thresholds
 docs/              architecture, content-aware, feedback loop, limitations
-results/           benchmark CSV / JSON outputs (thesis ground truth)
-figures/           thesis figures
+results/           local generated benchmark CSV / JSON outputs (ignored)
+figures/           local generated figures (ignored)
 tests/             pytest suite (router, codecs, observability, analysis)
 scripts/           PowerShell entrypoints for router scenarios
 ```
@@ -163,6 +161,20 @@ freeze.
 
 If you use this benchmark, please cite the thesis (BibTeX forthcoming).
 
-## License
+## License and third-party components
 
-See `LICENSE`.
+The original source code, tests, configuration templates, setup scripts and
+project documentation authored in this repository are licensed under the
+Apache License, Version 2.0, unless otherwise stated.
+
+This license does not apply to third-party datasets, pretrained model weights,
+codec binaries, external tools, or locally generated benchmark outputs. Those
+components are not redistributed by this repository and remain subject to their
+respective upstream licenses and terms.
+
+The router is designed to interoperate with external codecs, datasets and
+models through declarative specifications and measured R-D-E rows.
+Interoperability does not imply endorsement, ownership, redistribution rights,
+or relicensing of those components.
+
+See `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` for details.

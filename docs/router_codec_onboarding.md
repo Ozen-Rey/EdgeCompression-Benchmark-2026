@@ -3,6 +3,9 @@
 v0.44.5 closes the codec side of the pluggable dataset workflow. A researcher
 can introduce a codec by providing valid R-D-E rows; the router does not need
 to know the codec internals.
+External codec binaries, source trees, models and checkpoints are not
+redistributed by this repository and remain subject to their upstream licenses
+and terms.
 
 ## Three Levels
 
@@ -33,6 +36,8 @@ If the codec can be executed by the external codec pipeline, provide an
 external codec spec JSON. The existing probe, dry-run, benchmark, and export
 tools can use that spec when compatible. v0.44.5 adds a lightweight domain
 compatibility check between the external spec and `DomainSpec`.
+The spec describes interoperability; it does not grant redistribution rights
+for the external codec or its dependencies.
 
 ```bash
 python -m src.router.core.codec_onboarding \

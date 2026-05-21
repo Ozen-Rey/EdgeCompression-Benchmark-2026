@@ -15,6 +15,8 @@ riproduce automaticamente l'intero stack di benchmark.
 
 External codecs, datasets, checkpoints and energy measurement tools remain
 benchmark/execution prerequisites and are not installed by the setup helper.
+They are not redistributed by this repository and remain subject to upstream
+licenses and terms.
 
 
 
@@ -121,7 +123,7 @@ Implemented execution backends:
 | HEVC Intra | `ffmpeg`/`libx265` | command generation + execute |
 
 The router searches executables both in the system `PATH` and in local project
-folders:
+folders when the user has placed external tools there:
 
 ```text
 tools/jxl/cjxl.exe

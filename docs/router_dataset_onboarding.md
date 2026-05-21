@@ -9,6 +9,9 @@ editing Python code. It uses three small tools:
 
 The workflow is offline. It does not run benchmarks, compress media, probe
 codecs, or change router ranking.
+Dataset manifests and templates do not grant rights to external datasets.
+Users must obtain datasets from their upstream sources under the applicable
+terms.
 
 ## 1. Choose a DomainSpec
 
@@ -79,7 +82,9 @@ python -m src.router.core.dataset_ingestion \
 ```
 
 Replace example rows with measured codec rows. The item id column must match
-the manifest item ids.
+the manifest item ids. Do not invent missing quality, rate, or energy values,
+and do not assume that a manifest gives permission to redistribute the
+underlying media.
 
 ## 4. Run ingestion
 
