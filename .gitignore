@@ -1,45 +1,39 @@
 # ============================================================
-# .gitignore per tesi Rate-Distortion-Energy
-# Idea: tracciamo SOLO il codice nostro + il manoscritto + i CSV
-# di risultato (piccoli ma critici per riproducibilità).
-# Tutto il resto (dataset, codec esterni, weights, output binari,
-# bitstream, decoded YUV) è ricreabile o scaricabile, NON va in git.
+# EdgeCompression benchmark local/generated artifacts
+# Keep source code, tests, configs, docs, and small fixtures trackable.
+# Keep generated benchmark outputs, local datasets, checkpoints, caches,
+# temporary files, and local scratch artifacts out of future commits.
 # ============================================================
 
+# Generated benchmark/router outputs
+/results/
+/plots/
+/figures/
 
-# ============== DATASET ==============
-# UVG, Tecnick, MUSDB18, ecc. — pesanti, scaricabili dai siti ufficiali
-# Local image datasets reconstructed by scripts/download_image_datasets.ps1
-datasets/images/
-datasets/
-datasets_audio/
+# Local datasets and generated inputs
+/datasets/
+/datasets_audio/
+/test_images/
+/calibration_images/
 
+# External codec checkouts and local tool builds
+/external_codecs/
+/tools/
 
-# ============== CODEC ESTERNI ==============
-# Repo terzi cloni (Microsoft DCVC, ffmpeg, x264, x265, SVT-AV1, vmaf, ...)
-# Contengono codice non nostro + binari + build artifacts.
-# Le SHA dei commit / istruzioni di build le mettiamo in setup.sh.
-external_codecs/
-tools/
-
-
-# ============== MODEL WEIGHTS ==============
-# Checkpoint pretrained dei codec neurali (DCVC-DC, FM, RT, ecc.).
-# Scaricabili dai link ufficiali Microsoft. Pesanti (~700 MB totali).
-models/
-model/
+# Local model/checkpoint artifacts
+/model
+/model/
+/models/
+/checkpoints/
 *.pth
 *.pth.tar
 *.ckpt
 *.safetensors
 
-
-# ============== OUTPUT BINARI ==============
-# Bitstream prodotti dai benchmark (ricreabili rilanciando run_*.py).
-# Pesanti se misurati su molti q_index/CRF.
-bitstreams_video/
-bitstreams_audio/
-bitstreams_image/
+# Generated bitstreams and decoded media scratch
+/bitstreams_video/
+/bitstreams_audio/
+/bitstreams_image/
 *.265
 *.264
 *.266
@@ -48,51 +42,52 @@ bitstreams_image/
 *.mkv
 *.mp4
 *.webm
-
-# YUV decodificati (sempre temporanei, non dovrebbero mai essere committati)
 *.yuv
 *.y4m
 
-
-# ============== LOG ==============
-# Output dei run benchmark, info debug, telemetria.
+# Logs
 *.log
 *.log.*
 oracle_telemetry*.log
 audio_musdb*.log
 
+# Local temporary/cache files
+/cache/
+/.cache/
+/.huggingface/
+**/wandb/
+/.tmp/
+/.tmp_manual_probe/
+/.tmp_pytest_cache/
+/.tmp_pytest_run/
+/.pytest_cache/
+/.pytest_cache_run/
+/.pytest_tmp*/
+/.pytest_tmp_run/
+/.test_tmp/
+/pytest-cache-files-*/
+/pytest_cache/
+/pytest_tmp*/
+/tests/_tmp/
+/.mypy_cache/
+/.ruff_cache/
 
-# ============== PYTHON ==============
+# Python build/cache artifacts
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.ipynb_checkpoints/
 *.egg-info/
-dist/
-build/
-.pytest_cache/
-.tmp/
-.tmp_pytest_cache/
-.tmp_pytest_run/
-.pytest_cache_run/
-.pytest_tmp_run/
-.test_tmp/
-pytest-cache-files-*/
-pytest_cache/
-pytest_tmp/
-tests/_tmp/
-.mypy_cache/
-.ruff_cache/
+/dist/
+/build/
 
-# Virtual envs (se mai li mettessi nella repo)
+# Virtual environments
 venv/
 env/
 .venv/
 .env/
 
-
-# ============== EDITOR / OS ==============
+# Editor / OS files
 .vscode/
 .idea/
 *.swp
@@ -101,75 +96,50 @@ env/
 .DS_Store
 Thumbs.db
 
-
-# ============== JUPYTER ==============
+# Jupyter metadata
 .ipynb_checkpoints/
 *.ipynb_meta
 
-
-# ============== LATEX (manoscritto tesi) ==============
-# Manteniamo SOLO i .tex e i .bib, non gli artefatti di compilazione.
+# LaTeX build artifacts
 *.aux
 *.bbl
 *.blg
 *.fdb_latexmk
 *.fls
 *.lof
-*.log
 *.lot
 *.out
 *.synctex.gz
 *.toc
 *.xdv
 *.dvi
-# il PDF finale non lo committiamo (lo rigeneri da .tex con pdflatex)
-# Se vuoi conservarlo togli le 2 righe seguenti:
-*.pdf
-!figures/**/*.pdf
-# (l'ultima riga eccetto-pattern preserva i .pdf usati come figure)
 
+# Legacy/local scripts
+/_local_legacy_smoke_scripts/
+/src/selector/
 
-# ============== GRANDI FILE / CACHE ==============
-# Hugging Face / PyTorch cache (di solito già fuori dalla repo, ma per sicurezza)
-.cache/
-.huggingface/
-**/wandb/
+# Local thesis scratch
+/codice_tesi.txt
 
+# Personal scaffolding
+/notes_personali.md
+/todo.txt
+/TODO_personali/
 
-# ============== RISULTATI: COSA TENIAMO ==============
-# I CSV di benchmark sono PICCOLI (KB/MB) e CRITICI: li teniamo!
-# Quindi NIENTE di esplicito qui: results/ è tracciato per default.
-# Forziamo un po' di ridondanza commentata:
-# !results/
-# !results/**
-
-
-# ============== SCAFFOLDING (cose tue da mantenere fuori dalla repo) ==============
-# Output sperimentali "personali" che non vuoi pushare:
-notes_personali.md
-todo.txt
-TODO_personali/
-
-# Pytest / temporary test artifacts
-.pytest_cache/
-.pytest_tmp/
-.pytest_tmp_*/
-.tmp_manual_probe/
-pytest_tmp/
-pytest-cache-files-*/
-
-# Generated benchmark/router outputs
-results/
-calibration_images/
-test_images/
-plots/
-
-# Local legacy image benchmarking/oracle scripts kept outside version control
-src/utils/energy_monitor.py
-src/benchmark/benchmark_images.py
-src/selector/oracle_telemetry.py
-src/selector/oracle_images_jxl.py
-
-# Python cache
-__pycache__/
-*.pyc
+# Generated media and binary artifacts under local outputs
+/results/**/*.flac
+/results/**/*.wav
+/results/**/*.mp3
+/results/**/*.opus
+/results/**/*.mp4
+/results/**/*.mkv
+/results/**/*.webm
+/results/**/*.y4m
+/results/**/*.bin
+/results/**/*.pkl
+/results/**/*.pt
+/results/**/*.pth
+/results/**/*.ckpt
+/results/**/*.png
+/results/**/*.jpg
+/results/**/*.jpeg
