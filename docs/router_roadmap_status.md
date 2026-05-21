@@ -141,6 +141,11 @@ v0.46.0 adds research framing, contribution mapping, thesis-to-contribution
 mapping and claim-audit documentation. It introduces no new code, experiments
 or results; it clarifies the bounded scientific claims supported by the current
 R-D-E benchmark/router artifacts and separates them from future work.
+v0.46.1 adds a read-only thesis artifact map and clarifies the R-D-E claim
+boundary: the repository does not claim to invent the general
+Rate--Distortion--Energy perspective, but documents how the thesis and router
+operationalize it for measured codec evaluation, routing, provenance and
+reproducibility.
 
 ## Original roadmap recap
 
