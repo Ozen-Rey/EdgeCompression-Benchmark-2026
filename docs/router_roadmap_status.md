@@ -127,6 +127,11 @@ benchmark rows: it builds router-ready audio ViSQOL and video VMAF CSVs,
 validates them with `DomainSpec`, runs the router across operational profiles,
 and emits offline oracle/baseline/regret diagnostics without modifying Chapter
 4 results or inventing missing measurements.
+v0.45.2 adds a router-only cross-platform setup helper and a read-only
+environment doctor. The setup flow can create a Python environment, install the
+router in editable mode, run router CLI smoke checks and run a lightweight
+router-only test subset, all behind explicit prompts. It does not install codec
+binaries, datasets, checkpoints, system packages or benchmark execution stacks.
 
 ## Original roadmap recap
 

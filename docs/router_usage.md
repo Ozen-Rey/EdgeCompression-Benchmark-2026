@@ -1,5 +1,21 @@
 \# R-D-E Router Prototype
 
+## Router-only setup
+
+Use the router-only setup helper before running local router development
+checks:
+
+```powershell
+python scripts/setup/setup_router.py
+python scripts/setup/doctor.py --report-out environment_doctor_report.json
+```
+
+Lo script di setup prepara l'ambiente di sviluppo del router. Non installa ne'
+riproduce automaticamente l'intero stack di benchmark.
+
+External codecs, datasets, checkpoints and energy measurement tools remain
+benchmark/execution prerequisites and are not installed by the setup helper.
+
 
 
 This prototype implements an adaptive codec selection procedure based on

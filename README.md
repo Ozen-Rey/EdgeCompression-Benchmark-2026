@@ -101,18 +101,25 @@ Console entrypoints after `pip install -e .`:
 
 PowerShell scenario dispatcher: `scripts/run_router.ps1`.
 
-## Setup
+## Router setup
+
+The setup script prepares the router development environment. It does not
+install or reproduce the full benchmark stack.
 
 ```bash
-conda create -n tesi python=3.11
-conda activate tesi
-pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
-pip install -e .
+python scripts/setup/setup_router.py
+python scripts/setup/doctor.py --report-out environment_doctor_report.json
 ```
 
+`setup.sh` and `setup.ps1` are thin wrappers around the router-only setup
+script. The setup may create a Python virtual environment and install
+`python -m pip install -e ".[test]"`, but only after an explicit prompt
+(`No` is the default). It does not install external codecs, system packages,
+datasets, checkpoints, or benchmark outputs.
+
 External codec dependencies (`cjxl`, `ffmpeg`, `vvenc`, `SvtAv1EncApp`,
-`opusenc`, etc.) are resolved through the external codec registry; see
-`docs/external_codecs.md`.
+`opusenc`, etc.) are benchmark/execution dependencies and remain separate; see
+`docs/external_codecs.md` and `docs/router_setup.md`.
 
 ## Repository layout
 

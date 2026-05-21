@@ -1,5 +1,30 @@
 # Developer Setup
 
+## Router-only setup helper
+
+For a fresh router development environment, use the cross-platform setup helper:
+
+```powershell
+python scripts/setup/setup_router.py
+python scripts/setup/setup_router.py --dry-run
+python scripts/setup/setup_router.py --with-tests
+```
+
+The setup script prepares the router development environment. It does not
+install or reproduce the full benchmark stack. It may create a virtual
+environment and run `python -m pip install -e ".[test]"`, but only after an
+explicit `y/N` prompt. The default answer is `No`.
+
+The read-only doctor reports the local environment without modifying it:
+
+```powershell
+python scripts/setup/doctor.py --report-out environment_doctor_report.json
+```
+
+External codecs, datasets, checkpoints, hardware energy tools and full
+benchmark reproduction are intentionally outside this setup flow. See
+`docs/router_setup.md` for the full boundary.
+
 This repository supports editable installs for local development:
 
 ```powershell
