@@ -119,6 +119,9 @@ v0.44.6.1 hardens the full pluggability proof with a committed sample report,
 an explicit boundary statement on what schema validation does not prove, and a
 real JPEG image smoke that exercises the same manifest -> measurements ->
 R-D-E CSV -> router path with a benchmark codec name.
+v0.44.6.2 identifies that onboarding proof contract as `rde_manifest_v1`,
+propagates the contract id to onboarding reports, and asserts that the generated
+and committed proof reports carry the same stable identifier.
 
 ## Original roadmap recap
 

@@ -13,6 +13,7 @@ from src.router.codecs.external_codec_spec import (
     load_external_codec_spec,
     validate_external_codec_spec,
 )
+from src.router.core.contracts import ONBOARDING_CONTRACT_ID
 from src.router.core.dataset_ingestion import (
     build_measurements_template,
     load_measurements_csv,
@@ -209,6 +210,7 @@ def build_codec_onboarding_summary(
 
     return {
         "valid": len(errors) == 0,
+        "contract_id": ONBOARDING_CONTRACT_ID,
         "domain_spec": domain_spec_to_dict(domain_spec),
         "codec_spec": codec_spec,
         "codec_spec_validation": codec_spec_report,

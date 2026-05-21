@@ -3,7 +3,9 @@
 v0.44.6 adds a documented proof that the multi-domain onboarding pieces fit
 together without requiring router code changes. v0.44.6.1 hardens that proof
 with a static sample report, an explicit boundary statement, and an image smoke
-test that uses the real benchmark codec name `JPEG`.
+test that uses the real benchmark codec name `JPEG`. v0.44.6.2 identifies the
+onboarding proof contract as `rde_manifest_v1` and propagates that identifier to
+the generated onboarding reports and the committed sample report.
 
 The proof covers this path:
 
@@ -40,6 +42,9 @@ full_pluggability_proof_report.json
 
 That report records the domain, `DomainSpec`, new codec id, validation flags,
 selected codec/config and the generated artifact paths for each proof case.
+From v0.44.6.2 onward it also records `contract_id: rde_manifest_v1`, the
+stable identifier for the manifest + measurements CSV + DomainSpec -> validated
+R-D-E CSV -> router decision contract.
 
 A static reference copy is committed at
 `docs/examples/full_pluggability_proof_report.example.json`. It is only a
@@ -105,9 +110,10 @@ domain compatibility. It does not prove that a codec implementation is correct,
 measure energy, execute arbitrary models automatically, or certify that the
 reported R-D-E values are physically accurate.
 
-v0.44.6 and v0.44.6.1 do not benchmark real audio or video codecs, run external
-codec executables, add automatic dataset discovery, or add a router plugin API.
-Those remain future work. The release proves the current contract:
+v0.44.6, v0.44.6.1 and v0.44.6.2 do not benchmark real audio or video codecs,
+run external codec executables, add automatic dataset discovery, or add a
+router plugin API. Those remain future work. The release proves the current
+contract:
 
 ```text
 manifest + measurements CSV + DomainSpec -> validated R-D-E CSV -> router decision
