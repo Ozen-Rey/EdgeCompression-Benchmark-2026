@@ -132,6 +132,11 @@ environment doctor. The setup flow can create a Python environment, install the
 router in editable mode, run router CLI smoke checks and run a lightweight
 router-only test subset, all behind explicit prompts. It does not install codec
 binaries, datasets, checkpoints, system packages or benchmark execution stacks.
+v0.45.3 hardens the repository for public release by switching the
+repository-authored code/docs/config/setup surface to Apache-2.0, adding
+`NOTICE` and `THIRD_PARTY_NOTICES.md`, and making explicit that third-party
+datasets, codecs, models, checkpoints, external tools and generated benchmark
+outputs remain under their upstream terms.
 
 ## Original roadmap recap
 

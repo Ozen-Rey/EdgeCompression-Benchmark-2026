@@ -1,0 +1,16 @@
+R-D-E Router
+Copyright 2026 Valentino Tesic
+
+This product includes software developed for the R-D-E Router project.
+
+The source code, tests, configuration templates, setup scripts and project
+documentation authored in this repository are licensed under the Apache
+License, Version 2.0, unless otherwise stated.
+
+This NOTICE file is informational and does not modify the Apache License,
+Version 2.0.
+
+Third-party datasets, codec binaries, pretrained models, checkpoints,
+external tools, and locally generated benchmark outputs are not licensed by
+this repository. They remain subject to their respective upstream licenses and
+terms.

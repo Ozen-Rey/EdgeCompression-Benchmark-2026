@@ -13,6 +13,8 @@ execution stack.
 The benchmark depends on external codecs, datasets, checkpoints, quality tools,
 codec builds, and hardware-specific energy measurement. Those components have
 their own licenses, hardware assumptions, and installation procedures.
+This repository does not redistribute or relicense those third-party
+components.
 
 ## Interactive Setup
 
@@ -78,6 +80,8 @@ The setup script does not:
 
 Benchmark and execution setup remains separate and domain-specific. See the
 benchmark and external-codec documentation for those workflows.
+Users are responsible for obtaining external datasets, codec binaries, models,
+checkpoints and metric tools under their upstream terms.
 
 ## Environment Doctor
 

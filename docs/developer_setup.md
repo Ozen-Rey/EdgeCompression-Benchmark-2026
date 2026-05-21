@@ -24,6 +24,8 @@ python scripts/setup/doctor.py --report-out environment_doctor_report.json
 External codecs, datasets, checkpoints, hardware energy tools and full
 benchmark reproduction are intentionally outside this setup flow. See
 `docs/router_setup.md` for the full boundary.
+They remain subject to their own upstream licenses and terms; this repository
+does not redistribute them.
 
 This repository supports editable installs for local development:
 
@@ -159,9 +161,10 @@ When it finds an executable there, it prepends that executable directory to
 fail early with a clear prerequisite error, instead of surfacing later as an
 ambiguous infeasible router decision.
 
-This bootstrap is only a developer smoke-script convenience. The router itself
-does not auto-install tools, does not perform implicit WinGet discovery, and
-continues to honor strict capability filtering exactly as configured.
+This bootstrap is only a developer smoke-script convenience for tools already
+installed or provided by the user. The router itself does not auto-install
+tools, does not perform implicit WinGet discovery, and continues to honor
+strict capability filtering exactly as configured.
 
 ## Pytest temporary directory in smoke scenarios
 

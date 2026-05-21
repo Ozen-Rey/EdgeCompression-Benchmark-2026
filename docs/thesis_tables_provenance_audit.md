@@ -3,7 +3,7 @@
 Date: 2026-05-20
 
 Scope: provenance audit for the substantive table inconsistencies in
-`C:\Projects\TesiUnipd`, with read-only inspection of the router repository.
+`<thesis-root>`, with read-only inspection of the router repository.
 No router code, benchmark code, or heavy result generation was run.
 
 ## 1. Table inventory and provenance
@@ -116,15 +116,15 @@ No numeric results were changed.
 
 Changed:
 
-- `C:\Projects\TesiUnipd\Capitoli\capitolo4.tex`
-- `C:\Projects\TesiUnipd\Capitoli\capitolo5.tex`
-- `C:\Projects\TesiUnipd\Capitoli\capitolo6.tex`
-- `C:\Projects\TesiUnipd\tables\routing_v09\v09_content_aware_final_table.tex`
-- `C:\Projects\TesiUnipd\tables\routing_v09\v09_content_aware_best_k_table.tex`
-- `C:\Projects\TesiUnipd\tables\routing_v09\v0910_sklearn_ablation_compact_table.tex`
-- `C:\Projects\TesiUnipd\tables\routing_v09\v09_content_aware_overhead_table_paper.tex`
-- `C:\Projects\TesiUnipd\tables\routing_regime\table_regime_summary_core.tex`
-- `C:\Projects\TesiUnipd\tables\routing_regime\table_ssimulacra2_switch_summary.tex`
+- `<thesis-root>\Capitoli\capitolo4.tex`
+- `<thesis-root>\Capitoli\capitolo5.tex`
+- `<thesis-root>\Capitoli\capitolo6.tex`
+- `<thesis-root>\tables\routing_v09\v09_content_aware_final_table.tex`
+- `<thesis-root>\tables\routing_v09\v09_content_aware_best_k_table.tex`
+- `<thesis-root>\tables\routing_v09\v0910_sklearn_ablation_compact_table.tex`
+- `<thesis-root>\tables\routing_v09\v09_content_aware_overhead_table_paper.tex`
+- `<thesis-root>\tables\routing_regime\table_regime_summary_core.tex`
+- `<thesis-root>\tables\routing_regime\table_ssimulacra2_switch_summary.tex`
 
 Manual thesis-only fixes:
 
@@ -135,7 +135,7 @@ Manual thesis-only fixes:
 
 ## 6. Stale or not included
 
-`C:\Projects\TesiUnipd\tables\routing_regime\table_expected_quality_gate_summary.tex`
+`<thesis-root>\tables\routing_regime\table_expected_quality_gate_summary.tex`
 is congruent with `quality_gate_comparison_summary.csv`, but it is not included
 in the current `capitolo6.tex`. It should remain excluded if the expected-quality
 gate is only discussed narratively/diagnostically, or be reintroduced near the
@@ -146,9 +146,9 @@ expected-quality-gate paragraph if the thesis should expose the numbers.
 Command run:
 
 ```powershell
-cd C:\Projects\TesiUnipd
+cd <thesis-root>
 latexmk -pdf main.tex
-Select-String -Path C:\Projects\TesiUnipd\main.log -Pattern "Undefined references|Reference.*undefined|File.*not found|Overfull|Underfull|LaTeX Error|Package .* Error"
+Select-String -Path <thesis-root>\main.log -Pattern "Undefined references|Reference.*undefined|File.*not found|Overfull|Underfull|LaTeX Error|Package .* Error"
 ```
 
 Result: compilation succeeded and the warning/error query returned no matches.

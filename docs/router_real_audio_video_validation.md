@@ -7,7 +7,8 @@ measured energy, a `DomainSpec`, router decisions, and offline oracle/regret
 analysis.
 
 This is not a new benchmark campaign. It reuses existing benchmark rows under
-`results/audio` and `results/video`.
+locally generated `results/audio` and `results/video` directories. Those rows
+are not redistributed as part of the repository source license.
 
 ## Data Used
 
@@ -135,6 +136,8 @@ quality, energy, feasible rows, and profile-level behavior.
 This validation does not:
 
 - run a new benchmark campaign;
+- grant rights to redistribute the underlying datasets, codecs, models,
+  metrics, or generated benchmark rows;
 - change Chapter 4 official benchmark results;
 - add content-aware audio/video prediction;
 - validate automatic execution backends for every codec;
