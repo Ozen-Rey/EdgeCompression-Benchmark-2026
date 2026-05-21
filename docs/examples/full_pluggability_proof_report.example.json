@@ -63,6 +63,7 @@
   ],
   "claim": "new dataset + new codec/model measurements + DomainSpec -> R-D-E CSV -> router decision without router code changes",
   "codec_measurements_valid": true,
+  "contract_id": "rde_manifest_v1",
   "domain_spec_valid": true,
   "errors": [],
   "ingestion_valid": true,

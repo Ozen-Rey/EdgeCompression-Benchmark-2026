@@ -17,6 +17,7 @@ from src.router.core.codec_onboarding import (
     validate_codec_domain_compatibility,
     validate_codec_measurements_compatibility,
 )
+from src.router.core.contracts import ONBOARDING_CONTRACT_ID
 from src.router.core.dataset_ingestion import (
     build_rde_csv,
     join_manifest_measurements,
@@ -253,6 +254,7 @@ def run_onboarding(args: argparse.Namespace) -> dict[str, Any]:
             and router_decision_valid
             and not errors
         ),
+        "contract_id": ONBOARDING_CONTRACT_ID,
         "manifest_valid": manifest_valid,
         "measurements_valid": measurements_valid,
         "ingestion_valid": ingestion_valid,

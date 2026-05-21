@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from src.router.core.codec_onboarding import main as codec_onboarding_main
+from src.router.core.contracts import ONBOARDING_CONTRACT_ID
 from src.router.core.dataset_onboarding import main as dataset_onboarding_main
 
 
@@ -136,7 +137,9 @@ def test_full_dataset_codec_pluggability_proof_image_audio_video(
         candidate_codecs = _candidate_codecs(router_report_path)
 
         assert codec_report["valid"] is True
+        assert codec_report["contract_id"] == ONBOARDING_CONTRACT_ID
         assert onboarding_report["valid"] is True
+        assert onboarding_report["contract_id"] == ONBOARDING_CONTRACT_ID
         assert onboarding_report["manifest_valid"] is True
         assert onboarding_report["measurements_valid"] is True
         assert onboarding_report["ingestion_valid"] is True
@@ -186,6 +189,7 @@ def test_full_dataset_codec_pluggability_proof_image_audio_video(
     )
     proof_report = {
         "valid": valid,
+        "contract_id": ONBOARDING_CONTRACT_ID,
         "proof_mode": "pytest_tmp_generated",
         "pluggability_status": "proven" if valid else "failed",
         "claim": (
@@ -221,6 +225,7 @@ def test_full_dataset_codec_pluggability_proof_image_audio_video(
 
     persisted = json.loads(proof_report_path.read_text(encoding="utf-8"))
     assert persisted["valid"] is True
+    assert persisted["contract_id"] == ONBOARDING_CONTRACT_ID
     assert {case["domain"] for case in persisted["cases"]} == {
         "image",
         "audio",
@@ -278,6 +283,7 @@ def test_full_pluggability_proof_with_real_jpeg_codec(tmp_path: Path) -> None:
 def test_full_pluggability_sample_report_shape_is_consistent() -> None:
     payload = json.loads(SAMPLE_REPORT.read_text(encoding="utf-8"))
 
+    assert payload["contract_id"] == ONBOARDING_CONTRACT_ID
     assert payload["manifest_valid"] is True
     assert payload["ingestion_valid"] is True
     assert payload["domain_spec_valid"] is True
