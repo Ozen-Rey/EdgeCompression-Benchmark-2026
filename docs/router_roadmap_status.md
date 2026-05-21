@@ -137,6 +137,10 @@ repository-authored code/docs/config/setup surface to Apache-2.0, adding
 `NOTICE` and `THIRD_PARTY_NOTICES.md`, and making explicit that third-party
 datasets, codecs, models, checkpoints, external tools and generated benchmark
 outputs remain under their upstream terms.
+v0.46.0 adds research framing, contribution mapping, thesis-to-contribution
+mapping and claim-audit documentation. It introduces no new code, experiments
+or results; it clarifies the bounded scientific claims supported by the current
+R-D-E benchmark/router artifacts and separates them from future work.
 
 ## Original roadmap recap
 
