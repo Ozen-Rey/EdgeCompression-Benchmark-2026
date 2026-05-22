@@ -150,6 +150,10 @@ v0.46.2 adds clean Arch router validation fixes: it declares the `Pillow`
 router dependency, improves setup and doctor dependency probes, fixes router
 CLI examples to use `--out` / `--summary-out`, and aligns the image fixture
 with `DomainSpec` defaults.
+v0.46.3 adds automated router environment validation reports for
+cross-platform setup/replay evidence, collecting environment metadata, doctor
+output, CLI help captures and fixed audio/video/image fixture router reports
+without running benchmarks or writing under `results/`.
 
 ## Original roadmap recap
 
