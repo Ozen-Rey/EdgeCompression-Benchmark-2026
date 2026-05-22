@@ -111,3 +111,42 @@ It reports:
 Optional external tools are labeled as benchmark/execution dependencies. Missing
 tools do not make the doctor fail, because the router development environment
 does not require them.
+
+## Environment Validation Report
+
+After a machine has been prepared with `setup_router.py`, the validation
+script can collect portable router setup evidence:
+
+```bash
+python scripts/setup/validate_router_environment.py \
+  --label arch_laptop_3080 \
+  --out-dir validation_runs/arch_laptop_3080_v0463
+```
+
+Windows PowerShell:
+
+```powershell
+python scripts/setup/validate_router_environment.py `
+  --label windows_workstation `
+  --out-dir validation_runs/windows_workstation_v0463
+```
+
+The script is read-only with respect to the repository source and benchmark
+artifacts. It does not install packages, create virtual environments, download
+datasets or checkpoints, run benchmarks, require external codec binaries, or
+write under `results/`. It writes only inside `--out-dir`.
+
+`validation_runs/` is local evidence output and should not be committed. The
+generated manifest and summary demonstrate that the router can be imported,
+its CLIs can start, and the fixed audio/video/image R-D-E fixtures can be
+replayed on the current platform. They do not replace benchmark reproduction
+and do not validate hardware-invariant energy measurements.
+
+The validation run also writes `platform_fingerprint_full.json` and
+`platform_fingerprint_sanitized.json`. The fingerprint documents the platform
+context used for router validation: OS, CPU, RAM when available, optional GPU
+details, Python, Git and external tool visibility. This helps distinguish
+router reproducibility from measurement reproducibility. It does not prove that
+energy measurements are hardware-invariant. The sanitized fingerprint replaces
+home/repository paths and omits host, network and serial identifiers; it is the
+version intended for sharing.

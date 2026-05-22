@@ -59,3 +59,34 @@ python scripts/setup/doctor.py --report-out environment_doctor_report.json
 Missing optional tools such as `ffmpeg`, `cjxl`, `nvidia-smi`, VMAF or ViSQOL do
 not make the doctor fail. They are only relevant for benchmark or execution
 workflows outside this router setup.
+
+Automated environment validation can be run after setup to collect
+cross-platform router setup/replay evidence:
+
+```bash
+python scripts/setup/validate_router_environment.py \
+  --label arch_laptop_3080 \
+  --out-dir validation_runs/arch_laptop_3080_v0463
+```
+
+Windows PowerShell:
+
+```powershell
+python scripts/setup/validate_router_environment.py `
+  --label windows_workstation `
+  --out-dir validation_runs/windows_workstation_v0463
+```
+
+The validation script writes a manifest, text summary, doctor report, CLI help
+captures, `pip freeze`, and fixed audio/video/image fixture router reports
+under `--out-dir` only. `validation_runs/` is local output and should not be
+committed. This validates router portability and deterministic replay on fixed
+R-D-E rows; it does not reproduce the benchmark.
+
+It also writes full and sanitized platform fingerprints. The fingerprint
+documents the validation context (OS, CPU, RAM when available, optional GPU
+details, Python, Git and external tool visibility) so router reproducibility is
+not confused with measurement reproducibility. It does not show that energy
+measurements are hardware-invariant. The sanitized JSON replaces home/repo
+paths and omits host, network and serial identifiers; use the sanitized version
+for sharing.

@@ -137,6 +137,7 @@ Connected repository artifacts:
 | `src/router/observability/decision_replay.py` | Replays decisions from receipts for deterministic intra-version checks | Chapter 6, decision replay | Supports auditability, not cross-version equivalence by itself. |
 | `scripts/setup/setup_router.py` | Router-only development setup | Repository-publication support, not thesis methodology | Does not install benchmark stack, datasets, codecs, or checkpoints. |
 | `scripts/setup/doctor.py` | Read-only environment doctor | Repository-publication support, not thesis methodology | Reports optional external tools without installing them. |
+| `scripts/setup/validate_router_environment.py` | Automated router environment validation manifest | Repository-publication support, not thesis methodology | Captures setup/replay evidence for fixed R-D-E fixtures; does not reproduce benchmarks. |
 | `THIRD_PARTY_NOTICES.md` | Documents third-party boundaries | Repository publication / reproducibility boundary | Clarifies that external datasets, codecs, models, tools, and generated outputs are not relicensed. |
 
 ## R-D-E claim boundary
