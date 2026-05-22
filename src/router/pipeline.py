@@ -143,14 +143,15 @@ def apply_domain_spec_column_defaults(
 
     if spec_name:
         required_columns = {
-            "codec_column": spec.codec_column,
-            "config_column": spec.config_column,
-            "rate_column": spec.rate_column,
-            "quality_column": spec.quality_column,
-            "energy_column": spec.energy_column,
+            "codec_column": args.codec_col or spec.codec_column,
+            "config_column": args.config_col or spec.config_column,
+            "rate_column": args.rate_col or spec.rate_column,
+            "quality_column": args.quality_col or spec.quality_column,
+            "energy_column": args.energy_col or spec.energy_column,
         }
-        if spec.time_column is not None:
-            required_columns["time_column"] = spec.time_column
+        effective_time_column = args.time_col or spec.time_column
+        if effective_time_column is not None:
+            required_columns["time_column"] = effective_time_column
 
         missing = [
             f"{role}:{column}"

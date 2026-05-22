@@ -27,6 +27,12 @@ benchmark reproduction are intentionally outside this setup flow. See
 They remain subject to their own upstream licenses and terms; this repository
 does not redistribute them.
 
+Clean Arch validation showed that router dependencies must be explicit.
+`Pillow` is a router Python dependency because the current router import path
+includes content-aware image support through `PIL`. Router setup remains
+router-only: benchmark stacks, codec binaries, datasets and checkpoints stay
+out of scope.
+
 This repository supports editable installs for local development:
 
 ```powershell

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 AUDIO_VISQOL = ROOT / "tests" / "fixtures" / "rde_audio_visqol.csv"
 VIDEO_VMAF = ROOT / "tests" / "fixtures" / "rde_video_vmaf.csv"
 AUDIO_FAD = ROOT / "tests" / "fixtures" / "rde_audio_fad.csv"
+IMAGE_SSIMULACRA2 = ROOT / "tests" / "fixtures" / "image_rde_real_small.csv"
 
 
 def test_audio_visqol_fixture_validates_with_domain_spec(capsys) -> None:
@@ -101,6 +102,24 @@ def test_router_video_produces_report_and_summary(tmp_path: Path) -> None:
     assert summary_path.exists()
 
 
+def test_router_image_produces_report_and_summary_with_domain_spec(
+    tmp_path: Path,
+) -> None:
+    report, summary_path = _run_router(
+        IMAGE_SSIMULACRA2,
+        "image_ssimulacra2",
+        tmp_path,
+    )
+
+    assert report["domain"] == "image"
+    assert report["domain_spec"]["enabled"] is True
+    assert report["domain_spec"]["quality_metric"] == "SSIMULACRA2"
+    assert report["resolved_args"]["config_col"] == "config"
+    assert report["decision"]["selected"]["codec"]
+    assert report["decision"]["selected"]["config"]
+    assert summary_path.exists()
+
+
 def test_audio_video_report_uses_domain_spec_columns_not_image_defaults(
     tmp_path: Path,
 ) -> None:
@@ -174,6 +193,38 @@ def test_explicit_cli_column_override_wins_over_domain_spec_default(
         candidate["quality"] >= 4.0
         for candidate in report["decision"]["scored_candidate_pool"]
     )
+
+
+def test_explicit_config_column_override_wins_over_domain_spec_default(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "image_override.csv"
+    csv_path.write_text(
+        "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms\n"
+        "JPEG,q=85,1.60,81.1,0.10,6.3\n"
+        "JXL,d=1.0,1.37,85.2,2.55,134.0\n",
+        encoding="utf-8",
+    )
+
+    report_path = tmp_path / "image_override_report.json"
+    router_main(
+        [
+            "--csv",
+            str(csv_path),
+            "--domain-spec",
+            "image_ssimulacra2",
+            "--config-col",
+            "param",
+            "--profile",
+            "balanced",
+            "--out",
+            str(report_path),
+        ]
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["resolved_args"]["config_col"] == "param"
+    assert report["decision"]["selected"]["config"]
 
 
 def test_audio_fad_lower_is_better_validated(capsys) -> None:

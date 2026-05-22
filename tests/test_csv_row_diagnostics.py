@@ -12,7 +12,7 @@ from src.router.rde_router import main
 from tests.conftest import scratch_root
 
 
-_VALID_HEADER = "codec,param,bpp,ssimulacra2,energy_per_image_j,time_ms"
+_VALID_HEADER = "codec,config,bpp,ssimulacra2,energy_per_image_j,time_ms"
 
 
 def _tmp_path(name: str) -> Path:
@@ -32,7 +32,7 @@ def _common_csv_args(csv_path: Path) -> list[str]:
         "--codec-col",
         "codec",
         "--config-col",
-        "param",
+        "config",
         "--rate-col",
         "bpp",
         "--quality-col",
@@ -62,7 +62,7 @@ def test_loader_clean_csv_has_zero_dropped_rows():
     points, diagnostics = load_rde_points_with_diagnostics(
         csv_path=str(_real_fixture()),
         codec_col="codec",
-        config_col="param",
+        config_col="config",
         rate_col="bpp",
         quality_col="ssimulacra2",
         energy_col="energy_per_image_j",
@@ -90,7 +90,7 @@ def test_loader_drops_row_with_invalid_rate_and_records_diagnostics():
     points, diagnostics = load_rde_points_with_diagnostics(
         csv_path=str(csv_path),
         codec_col="codec",
-        config_col="param",
+        config_col="config",
         rate_col="bpp",
         quality_col="ssimulacra2",
         energy_col="energy_per_image_j",
@@ -124,7 +124,7 @@ def test_loader_drops_row_with_missing_codec():
     points, diagnostics = load_rde_points_with_diagnostics(
         csv_path=str(csv_path),
         codec_col="codec",
-        config_col="param",
+        config_col="config",
         rate_col="bpp",
         quality_col="ssimulacra2",
         energy_col="energy_per_image_j",
@@ -147,7 +147,7 @@ def test_loader_aggregates_reasons_and_caps_examples():
     points, diagnostics = load_rde_points_with_diagnostics(
         csv_path=str(csv_path),
         codec_col="codec",
-        config_col="param",
+        config_col="config",
         rate_col="bpp",
         quality_col="ssimulacra2",
         energy_col="energy_per_image_j",
@@ -174,7 +174,7 @@ def test_loader_raises_when_all_rows_invalid():
         load_rde_points_with_diagnostics(
             csv_path=str(csv_path),
             codec_col="codec",
-            config_col="param",
+            config_col="config",
             rate_col="bpp",
             quality_col="ssimulacra2",
             energy_col="energy_per_image_j",
@@ -186,7 +186,7 @@ def test_load_rde_points_wrapper_returns_only_points_list():
     points = load_rde_points(
         csv_path=str(_real_fixture()),
         codec_col="codec",
-        config_col="param",
+        config_col="config",
         rate_col="bpp",
         quality_col="ssimulacra2",
         energy_col="energy_per_image_j",

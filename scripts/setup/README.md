@@ -43,6 +43,12 @@ Non-goals:
 - no benchmark execution;
 - no writes under `results/`.
 
+Clean Arch validation showed that router dependencies must be explicit.
+`Pillow` is a router Python dependency because the current router import path
+includes content-aware image support through `PIL`. This setup remains
+router-only: benchmark stacks, codec binaries, datasets and checkpoints stay
+out of scope.
+
 The read-only environment doctor reports the local router environment and
 optional benchmark/execution tools:
 

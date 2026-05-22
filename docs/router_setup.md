@@ -16,6 +16,12 @@ their own licenses, hardware assumptions, and installation procedures.
 This repository does not redistribute or relicense those third-party
 components.
 
+Clean Arch validation revealed that router Python dependencies must be declared
+explicitly. `Pillow` is a router dependency because the current router import
+path includes content-aware image support through `PIL`. Router setup remains
+router-only: the benchmark stack, codec binaries, datasets and checkpoints are
+still out of scope.
+
 ## Interactive Setup
 
 From the repository root:
@@ -98,6 +104,7 @@ It reports:
 - router import status and version;
 - router CLI help checks;
 - Python dependency visibility;
+- `Pillow` / `PIL` availability for the router CLI import path;
 - optional external tools such as `ffmpeg`, `ffprobe`, `cjxl`, `djxl`, and
   `nvidia-smi`.
 

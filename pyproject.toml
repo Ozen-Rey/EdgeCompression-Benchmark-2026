@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edgecompression-benchmark-2026"
-version = "0.45.3"
+version = "0.46.2"
 description = "Edge compression benchmark and R-D-E router tooling."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,6 +12,9 @@ license = { file = "LICENSE" }
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "Pillow",
 ]
 
 [project.scripts]

@@ -10,6 +10,10 @@ from src.router.core.domain_spec import (
 )
 
 
+ROOT = Path(__file__).resolve().parents[1]
+IMAGE_FIXTURE = ROOT / "tests" / "fixtures" / "image_rde_real_small.csv"
+
+
 def _write_csv(path: Path, header: list[str], rows: list[list[object]]) -> Path:
     lines = [",".join(header)]
     for row in rows:
@@ -50,6 +54,14 @@ def test_image_ssimulacra2_validates_image_fixture() -> None:
 
     assert report["valid"] is True
     assert report["num_rows"] == 1
+
+
+def test_image_ssimulacra2_fixture_uses_builtin_config_column() -> None:
+    header = IMAGE_FIXTURE.read_text(encoding="utf-8").splitlines()[0].split(",")
+
+    assert BUILTIN_DOMAIN_SPECS["image_ssimulacra2"].config_column == "config"
+    assert "config" in header
+    assert "param" not in header
 
 
 def test_video_vmaf_validates_video_fixture() -> None:

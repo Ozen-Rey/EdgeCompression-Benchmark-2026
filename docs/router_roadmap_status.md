@@ -146,6 +146,10 @@ boundary: the repository does not claim to invent the general
 Rate--Distortion--Energy perspective, but documents how the thesis and router
 operationalize it for measured codec evaluation, routing, provenance and
 reproducibility.
+v0.46.2 adds clean Arch router validation fixes: it declares the `Pillow`
+router dependency, improves setup and doctor dependency probes, fixes router
+CLI examples to use `--out` / `--summary-out`, and aligns the image fixture
+with `DomainSpec` defaults.
 
 ## Original roadmap recap
 

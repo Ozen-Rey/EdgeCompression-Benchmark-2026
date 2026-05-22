@@ -119,7 +119,7 @@ def test_router_end_to_end_on_real_small_image_fixture():
             "--codec-col",
             "codec",
             "--config-col",
-            "param",
+            "config",
             "--rate-col",
             "bpp",
             "--quality-col",
@@ -195,6 +195,35 @@ def test_router_end_to_end_on_real_small_image_fixture():
     assert "--out" not in receipt["replay"]["argv"]
 
 
+def test_router_real_small_image_fixture_works_with_image_domain_spec():
+    fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "image_rde_real_small.csv"
+    )
+    out_path = _tmp_path("real_fixture_domain_spec_report.json")
+
+    main(
+        [
+            "--csv",
+            str(fixture),
+            "--domain-spec",
+            "image_ssimulacra2",
+            "--profile",
+            "balanced",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    report = json.loads(out_path.read_text(encoding="utf-8"))
+
+    assert report["domain"] == "image"
+    assert report["domain_spec"]["enabled"] is True
+    assert report["resolved_args"]["config_col"] == "config"
+    assert report["decision"]["selected"]["config"]
+
+
 def test_energy_tier_reporting_does_not_change_fixture_decision_or_ranking():
     fixture = (
         Path(__file__).resolve().parent
@@ -209,7 +238,7 @@ def test_energy_tier_reporting_does_not_change_fixture_decision_or_ranking():
         "--codec-col",
         "codec",
         "--config-col",
-        "param",
+        "config",
         "--rate-col",
         "bpp",
         "--quality-col",
@@ -271,7 +300,7 @@ def test_router_with_valid_bundle_reports_bundle_provenance():
             "--codec-col",
             "codec",
             "--config-col",
-            "param",
+            "config",
             "--rate-col",
             "bpp",
             "--quality-col",
@@ -339,7 +368,7 @@ def test_router_with_modern_bundle_reports_nonempty_fingerprint_validation():
         "--codec-col",
         "codec",
         "--config-col",
-        "param",
+        "config",
         "--rate-col",
         "bpp",
         "--quality-col",
@@ -421,7 +450,7 @@ def test_router_with_validated_bundle_reports_validation_provenance():
             "--codec-col",
             "codec",
             "--config-col",
-            "param",
+            "config",
             "--rate-col",
             "bpp",
             "--quality-col",
@@ -495,7 +524,7 @@ def test_router_rejects_bundle_with_rejected_validation():
                 "--codec-col",
                 "codec",
                 "--config-col",
-                "param",
+                "config",
                 "--rate-col",
                 "bpp",
                 "--quality-col",
@@ -536,7 +565,7 @@ def test_router_rejects_validation_bound_to_different_bundle():
                 "--codec-col",
                 "codec",
                 "--config-col",
-                "param",
+                "config",
                 "--rate-col",
                 "bpp",
                 "--quality-col",
@@ -576,7 +605,7 @@ def test_router_rejects_legacy_validation_without_bundle_hash():
                 "--codec-col",
                 "codec",
                 "--config-col",
-                "param",
+                "config",
                 "--rate-col",
                 "bpp",
                 "--quality-col",
@@ -610,7 +639,7 @@ def test_router_rejects_missing_or_malformed_bundle_validation():
                 "--codec-col",
                 "codec",
                 "--config-col",
-                "param",
+                "config",
                 "--rate-col",
                 "bpp",
                 "--quality-col",
@@ -635,7 +664,7 @@ def test_router_rejects_missing_or_malformed_bundle_validation():
                 "--codec-col",
                 "codec",
                 "--config-col",
-                "param",
+                "config",
                 "--rate-col",
                 "bpp",
                 "--quality-col",
@@ -665,7 +694,7 @@ def test_router_rejects_validation_without_bundle_manifest():
                 "--codec-col",
                 "codec",
                 "--config-col",
-                "param",
+                "config",
                 "--rate-col",
                 "bpp",
                 "--quality-col",
@@ -704,7 +733,7 @@ def test_bundle_validation_flag_only_gates_and_does_not_change_ranking():
         "--codec-col",
         "codec",
         "--config-col",
-        "param",
+        "config",
         "--rate-col",
         "bpp",
         "--quality-col",
@@ -775,7 +804,7 @@ def test_router_does_not_auto_discover_bundle_validation():
             "--codec-col",
             "codec",
             "--config-col",
-            "param",
+            "config",
             "--rate-col",
             "bpp",
             "--quality-col",
@@ -814,7 +843,7 @@ def test_router_with_invalid_bundle_fails_controlled():
                 "--codec-col",
                 "codec",
                 "--config-col",
-                "param",
+                "config",
                 "--rate-col",
                 "bpp",
                 "--quality-col",
