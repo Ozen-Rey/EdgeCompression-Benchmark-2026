@@ -8,13 +8,15 @@ benchmark execution stacks.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +37,193 @@ LIGHTWEIGHT_TESTS = [
     "tests/test_multidomain_router_smoke.py",
     "tests/test_audio_video_policy_validation.py",
 ]
+ROUTER_CORE_DEPENDENCIES = [
+    {
+        "module": "src.router.version",
+        "expected_package": "edgecompression-benchmark-2026",
+        "required_for": "router version metadata",
+    },
+    {
+        "module": "PIL",
+        "expected_package": "Pillow",
+        "required_for": "router CLI import path / content-aware image support",
+    },
+    {
+        "module": "src.router.rde_router",
+        "expected_package": "edgecompression-benchmark-2026",
+        "required_for": "router CLI entrypoint",
+    },
+]
+
+
+def _platform_id() -> Dict[str, Any]:
+    system = platform.system()
+    info: Dict[str, Any] = {
+        "system": system,
+        "id": system.lower(),
+        "id_like": [],
+        "pretty_name": platform.platform(),
+    }
+    if system == "Linux":
+        try:
+            release = platform.freedesktop_os_release()
+        except OSError:
+            release = {}
+        info.update(
+            {
+                "id": str(release.get("ID") or "linux").lower(),
+                "id_like": [
+                    value.lower()
+                    for value in str(release.get("ID_LIKE") or "").split()
+                    if value
+                ],
+                "pretty_name": release.get("PRETTY_NAME") or platform.platform(),
+            }
+        )
+    elif system == "Darwin":
+        info["id"] = "macos"
+        info["pretty_name"] = f"macOS {platform.mac_ver()[0]}".strip()
+    elif system == "Windows":
+        info["id"] = "windows"
+    return info
+
+
+def _system_package_hints(platform_info: Mapping[str, Any]) -> List[str]:
+    distro_id = str(platform_info.get("id") or "").lower()
+    id_like = {str(value).lower() for value in platform_info.get("id_like", [])}
+
+    if distro_id in {"arch", "manjaro", "endeavouros"} or "arch" in id_like:
+        return ["sudo pacman -S --needed git python python-pip unzip"]
+    if distro_id in {"ubuntu", "debian"} or {"ubuntu", "debian"} & id_like:
+        return [
+            "sudo apt update",
+            "sudo apt install git python3 python3-pip python3-venv unzip",
+        ]
+    if distro_id == "fedora" or "fedora" in id_like:
+        return ["sudo dnf install git python3 python3-pip unzip"]
+    if distro_id == "macos":
+        return [
+            "Install Python 3 and Git via the official installers, or via Homebrew if you already use Homebrew."
+        ]
+    if distro_id == "windows":
+        return [
+            "Install Git and Python 3; use setup.ps1 or python scripts/setup/setup_router.py."
+        ]
+    return [
+        "Install Git, Python 3, pip, venv support, and unzip using your OS package manager."
+    ]
+
+
+def _run_probe(command: Sequence[str], timeout_s: float = 5.0) -> Dict[str, Any]:
+    try:
+        completed = subprocess.run(
+            list(command),
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return {
+            "ok": False,
+            "returncode": None,
+            "stdout": "",
+            "stderr": str(exc),
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "ok": False,
+            "returncode": None,
+            "stdout": exc.stdout or "",
+            "stderr": f"timed out after {timeout_s}s",
+        }
+    return {
+        "ok": completed.returncode == 0,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    }
+
+
+def _first_output_line(result: Mapping[str, Any]) -> str | None:
+    text = str(result.get("stdout") or result.get("stderr") or "").strip()
+    if not text:
+        return None
+    return text.splitlines()[0]
+
+
+def _bootstrap_prerequisite_report() -> Dict[str, Dict[str, Any]]:
+    pip_probe = _run_probe([sys.executable, "-m", "pip", "--version"])
+    venv_spec = importlib.util.find_spec("venv")
+    git_path = shutil.which("git")
+    unzip_path = shutil.which("unzip")
+
+    report: Dict[str, Dict[str, Any]] = {
+        "git": {
+            "available": git_path is not None,
+            "path": git_path,
+            "required": True,
+            "required_for": "source checkout and version metadata",
+            "install_scope": "system/bootstrap prerequisite",
+            "managed_by_setup": False,
+        },
+        "python": {
+            "available": True,
+            "path": sys.executable,
+            "version": platform.python_version(),
+            "required": True,
+            "required_for": "router runtime and setup helper",
+            "install_scope": "system/bootstrap prerequisite",
+            "managed_by_setup": False,
+        },
+        "pip": {
+            "available": pip_probe["ok"],
+            "path": sys.executable,
+            "version_summary": _first_output_line(pip_probe),
+            "required": True,
+            "required_for": "installing project Python dependencies from pyproject.toml",
+            "install_scope": "system/bootstrap prerequisite",
+            "managed_by_setup": False,
+        },
+        "venv": {
+            "available": venv_spec is not None,
+            "path": None,
+            "required": True,
+            "required_for": "creating an isolated router environment",
+            "install_scope": "system/bootstrap prerequisite",
+            "managed_by_setup": False,
+        },
+        "unzip": {
+            "available": unzip_path is not None,
+            "path": unzip_path,
+            "required": False,
+            "required_for": "extracting source archives",
+            "optional_for_source_archives": True,
+            "install_scope": "system/bootstrap prerequisite",
+            "managed_by_setup": False,
+        },
+    }
+
+    if git_path:
+        version_probe = _run_probe([git_path, "--version"])
+        report["git"]["version_summary"] = _first_output_line(version_probe)
+    if unzip_path:
+        version_probe = _run_probe([unzip_path, "-v"])
+        report["unzip"]["version_summary"] = _first_output_line(version_probe)
+
+    return report
+
+
+def _venv_failure_hint(platform_info: Mapping[str, Any]) -> str:
+    distro_id = str(platform_info.get("id") or "").lower()
+    id_like = {str(value).lower() for value in platform_info.get("id_like", [])}
+
+    if distro_id in {"ubuntu", "debian"} or {"ubuntu", "debian"} & id_like:
+        return "Install python3-venv and re-run setup."
+    if distro_id in {"arch", "manjaro", "endeavouros"} or "arch" in id_like:
+        return "Verify that the python package is installed, then re-run setup."
+    return "Verify that Python venv support is installed for this Python interpreter."
 
 
 def _venv_python(venv: Path) -> Path:
@@ -101,6 +290,55 @@ def _check_router_import(python_executable: Path | str, dry_run: bool) -> Dict[s
     )
 
 
+def _probe_router_core_dependencies(
+    python_executable: Path | str,
+    dry_run: bool,
+) -> Dict[str, Any]:
+    probe: Dict[str, Any] = {
+        "ok": True,
+        "checks": {},
+        "missing": [],
+        "suggested_action": (
+            "Re-run scripts/setup/setup_router.py or install the project "
+            "dependencies with python -m pip install -e \".[test]\"."
+        ),
+    }
+
+    for dependency in ROUTER_CORE_DEPENDENCIES:
+        module = dependency["module"]
+        result = _run(
+            [
+                str(python_executable),
+                "-c",
+                f"import importlib; importlib.import_module({module!r}); print('ok')",
+            ],
+            dry_run=dry_run,
+            timeout_s=10,
+        )
+        entry = {
+            "module": module,
+            "expected_package": dependency["expected_package"],
+            "required_for": dependency["required_for"],
+            "install_scope": "python_package",
+            "installed_via": "pyproject.toml / pip",
+            "available": None if dry_run else result["ok"],
+            "result": result,
+        }
+        probe["checks"][module] = entry
+        if not result["ok"]:
+            probe["ok"] = False
+            probe["missing"].append(
+                {
+                    "module": module,
+                    "expected_package": dependency["expected_package"],
+                    "required_for": dependency["required_for"],
+                    "suggested_action": probe["suggested_action"],
+                }
+            )
+
+    return probe
+
+
 def _run_smoke_checks(python_executable: Path | str, dry_run: bool) -> Dict[str, Any]:
     checks: Dict[str, Any] = {}
     for module in SMOKE_MODULES:
@@ -139,6 +377,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def run_setup(args: argparse.Namespace) -> Dict[str, Any]:
     python_ok = sys.version_info >= MIN_PYTHON
+    platform_info = _platform_id()
     report: Dict[str, Any] = {
         "scope": "router-only setup",
         "dry_run": args.dry_run,
@@ -152,6 +391,15 @@ def run_setup(args: argparse.Namespace) -> Dict[str, Any]:
             "version": platform.python_version(),
             "minimum_supported": ".".join(str(part) for part in MIN_PYTHON),
             "supported": python_ok,
+        },
+        "bootstrap_prerequisites": _bootstrap_prerequisite_report(),
+        "system_package_hints": _system_package_hints(platform_info),
+        "dependency_boundaries": {
+            "router_python_dependencies": "pyproject.toml / pip",
+            "system_bootstrap_prerequisites": (
+                "manual OS bootstrap only; setup_router.py reports hints but "
+                "does not install system packages"
+            ),
         },
         "venv": {
             "requested": not args.no_venv,
@@ -192,7 +440,11 @@ def run_setup(args: argparse.Namespace) -> Dict[str, Any]:
                 result = _run([sys.executable, "-m", "venv", str(venv_path)], args.dry_run)
                 report["actions"].append({"name": "create_venv", "result": result})
                 if not result["ok"]:
-                    report["errors"].append("Virtual environment creation failed.")
+                    hint = _venv_failure_hint(platform_info)
+                    print(f"Virtual environment creation failed. {hint}", file=sys.stderr)
+                    report["errors"].append(
+                        f"Virtual environment creation failed. {hint}"
+                    )
             else:
                 report["actions"].append({"name": "create_venv", "skipped": True})
         if venv_python.exists() or (args.dry_run and create_requested):
@@ -222,6 +474,17 @@ def run_setup(args: argparse.Namespace) -> Dict[str, Any]:
     report["router_import"] = import_result
     if not import_result["ok"]:
         report["errors"].append("Router import check failed.")
+
+    dependency_probe = _probe_router_core_dependencies(selected_python, args.dry_run)
+    report["router_core_dependency_probe"] = dependency_probe
+    if not dependency_probe["ok"]:
+        for missing in dependency_probe["missing"]:
+            report["errors"].append(
+                "Missing required router dependency: "
+                f"module {missing['module']} "
+                f"(package {missing['expected_package']}). "
+                f"{missing['suggested_action']}"
+            )
 
     run_smoke = _prompt_yes_no("Run router smoke checks?", assume_yes=args.yes)
     if run_smoke:

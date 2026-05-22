@@ -41,6 +41,13 @@ def test_pyproject_declares_rde_router_console_script() -> None:
     )
 
 
+def test_pyproject_declares_pillow_as_router_dependency() -> None:
+    data = _load_pyproject()
+    dependencies = data["project"].get("dependencies", [])
+
+    assert "Pillow" in dependencies
+
+
 def test_pyproject_declares_rde_decision_explain_console_script() -> None:
     data = _load_pyproject()
     scripts = data["project"].get("scripts", {})
