@@ -15,7 +15,7 @@ from typing import Dict
 # Keep ROUTER_VERSION and pyproject.toml [project].version in sync.
 # They identify the same release; the dispatcher and the package
 # metadata are read by different tools but must agree on the version.
-ROUTER_VERSION = "0.46.3"
+ROUTER_VERSION = "0.46.4"
 
 
 FEATURE_GROUPS: Dict[str, Dict[str, str]] = {
