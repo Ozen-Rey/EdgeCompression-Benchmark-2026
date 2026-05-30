@@ -154,6 +154,11 @@ v0.46.3 adds automated router environment validation reports for
 cross-platform setup/replay evidence, collecting environment metadata, doctor
 output, CLI help captures and fixed audio/video/image fixture router reports
 without running benchmarks or writing under `results/`.
+v0.46.4 adds a Kodak image mini-benchmark validation script for local R-D-E
+measurement sanity checks. It writes local-only router-ready CSV, provenance
+JSON and diagnostic plots for JPEG, JPEG XL, HEVC intra/x265 and DCAE when
+available, without replacing the main thesis benchmark or committing generated
+results.
 
 ## Original roadmap recap
 
