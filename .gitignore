@@ -26,10 +26,15 @@
 /model/
 /models/
 /checkpoints/
+*.pt
 *.pth
 *.pth.tar
 *.ckpt
 *.safetensors
+*.pkl
+*.zip
+*.tar
+*.flac
 
 # Generated bitstreams and decoded media scratch
 /bitstreams_video/
