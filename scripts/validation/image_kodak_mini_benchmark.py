@@ -440,13 +440,35 @@ def encode_decode_jxl(image_path: Path, distance: int, warnings: list[str]) -> M
     )
 
 
+def resolve_ffmpeg_exe() -> tuple[Optional[str], str]:
+    """Locate an ffmpeg binary: prefer a system ffmpeg, fall back to the
+    imageio-ffmpeg pip wheel (installed by the optional ``benchmark-hevc``
+    extra). Returns (path_or_None, source)."""
+    path = shutil.which("ffmpeg")
+    if path:
+        return path, "system_path"
+    try:
+        import imageio_ffmpeg  # type: ignore
+
+        return imageio_ffmpeg.get_ffmpeg_exe(), "imageio_ffmpeg"
+    except Exception:
+        return None, "missing"
+
+
 def encode_decode_hevc(image_path: Path, crf: int, warnings: list[str]) -> Measurement:
     import numpy as np
     from PIL import Image
 
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg, ffmpeg_source = resolve_ffmpeg_exe()
     if not ffmpeg:
-        raise RuntimeError("HEVC unavailable: ffmpeg missing")
+        raise RuntimeError(
+            "HEVC unavailable: no ffmpeg on PATH and imageio-ffmpeg not installed "
+            "(pip install -e \".[benchmark,benchmark-hevc]\")"
+        )
+    if ffmpeg_source == "imageio_ffmpeg":
+        warning = "hevc_backend_imageio_ffmpeg"
+        if warning not in warnings:
+            warnings.append(warning)
 
     with Image.open(image_path) as image:
         img_np = np.array(image.convert("RGB"))
@@ -841,10 +863,12 @@ def codec_availability_summary(codecs: Iterable[str]) -> dict[str, Any]:
                 "djxl": shutil.which("djxl"),
             }
         elif codec == "hevc":
+            ffmpeg_path, ffmpeg_source = resolve_ffmpeg_exe()
             summary[codec] = {
-                "available": bool(shutil.which("ffmpeg")),
+                "available": ffmpeg_path is not None,
                 "backend": "ffmpeg_libx265",
-                "ffmpeg": shutil.which("ffmpeg"),
+                "ffmpeg": ffmpeg_path,
+                "ffmpeg_source": ffmpeg_source,
             }
         elif codec == "dcae":
             roots = [

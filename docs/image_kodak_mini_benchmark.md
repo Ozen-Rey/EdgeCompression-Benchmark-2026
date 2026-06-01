@@ -36,7 +36,7 @@ Linux / macOS:
 ```
 
 With confirmation (default `No`; `--yes` auto-accepts) it creates/uses a venv,
-installs `pip install -e ".[benchmark]"` (numpy, imagecodecs, matplotlib),
+installs `pip install -e ".[benchmark]"` (numpy, imagecodecs, matplotlib, ssimulacra2),
 downloads the 24 Kodak PNGs locally, then runs the mini-benchmark with the
 numpy-only PSNR metric and replays the R-D-E router so the result is testable
 immediately. The router-ready CSV lands in
@@ -79,14 +79,28 @@ campaign.
 
 The validation target is:
 
-- JPEG;
-- JPEG XL;
-- HEVC intra / x265;
-- DCAE, when the existing local DCAE code and checkpoints are available.
+- **JPEG** — via the `imagecodecs` Python wheel (Pillow fallback). No system
+  binary required.
+- **JPEG XL** — via `imagecodecs`, which bundles its own libjxl. No system
+  binary required; `cjxl` / `djxl` are used only as a fallback if `imagecodecs`
+  lacks JPEG XL.
+- **HEVC intra / x265** — via ffmpeg with libx265. It uses a system `ffmpeg`
+  if one is on `PATH`, otherwise the ffmpeg binary from the optional
+  `imageio-ffmpeg` wheel (the `benchmark-hevc` extra:
+  `pip install -e ".[benchmark,benchmark-hevc]"`, or
+  `setup_benchmark.py --with-hevc`). That bundled ffmpeg is GPL via x265, is
+  fetched by pip onto your machine, and is run as a separate process. HEVC is
+  skipped when no ffmpeg is available.
+- **DCAE** — via torch and local DCAE checkpoints, when available.
+
+So JPEG and JPEG XL run out of the box after `pip install -e ".[benchmark]"`;
+HEVC additionally works out of the box once the `benchmark-hevc` extra is
+installed (no system tools), while DCAE depends on torch and checkpoints that
+the setup does not install.
 
 DCAE rows are not simulated. If the local DCAE root or checkpoint is missing,
 the report marks it unavailable and the script continues unless `--strict` is
-set.
+set. The same holds for HEVC when `ffmpeg` is missing.
 
 ## Outputs
 

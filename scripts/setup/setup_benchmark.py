@@ -143,10 +143,18 @@ def _optional_tool_report() -> Dict[str, Dict[str, Any]]:
 def _codec_plan(tool_report: Dict[str, Dict[str, Any]], deps: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
     imagecodecs_ok = deps.get("imagecodecs", {}).get("available", False)
     jxl_cli = tool_report.get("cjxl", {}).get("available") and tool_report.get("djxl", {}).get("available")
+    ffmpeg_ok = tool_report.get("ffmpeg", {}).get("available")
+    imageio_ffmpeg_ok = importlib.util.find_spec("imageio_ffmpeg") is not None
+    if ffmpeg_ok:
+        hevc = "ready (system ffmpeg)"
+    elif imageio_ffmpeg_ok:
+        hevc = "ready (imageio-ffmpeg)"
+    else:
+        hevc = 'needs ffmpeg or pip install -e ".[benchmark-hevc]" (skipped otherwise)'
     return {
         "jpeg": "ready (imagecodecs or Pillow fallback)",
         "jxl": "ready" if imagecodecs_ok or jxl_cli else "needs imagecodecs or cjxl/djxl",
-        "hevc": "ready" if tool_report.get("ffmpeg", {}).get("available") else "needs ffmpeg (skipped otherwise)",
+        "hevc": hevc,
         "dcae": "needs torch + DCAE checkpoints (skipped otherwise)",
     }
 
@@ -190,6 +198,8 @@ def run_setup(args: argparse.Namespace) -> Dict[str, Any]:
         },
         "quality_metric": args.quality_metric,
         "energy_proxy": args.energy_proxy,
+        "with_hevc": args.with_hevc,
+        "install_extras": "benchmark,benchmark-hevc" if args.with_hevc else "benchmark",
         "benchmark_dependencies": deps,
         "optional_external_tools": tools,
         "codec_plan": _codec_plan(tools, deps),
@@ -227,10 +237,12 @@ def run_setup(args: argparse.Namespace) -> Dict[str, Any]:
         elif venv_path.exists():
             report["warnings"].append(f"Virtual environment exists but {venv_python} was not found.")
 
-    # 2) Install the benchmark extra.
-    if _prompt_yes_no('Install project with the benchmark extra (pip install -e ".[benchmark]")?', assume_yes=args.yes):
+    # 2) Install the benchmark extra (optionally with HEVC support).
+    extras = "benchmark,benchmark-hevc" if args.with_hevc else "benchmark"
+    install_target = f".[{extras}]"
+    if _prompt_yes_no(f'Install project with the benchmark extra (pip install -e "{install_target}")?', assume_yes=args.yes):
         pip_upgrade = _run([str(selected_python), "-m", "pip", "install", "--upgrade", "pip"], args.dry_run)
-        editable = _run([str(selected_python), "-m", "pip", "install", "-e", ".[benchmark]"], args.dry_run)
+        editable = _run([str(selected_python), "-m", "pip", "install", "-e", install_target], args.dry_run)
         report["actions"].extend(
             [
                 {"name": "upgrade_pip", "result": pip_upgrade},
@@ -331,6 +343,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "When energy telemetry is unavailable, fill missing energy with a "
             "labeled time proxy so the router replay works everywhere. Default: time. "
             "Use 'off' on a real measurement host to keep energy strictly measured."
+        ),
+    )
+    parser.add_argument(
+        "--with-hevc",
+        action="store_true",
+        help=(
+            "Also install the benchmark-hevc extra (imageio-ffmpeg) so HEVC works "
+            "without a system ffmpeg. That ffmpeg build is GPL (via x265)."
         ),
     )
     parser.add_argument("--no-router", dest="run_router", action="store_false", help="Skip router replay.")

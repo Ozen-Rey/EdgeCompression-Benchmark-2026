@@ -24,6 +24,8 @@ package metadata or project metadata.
 |---|---|---|
 | setuptools | Build backend declared in `pyproject.toml` | See upstream package metadata |
 | pytest | Optional test dependency declared as the `test` and `dev` extras | See upstream package metadata |
+| numpy, imagecodecs, matplotlib, ssimulacra2 | Declared by the optional `benchmark` extra for the image mini-benchmark | See upstream package metadata |
+| imageio-ffmpeg | Declared by the optional `benchmark-hevc` extra; provides an ffmpeg binary so HEVC works without a system ffmpeg | The Python wrapper is permissively licensed, but the ffmpeg binary it installs is built with x265 and is therefore **GPL**. It is fetched by pip onto the user's machine (not redistributed here) and invoked as a separate subprocess (arm's-length), so it does not relicense this repository's code. |
 
 Some benchmark scripts may import additional optional scientific, media,
 machine-learning or hardware-measurement packages when users run benchmark
@@ -39,7 +41,7 @@ by the user.
 
 | Component | Role | Redistributed? | License / terms |
 |---|---|---:|---|
-| FFmpeg / FFprobe | Optional external media processing tool used by benchmark/execution workflows | No | See upstream FFmpeg project and build-specific licensing |
+| FFmpeg / FFprobe | Optional external media processing tool used by benchmark/execution workflows. May be a system install, or the ffmpeg binary provided by the optional `imageio-ffmpeg` pip wheel (`benchmark-hevc` extra) | No | See upstream FFmpeg project and build-specific licensing; the `imageio-ffmpeg` build includes x265 and is GPL |
 | x264 | Optional external AVC/H.264 encoder | No | See upstream project |
 | x265 | Optional external HEVC/H.265 encoder | No | See upstream project |
 | SVT-AV1 | Optional external AV1 encoder | No | See upstream project |

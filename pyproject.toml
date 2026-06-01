@@ -45,6 +45,15 @@ benchmark = [
     "matplotlib",
     "ssimulacra2",
 ]
+# Opt-in HEVC support without a system ffmpeg. imageio-ffmpeg ships an ffmpeg
+# binary (built with libx265) as a pip wheel, so HEVC works cross-platform with
+# no admin / system package. Kept out of the default `benchmark` extra because
+# that ffmpeg build is GPL (via x265); install it explicitly when you want HEVC:
+#   pip install -e ".[benchmark,benchmark-hevc]"
+# It is used as a separate subprocess (arm's-length), not linked into this code.
+benchmark-hevc = [
+    "imageio-ffmpeg",
+]
 
 [tool.setuptools]
 include-package-data = true

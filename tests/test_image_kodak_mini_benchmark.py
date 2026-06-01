@@ -258,6 +258,39 @@ def test_default_metric_is_psnr_and_psnr_column_written(tmp_path: Path, monkeypa
     assert bench.csv_valid_for_router(rows[0]) is True
 
 
+def test_resolve_ffmpeg_prefers_system_path(monkeypatch) -> None:
+    monkeypatch.setattr(bench.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    path, source = bench.resolve_ffmpeg_exe()
+    assert path == "/usr/bin/ffmpeg"
+    assert source == "system_path"
+
+
+def test_resolve_ffmpeg_falls_back_to_imageio(monkeypatch) -> None:
+    import sys as _sys
+    import types as _types
+
+    fake = _types.ModuleType("imageio_ffmpeg")
+    fake.get_ffmpeg_exe = lambda: "/fake/bundled/ffmpeg"  # type: ignore[attr-defined]
+    monkeypatch.setitem(_sys.modules, "imageio_ffmpeg", fake)
+    monkeypatch.setattr(bench.shutil, "which", lambda name: None)
+
+    path, source = bench.resolve_ffmpeg_exe()
+    assert path == "/fake/bundled/ffmpeg"
+    assert source == "imageio_ffmpeg"
+
+
+def test_resolve_ffmpeg_missing_when_no_backend(monkeypatch) -> None:
+    import sys as _sys
+
+    monkeypatch.setattr(bench.shutil, "which", lambda name: None)
+    # Force `import imageio_ffmpeg` to fail even if it is installed.
+    monkeypatch.setitem(_sys.modules, "imageio_ffmpeg", None)
+
+    path, source = bench.resolve_ffmpeg_exe()
+    assert path is None
+    assert source == "missing"
+
+
 def test_csv_valid_for_router_respects_quality_metric() -> None:
     base = {
         "status": "ok",

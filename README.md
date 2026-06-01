@@ -159,13 +159,24 @@ Notes:
   --quality-metric ssimulacra2 ...` to route on it instead of PSNR.
 - Useful flags: `--dry-run` (preview commands, change nothing), `--no-venv`
   (use the current environment), `--skip-benchmark` (set up only),
-  `--codecs jpeg,jxl,hevc`, `--max-images N`.
+  `--with-hevc` (also install the pip HEVC backend), `--codecs jpeg,jxl,hevc`,
+  `--max-images N`.
 - Optional convenience wrappers exist but the Python command above is the
   portable one. On Linux/macOS run wrappers as `bash setup_benchmark.sh ...`
   (they are not marked executable); on Windows use `.\setup_benchmark.ps1 ...`.
-- It does **not** install torch / DCAE checkpoints or ffmpeg / cjxl system
-  binaries. The HEVC and DCAE codecs are skipped automatically when those are
-  absent; JPEG and JPEG XL work out of the box. See
+- JPEG and JPEG XL run through the `imagecodecs` Python wheel installed by the
+  extra (it bundles its own libjxl), so they work out of the box with **no**
+  system binaries. The optional `cjxl` / `djxl` binaries are only a fallback if
+  `imagecodecs` ever lacks JPEG XL.
+- HEVC needs ffmpeg with libx265. You can either use a system `ffmpeg`, or
+  install it via pip with no admin rights by adding the optional `benchmark-hevc`
+  extra (`pip install -e ".[benchmark,benchmark-hevc]"`, or
+  `python scripts/setup/setup_benchmark.py --with-hevc`), which pulls
+  `imageio-ffmpeg` — a wheel that bundles an ffmpeg binary built with libx265.
+  That bundled ffmpeg is GPL (via x265); it is fetched by pip onto your machine
+  and run as a separate process, so it does not relicense this project. DCAE
+  needs torch plus checkpoints. When neither HEVC nor DCAE backends are present
+  they are simply skipped, and the rest of the benchmark still runs. See
   `docs/image_kodak_mini_benchmark.md`.
 
 ### Router-only setup
