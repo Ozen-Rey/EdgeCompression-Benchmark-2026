@@ -1,0 +1,12 @@
+{
+  "image": {
+    "default_metric": "psnr",
+    "higher_is_better": true,
+    "targets": {
+      "preview": 25.0,
+      "normal": 30.0,
+      "high": 36.0,
+      "very-high": 40.0
+    }
+  }
+}

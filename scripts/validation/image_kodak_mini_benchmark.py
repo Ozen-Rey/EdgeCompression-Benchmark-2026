@@ -28,10 +28,38 @@ from typing import Any, Callable, Iterable, Optional
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-SCRIPT_VERSION = "0.46.4"
+SCRIPT_VERSION = "0.46.5"
 DATASET_NAME = "kodak"
 DEFAULT_CODECS = "jpeg,jxl,hevc,dcae"
 DEFAULT_IMAGE_GLOB = "*.png"
+
+# Quality metric selection. PSNR needs only numpy and is the low-friction
+# default for the self-contained benchmark setup; SSIMULACRA2 needs the optional
+# ssimulacra2 package. Each metric maps to the matching built-in router
+# domain spec so the router can be replayed on the produced CSV.
+DEFAULT_QUALITY_METRIC = "psnr"
+QUALITY_METRIC_COLUMNS = {"ssimulacra2": "ssimulacra2", "psnr": "psnr"}
+DOMAIN_SPEC_FOR_METRIC = {
+    "ssimulacra2": "image_ssimulacra2",
+    "psnr": "image_psnr",
+}
+# The default router quality thresholds are SSIMULACRA2-scaled (50/80/90), which
+# are infeasible for PSNR (dB). Point the PSNR router replay at PSNR-appropriate
+# image thresholds so the on-the-spot replay yields feasible decisions.
+QUALITY_THRESHOLDS_FOR_METRIC = {
+    "ssimulacra2": None,
+    "psnr": "configs/quality_thresholds_psnr.json",
+}
+
+# Energy proxy. On hosts without RAPL/NVML telemetry there is no measured
+# energy, so router-valid rows cannot be produced. When --energy-proxy time is
+# set we fill energy_per_image_j from a time-proportional proxy using a fixed
+# reference power, and label every such row energy_provenance=time_proxy_non_measured.
+# This is explicitly NOT a measurement; it only lets the router be exercised
+# end-to-end where no telemetry exists. It is off by default so real
+# measurement runs are never silently polluted.
+TIME_PROXY_REFERENCE_POWER_W = 15.0
+ENERGY_PROVENANCE_TIME_PROXY = "time_proxy_non_measured"
 
 JPEG_QUALITIES = [30, 50, 70, 85, 95]
 JXL_DISTANCES = [1, 2, 4, 6, 8]
@@ -57,6 +85,7 @@ CSV_COLUMNS = [
     "rate_bpp",
     "quality_metric",
     "ssimulacra2",
+    "psnr",
     "energy_j_per_image",
     "time_ms",
     "compressed_size_bytes",
@@ -69,6 +98,7 @@ CSV_COLUMNS = [
     "decode_time_ms",
     "energy_cpu_j",
     "energy_gpu_j",
+    "energy_provenance",
 ]
 
 ROUTER_PROFILES = [
@@ -95,6 +125,7 @@ class Measurement:
     ssimulacra2: Optional[float]
     compressed_size_bytes: int
     time_ms: float
+    psnr: Optional[float] = None
     encode_time_ms: Optional[float] = None
     decode_time_ms: Optional[float] = None
 
@@ -246,6 +277,32 @@ def image_size(path: Path) -> tuple[int, int]:
         return image.size
 
 
+def compute_psnr(orig_np: Any, rec_np: Any, warnings: list[str]) -> Optional[float]:
+    """Compute RGB PSNR (dB) from two uint8 arrays using numpy only."""
+    try:
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - numpy is a benchmark dependency
+        warning = f"psnr_unavailable:{exc.__class__.__name__}"
+        if warning not in warnings:
+            warnings.append(warning)
+        return None
+
+    try:
+        orig = np.asarray(orig_np)
+        rec = np.asarray(rec_np)
+        if orig.shape != rec.shape:
+            warnings.append(f"psnr_shape_mismatch:{orig.shape}!={rec.shape}")
+            return None
+        diff = orig.astype(np.float64) - rec.astype(np.float64)
+        mse = float(np.mean(diff * diff))
+        if mse <= 0.0:
+            return 100.0
+        return float(10.0 * np.log10((255.0 ** 2) / mse))
+    except Exception as exc:
+        warnings.append(f"psnr_failed:{exc.__class__.__name__}:{exc}")
+        return None
+
+
 def compute_ssimulacra2(orig_path: Path, rec_np: Any, warnings: list[str]) -> Optional[float]:
     try:
         import ssimulacra2 as ssimulacra2_mod  # type: ignore
@@ -305,11 +362,13 @@ def encode_decode_jpeg(image_path: Path, quality: int, warnings: list[str]) -> M
 
     size = len(encoded)
     ssim2 = compute_ssimulacra2(image_path, rec_np, warnings)
+    psnr = compute_psnr(img_np, rec_np, warnings)
     return Measurement(
         width=width,
         height=height,
         bpp=size * 8 / (width * height),
         ssimulacra2=ssim2,
+        psnr=psnr,
         compressed_size_bytes=size,
         time_ms=(t2 - t0) * 1000,
         encode_time_ms=(t1 - t0) * 1000,
@@ -367,11 +426,13 @@ def encode_decode_jxl(image_path: Path, distance: int, warnings: list[str]) -> M
             warnings.append("jxl_backend_cjxl_djxl_local_fallback")
 
     ssim2 = compute_ssimulacra2(image_path, rec_np, warnings)
+    psnr = compute_psnr(img_np, rec_np, warnings)
     return Measurement(
         width=width,
         height=height,
         bpp=size * 8 / (width * height),
         ssimulacra2=ssim2,
+        psnr=psnr,
         compressed_size_bytes=size,
         time_ms=(t2 - t0) * 1000,
         encode_time_ms=(t1 - t0) * 1000,
@@ -450,11 +511,13 @@ def encode_decode_hevc(image_path: Path, crf: int, warnings: list[str]) -> Measu
         size = bitstream.stat().st_size
 
     ssim2 = compute_ssimulacra2(image_path, rec_np, warnings)
+    psnr = compute_psnr(img_np, rec_np, warnings)
     return Measurement(
         width=width,
         height=height,
         bpp=size * 8 / (width * height),
         ssimulacra2=ssim2,
+        psnr=psnr,
         compressed_size_bytes=size,
         time_ms=(t2 - t0) * 1000,
         encode_time_ms=(t1 - t0) * 1000,
@@ -525,6 +588,7 @@ def encode_decode_dcae(
         height=height,
         bpp=bpp,
         ssimulacra2=safe_float(row.get("ssimulacra2")),
+        psnr=safe_float(row.get("psnr")),
         compressed_size_bytes=max(int(round(bpp * width * height / 8)), 0),
         time_ms=float(row["time_ms"]),
     )
@@ -612,6 +676,26 @@ def run_with_energy(
     return last, energy
 
 
+def resolve_energy_provenance(
+    measurement: Measurement,
+    energy: EnergyResult,
+    proxy_mode: str,
+) -> str:
+    """Decide the energy provenance for a row, applying a time proxy if asked.
+
+    Mutates ``energy`` in place when a proxy is applied so make_row writes the
+    proxied value. Returns the provenance label for the CSV/report.
+    """
+    if energy.energy_j is not None:
+        return (energy.backend or "measured") if energy.measured else (energy.backend or "reported_unverified")
+    if proxy_mode == "time" and measurement.time_ms is not None:
+        energy.energy_j = max(float(measurement.time_ms), 0.0) / 1000.0 * TIME_PROXY_REFERENCE_POWER_W
+        energy.cpu_j = None
+        energy.gpu_j = None
+        return ENERGY_PROVENANCE_TIME_PROXY
+    return "none"
+
+
 def make_row(
     image_path: Path,
     op: OperatingPoint,
@@ -619,6 +703,8 @@ def make_row(
     energy: Optional[EnergyResult],
     status: str,
     error: str = "",
+    quality_metric: str = DEFAULT_QUALITY_METRIC,
+    energy_provenance: str = "",
 ) -> dict[str, Any]:
     if measurement is None:
         try:
@@ -643,8 +729,9 @@ def make_row(
         "codec": op.codec_label,
         "config": op.config,
         "rate_bpp": measurement.bpp if status == "ok" else "",
-        "quality_metric": "ssimulacra2",
+        "quality_metric": quality_metric,
         "ssimulacra2": measurement.ssimulacra2 if status == "ok" and measurement.ssimulacra2 is not None else "",
+        "psnr": measurement.psnr if status == "ok" and measurement.psnr is not None else "",
         "energy_j_per_image": energy_j if status == "ok" and energy_j is not None else "",
         "time_ms": measurement.time_ms if status == "ok" else "",
         "compressed_size_bytes": measurement.compressed_size_bytes if status == "ok" else "",
@@ -657,6 +744,7 @@ def make_row(
         "decode_time_ms": measurement.decode_time_ms if measurement.decode_time_ms is not None and status == "ok" else "",
         "energy_cpu_j": energy.cpu_j if energy and energy.cpu_j is not None and status == "ok" else "",
         "energy_gpu_j": energy.gpu_j if energy and energy.gpu_j is not None and status == "ok" else "",
+        "energy_provenance": energy_provenance if status == "ok" else "",
     }
 
 
@@ -773,10 +861,16 @@ def codec_availability_summary(codecs: Iterable[str]) -> dict[str, Any]:
     return summary
 
 
+def quality_column_for_row(row: dict[str, str]) -> str:
+    metric = str(row.get("quality_metric", "") or "").strip().lower()
+    return QUALITY_METRIC_COLUMNS.get(metric, "ssimulacra2")
+
+
 def csv_valid_for_router(row: dict[str, str]) -> bool:
     if row.get("status") != "ok":
         return False
-    for column in ("bpp", "ssimulacra2", "energy_per_image_j", "time_ms"):
+    quality_column = quality_column_for_row(row)
+    for column in ("bpp", quality_column, "energy_per_image_j", "time_ms"):
         if str(row.get(column, "")).strip() == "":
             return False
     return True
@@ -804,12 +898,29 @@ def write_router_input_subset(csv_path: Path, subset_path: Path) -> int:
     return count
 
 
-def run_router_profiles(csv_path: Path, out_dir: Path, report: dict[str, Any]) -> None:
+def run_router_profiles(
+    csv_path: Path,
+    out_dir: Path,
+    report: dict[str, Any],
+    domain_spec: str = DOMAIN_SPEC_FOR_METRIC[DEFAULT_QUALITY_METRIC],
+    quality_thresholds_file: Optional[str] = None,
+) -> None:
     subset_path = out_dir / "_router_valid_rows.csv"
     valid = write_router_input_subset(csv_path, subset_path)
-    report["router_replay"] = {"enabled": True, "valid_rows": valid, "profiles": {}}
+    thresholds_path = (
+        quality_thresholds_file
+        if quality_thresholds_file and Path(quality_thresholds_file).exists()
+        else None
+    )
+    report["router_replay"] = {
+        "enabled": True,
+        "valid_rows": valid,
+        "domain_spec": domain_spec,
+        "quality_thresholds_file": thresholds_path,
+        "profiles": {},
+    }
     if valid == 0:
-        report["router_replay"]["warning"] = "no rows with numeric bpp/ssimulacra2/energy/time; router skipped"
+        report["router_replay"]["warning"] = "no rows with numeric bpp/quality/energy/time; router skipped"
         return
 
     for profile in ROUTER_PROFILES:
@@ -823,7 +934,7 @@ def run_router_profiles(csv_path: Path, out_dir: Path, report: dict[str, Any]) -
             "--csv",
             str(subset_path),
             "--domain-spec",
-            "image_ssimulacra2",
+            domain_spec,
             "--profile",
             profile,
             "--out",
@@ -831,6 +942,8 @@ def run_router_profiles(csv_path: Path, out_dir: Path, report: dict[str, Any]) -
             "--summary-out",
             str(summary_path),
         ]
+        if thresholds_path:
+            cmd.extend(["--quality-thresholds-file", thresholds_path])
         completed = subprocess.run(cmd, capture_output=True, text=True)
         report["router_replay"]["profiles"][profile] = {
             "returncode": completed.returncode,
@@ -840,7 +953,7 @@ def run_router_profiles(csv_path: Path, out_dir: Path, report: dict[str, Any]) -
         }
 
 
-def load_rows_for_plots(csv_path: Path) -> list[dict[str, Any]]:
+def load_rows_for_plots(csv_path: Path, quality_column: str = "psnr") -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if not csv_path.exists():
         return rows
@@ -849,9 +962,11 @@ def load_rows_for_plots(csv_path: Path) -> list[dict[str, Any]]:
             if row.get("status") != "ok":
                 continue
             parsed = dict(row)
-            for column in ("bpp", "ssimulacra2", "energy_per_image_j", "time_ms"):
+            for column in ("bpp", quality_column, "energy_per_image_j", "time_ms"):
                 parsed[column] = safe_float(row.get(column))
-            if parsed["bpp"] is None or parsed["ssimulacra2"] is None:
+            # Generic "quality" key so the plotting code is metric-agnostic.
+            parsed["quality"] = parsed.get(quality_column)
+            if parsed["bpp"] is None or parsed["quality"] is None:
                 continue
             rows.append(parsed)
     return rows
@@ -948,14 +1063,21 @@ def plot_router_profile_selection(out_dir: Path, path: Path) -> None:
     plt.close(fig)
 
 
-def generate_plots(csv_path: Path, out_dir: Path, include_router: bool) -> list[str]:
-    rows = load_rows_for_plots(csv_path)
+def generate_plots(
+    csv_path: Path,
+    out_dir: Path,
+    include_router: bool,
+    quality_metric: str = DEFAULT_QUALITY_METRIC,
+) -> list[str]:
+    quality_column = QUALITY_METRIC_COLUMNS.get(quality_metric, "ssimulacra2")
+    quality_label = quality_metric.upper()
+    rows = load_rows_for_plots(csv_path, quality_column)
     plot_dir = out_dir / "plots"
     paths = [
-        ("rate_quality.png", "bpp", "ssimulacra2", "Rate (bpp)", "SSIMULACRA2"),
-        ("energy_quality.png", "energy_per_image_j", "ssimulacra2", "Energy (J/image)", "SSIMULACRA2"),
+        ("rate_quality.png", "bpp", "quality", "Rate (bpp)", quality_label),
+        ("energy_quality.png", "energy_per_image_j", "quality", "Energy (J/image)", quality_label),
         ("rate_energy.png", "bpp", "energy_per_image_j", "Rate (bpp)", "Energy (J/image)"),
-        ("time_quality.png", "time_ms", "ssimulacra2", "Time (ms/image)", "SSIMULACRA2"),
+        ("time_quality.png", "time_ms", "quality", "Time (ms/image)", quality_label),
     ]
     generated: list[str] = []
     if rows:
@@ -983,10 +1105,31 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kodak-dir", required=True, type=Path, help="Directory containing the 24 Kodak images.")
     parser.add_argument("--out-dir", required=True, type=Path, help="Local output directory.")
     parser.add_argument("--codecs", default=DEFAULT_CODECS, help="Comma-separated codec list. Default: jpeg,jxl,hevc,dcae.")
+    parser.add_argument(
+        "--quality-metric",
+        choices=sorted(QUALITY_METRIC_COLUMNS),
+        default=DEFAULT_QUALITY_METRIC,
+        help=(
+            "Quality metric used for router-valid rows and replay. "
+            "'psnr' needs only numpy; 'ssimulacra2' needs the ssimulacra2 package. "
+            f"Default: {DEFAULT_QUALITY_METRIC}."
+        ),
+    )
     parser.add_argument("--max-images", type=int, default=None, help="Optional image limit for pilot/debug runs.")
     parser.add_argument("--image-glob", default=DEFAULT_IMAGE_GLOB, help="Comma-separated glob patterns. Default: *.png.")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto", help="DCAE device.")
     parser.add_argument("--energy-backend", choices=["auto", "cpu", "gpu", "both", "none"], default="auto")
+    parser.add_argument(
+        "--energy-proxy",
+        choices=["off", "time"],
+        default="off",
+        help=(
+            "Fallback when energy is not measured. 'time' fills missing energy "
+            "with a labeled time-proportional proxy (energy_provenance="
+            "time_proxy_non_measured) so the router can be replayed without "
+            "telemetry. Off by default to avoid polluting real measurements."
+        ),
+    )
     parser.add_argument("--repeats", type=int, default=1, help="Measured repeats per image/config.")
     parser.add_argument("--warmup", type=int, default=1, help="Warmup repeats before measurement.")
     parser.add_argument("--randomize-order", action="store_true", help="Randomize codec/config/image order.")
@@ -1063,8 +1206,19 @@ def main(argv: Optional[list[str]] = None) -> int:
             "scope": None,
             "per_image_measurement": True,
             "normalization": "per image/config measurement; repeats are averaged when repeats > 1",
+            "proxy_mode": args.energy_proxy,
+            "proxy_reference_power_w": TIME_PROXY_REFERENCE_POWER_W if args.energy_proxy == "time" else None,
+            "proxy_rows": 0,
+            "proxy_note": (
+                "time-proportional proxy fills missing energy and is labeled "
+                "energy_provenance=time_proxy_non_measured; it is not a measurement"
+            ),
         },
-        "metric_backend": {"quality_metric": "ssimulacra2", "metric_zoo": False},
+        "metric_backend": {
+            "quality_metric": args.quality_metric,
+            "router_domain_spec": DOMAIN_SPEC_FOR_METRIC[args.quality_metric],
+            "metric_zoo": False,
+        },
         "device_info": {"requested": args.device, "cuda": cuda},
         "platform_fingerprint": collect_platform_fingerprint(),
         "nvidia_smi_snapshot": nvidia_smi,
@@ -1109,6 +1263,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     dcae_cache: dict[str, Any] = {}
     strict_failed = False
     processed_images: set[str] = set()
+    proxy_rows = 0
 
     for image_path, op in tasks:
         key = (DATASET_NAME, image_path.stem, op.codec_label, op.config)
@@ -1118,9 +1273,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             operation = operation_for_point(op, image_path, args.device, warnings_for_row, dcae_cache)
             measurement, energy = run_with_energy(operation, meter, args.warmup, args.repeats)
-            if measurement.ssimulacra2 is None:
-                raise RuntimeError("SSIMULACRA2 unavailable or failed; quality row not router-valid")
-            row = make_row(image_path, op, measurement, energy, "ok")
+            quality_value = getattr(measurement, args.quality_metric)
+            if quality_value is None:
+                raise RuntimeError(
+                    f"{args.quality_metric.upper()} unavailable or failed; quality row not router-valid"
+                )
+            energy_provenance = resolve_energy_provenance(measurement, energy, args.energy_proxy)
+            if energy_provenance == ENERGY_PROVENANCE_TIME_PROXY:
+                proxy_rows += 1
+            row = make_row(
+                image_path, op, measurement, energy, "ok",
+                quality_metric=args.quality_metric,
+                energy_provenance=energy_provenance,
+            )
             if energy.energy_j is None:
                 report_warnings.append("energy measurement unavailable; R-D-E rows are incomplete for router replay")
             report["energy_backend"]["used"] = energy.backend
@@ -1143,25 +1308,42 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "error": error,
             }
             report["failures"].append(failure)
-            row = make_row(image_path, op, None, None, "failed", error)
+            row = make_row(image_path, op, None, None, "failed", error, quality_metric=args.quality_metric)
             strict_failed = True
             print(f"[WARN] {op.codec_label} {op.config} failed on {image_path.name}: {error}", file=sys.stderr)
             if os.environ.get("KODAK_MINI_DEBUG_TRACEBACK"):
                 traceback.print_exc()
         append_csv_row(csv_path, row)
 
+    report["energy_backend"]["proxy_rows"] = proxy_rows
+    if proxy_rows > 0:
+        report_warnings.append(
+            f"energy_provenance=time_proxy_non_measured applied to {proxy_rows} rows; "
+            "these energy values are a time-scaled proxy, not a measurement"
+        )
     report["number_of_images_processed"] = len(processed_images)
     report["warnings"] = sorted(set(report_warnings))
     report["router_valid_rows"] = count_router_valid_rows(csv_path)
 
     if args.run_router:
-        run_router_profiles(csv_path, out_dir, report)
+        run_router_profiles(
+            csv_path,
+            out_dir,
+            report,
+            domain_spec=DOMAIN_SPEC_FOR_METRIC[args.quality_metric],
+            quality_thresholds_file=QUALITY_THRESHOLDS_FOR_METRIC.get(args.quality_metric),
+        )
     else:
         report["router_replay"] = {"enabled": False}
 
     if not args.skip_plots:
         try:
-            report["plots"] = generate_plots(csv_path, out_dir, include_router=args.run_router)
+            report["plots"] = generate_plots(
+                csv_path,
+                out_dir,
+                include_router=args.run_router,
+                quality_metric=args.quality_metric,
+            )
         except Exception as exc:
             report["plots"] = []
             report["warnings"].append(f"plot_generation_failed:{exc.__class__.__name__}:{exc}")

@@ -182,6 +182,7 @@ def test_mocked_end_to_end_writes_router_ready_csv(tmp_path: Path, monkeypatch) 
             height=2,
             bpp=1.0,
             ssimulacra2=80.0,
+            psnr=35.0,
             compressed_size_bytes=1,
             time_ms=1.5,
         )
@@ -215,3 +216,59 @@ def test_mocked_end_to_end_writes_router_ready_csv(tmp_path: Path, monkeypatch) 
     assert rows[0]["config"] == "q=30"
     assert rows[0]["bpp"] == "1.0"
     assert rows[0]["status"] == "ok"
+
+
+def test_default_metric_is_psnr_and_psnr_column_written(tmp_path: Path, monkeypatch) -> None:
+    kodak_dir = tmp_path / "kodak"
+    out_dir = tmp_path / "out"
+    kodak_dir.mkdir()
+    (kodak_dir / "kodim01.png").write_text("fake", encoding="utf-8")
+
+    def fake_operation(*args, **kwargs):
+        return bench.Measurement(
+            width=2, height=2, bpp=1.0, ssimulacra2=None, psnr=33.0,
+            compressed_size_bytes=1, time_ms=2.0,
+        )
+
+    monkeypatch.setattr(bench, "encode_decode_jpeg", fake_operation)
+    rc = bench.main(
+        [
+            "--kodak-dir", str(kodak_dir),
+            "--out-dir", str(out_dir),
+            "--codecs", "jpeg",
+            "--max-images", "1",
+            "--energy-backend", "none",
+            "--energy-proxy", "time",
+            "--warmup", "0",
+            "--skip-plots",
+        ]
+    )
+    assert rc == 0
+    with (out_dir / "kodak_image_rde_mini_router_ready.csv").open(
+        newline="", encoding="utf-8-sig"
+    ) as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows[0]["status"] == "ok"
+    assert rows[0]["quality_metric"] == "psnr"
+    assert rows[0]["psnr"] == "33.0"
+    # Time proxy fills energy and labels provenance, making the row router-valid.
+    assert rows[0]["energy_provenance"] == bench.ENERGY_PROVENANCE_TIME_PROXY
+    assert rows[0]["energy_per_image_j"] != ""
+    assert bench.csv_valid_for_router(rows[0]) is True
+
+
+def test_csv_valid_for_router_respects_quality_metric() -> None:
+    base = {
+        "status": "ok",
+        "bpp": "1.0",
+        "energy_per_image_j": "0.5",
+        "time_ms": "2.0",
+        "psnr": "33.0",
+        "ssimulacra2": "",
+        "quality_metric": "psnr",
+    }
+    assert bench.csv_valid_for_router(base) is True
+    # Same row routed on SSIMULACRA2 is invalid because that column is empty.
+    base["quality_metric"] = "ssimulacra2"
+    assert bench.csv_valid_for_router(base) is False

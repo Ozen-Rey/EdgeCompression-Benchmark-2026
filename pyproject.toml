@@ -34,6 +34,17 @@ rde-codec-onboard = "src.router.core.codec_onboarding:main"
 [project.optional-dependencies]
 test = ["pytest"]
 dev = ["pytest"]
+# Self-contained image mini-benchmark stack: enough to produce a router-ready
+# CSV on Kodak with the numpy-only PSNR metric or the SSIMULACRA2 metric
+# (JPEG/JPEG XL via imagecodecs). ssimulacra2 is a small pure-Python wheel
+# (numpy/pillow/scipy). It intentionally does not pull torch (DCAE) or
+# ffmpeg/cjxl system binaries; those remain optional and degrade gracefully.
+benchmark = [
+    "numpy",
+    "imagecodecs",
+    "matplotlib",
+    "ssimulacra2",
+]
 
 [tool.setuptools]
 include-package-data = true

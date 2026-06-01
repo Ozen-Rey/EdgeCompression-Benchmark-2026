@@ -99,25 +99,92 @@ Console entrypoints after `pip install -e .`:
 
 PowerShell scenario dispatcher: `scripts/run_router.ps1`.
 
-## Router setup
+## Setup
 
-The setup script prepares the router development environment. It does not
-install or reproduce the full benchmark stack.
+There are two independent setup paths: a **benchmark setup** that produces a
+router-ready CSV and exercises the router on the spot, and a minimal
+**router-only setup**. Both are driven by cross-platform Python helpers, so the
+exact same commands work on Windows, Linux, and macOS.
+
+### Prerequisites
+
+- **Git** and **Python ≥ 3.10** (with `pip` and the `venv` module). Nothing
+  else is required to start.
+- Use `python` or `python3`, whichever your system exposes (on many Linux/macOS
+  systems it is `python3`). Check with `python --version`.
+- The helpers never install system packages. If a prerequisite is missing they
+  print OS-specific install hints and stop without changing anything.
+
+### Quickstart: run the benchmark and test the router (any OS)
+
+1. Get the repository:
+
+   ```bash
+   git clone <repository-url>
+   cd EdgeCompression-Benchmark-2026
+   ```
+
+2. Run the benchmark setup. This single command is identical on every OS:
+
+   ```bash
+   python scripts/setup/setup_benchmark.py --yes
+   ```
+
+   With `--yes` it auto-accepts every step (omit it to confirm each one; the
+   default answer is `No`). It creates a `.venv`, installs the benchmark extra
+   (`pip install -e ".[benchmark]"`: numpy, imagecodecs, matplotlib,
+   ssimulacra2), downloads the 24 Kodak PNG images locally, runs the image
+   mini-benchmark with the numpy-only PSNR metric, and replays the R-D-E router
+   on the produced CSV — all inside the created virtual environment.
+
+3. Inspect the outputs under `validation_runs/benchmark_quickstart/`:
+
+   - `kodak_image_rde_mini_router_ready.csv` — the router-ready R-D-E rows;
+   - `kodak_image_rde_mini_report.json` — run provenance, backends, warnings;
+   - `router_<profile>_summary.csv` / `router_<profile>_report.json` — the
+     router decision per profile (balanced, energy-limited, bandwidth-limited,
+     quality-first).
+
+4. Verify it worked: the report JSON should show `router_valid_rows > 0` and a
+   `router_replay` block with `returncode: 0` for each profile, and the
+   `router_*_summary.csv` files should name a `selected_codec`.
+
+Notes:
+
+- It works **regardless of telemetry**: where no hardware energy backend
+  (RAPL/NVML) is available, missing energy is filled with a labeled time proxy
+  (`energy_provenance=time_proxy_non_measured`) so the router replay still runs.
+  This is explicitly **not** a measurement.
+- SSIMULACRA2 is also installed; use `python scripts/setup/setup_benchmark.py
+  --quality-metric ssimulacra2 ...` to route on it instead of PSNR.
+- Useful flags: `--dry-run` (preview commands, change nothing), `--no-venv`
+  (use the current environment), `--skip-benchmark` (set up only),
+  `--codecs jpeg,jxl,hevc`, `--max-images N`.
+- Optional convenience wrappers exist but the Python command above is the
+  portable one. On Linux/macOS run wrappers as `bash setup_benchmark.sh ...`
+  (they are not marked executable); on Windows use `.\setup_benchmark.ps1 ...`.
+- It does **not** install torch / DCAE checkpoints or ffmpeg / cjxl system
+  binaries. The HEVC and DCAE codecs are skipped automatically when those are
+  absent; JPEG and JPEG XL work out of the box. See
+  `docs/image_kodak_mini_benchmark.md`.
+
+### Router-only setup
+
+If you only want a router development environment (no benchmark stack), use the
+separate router-only helper:
 
 ```bash
 python scripts/setup/setup_router.py
 python scripts/setup/doctor.py --report-out environment_doctor_report.json
 ```
 
-`setup.sh` and `setup.ps1` are thin wrappers around the router-only setup
-script. The setup may create a Python virtual environment and install
-`python -m pip install -e ".[test]"`, but only after an explicit prompt
-(`No` is the default). It does not install external codecs, system packages,
-datasets, checkpoints, or benchmark outputs.
-
-External codec dependencies (`cjxl`, `ffmpeg`, `vvenc`, `SvtAv1EncApp`,
-`opusenc`, etc.) are benchmark/execution dependencies and remain separate; see
-`docs/external_codecs.md` and `docs/router_setup.md`.
+It may create a virtual environment and install `python -m pip install -e
+".[test]"`, but only after an explicit prompt (`No` is the default). It does not
+install external codecs, system packages, datasets, checkpoints, or benchmark
+outputs. The read-only `doctor.py` reports the local environment without
+changing it. External codec dependencies (`cjxl`, `ffmpeg`, `vvenc`,
+`SvtAv1EncApp`, `opusenc`, etc.) remain separate; see `docs/external_codecs.md`
+and `docs/router_setup.md`.
 
 ## Repository layout
 

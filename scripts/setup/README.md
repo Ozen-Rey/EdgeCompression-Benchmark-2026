@@ -3,6 +3,12 @@
 The setup script prepares the router development environment. It does not
 install or reproduce the full benchmark stack.
 
+> Looking to run a benchmark to test the router on the spot? Use the separate
+> benchmark setup instead: `python scripts/setup/setup_benchmark.py --yes`
+> (or `setup_benchmark.ps1` / `setup_benchmark.sh`). It installs the benchmark
+> extra, downloads Kodak, and produces a router-ready CSV. See
+> `docs/image_kodak_mini_benchmark.md`. This router-only setup stays minimal.
+
 Run the interactive setup from the repository root:
 
 ```powershell
