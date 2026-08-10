@@ -7,7 +7,7 @@ content-aware routing extension.
 ## Overview
 
 This repository contains the code, configuration, documentation, and routing infrastructure
-underlying the master's thesis _"Compressione dei Dati: Un'Analisi
+underlying the bachelor's thesis _"Compressione dei Dati: Un'Analisi
 Comparativa tra Metodi Tradizionali e Approcci basati su Intelligenza
 Artificiale"_ (Università degli Studi di Padova, AA 2025-2026).
 
